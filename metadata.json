@@ -1,0 +1,5 @@
+{
+  "name": "DentalPlan Pro",
+  "description": "A professional treatment plan management system for dental clinics. Allows doctors to create, manage, and share treatment plans with patients, tracking acceptance and financials.",
+  "requestFramePermissions": []
+}
