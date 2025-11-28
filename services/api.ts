@@ -50,11 +50,11 @@ const SEED_PLANS: TreatmentPlan[] = [
     items: [
       { 
         id: 'tpi1', treatmentPlanId: 'tp1', feeScheduleEntryId: 'f1', procedureCode: 'D6010', procedureName: 'Surgical Placement of Implant Body', 
-        selectedTeeth: ['8'], baseFee: 2000, grossFee: 2000, netFee: 2000, units: 1, discount: 0, sortOrder: 1, unitType: 'PER_TOOTH', category: 'IMPLANT' 
+        selectedTeeth: [8], baseFee: 2000, grossFee: 2000, netFee: 2000, units: 1, discount: 0, sortOrder: 1, unitType: 'PER_TOOTH', category: 'IMPLANT' 
       },
       { 
         id: 'tpi2', treatmentPlanId: 'tp1', feeScheduleEntryId: 'f2', procedureCode: 'D6058', procedureName: 'Abutment supported porcelain/ceramic crown', 
-        selectedTeeth: ['8'], baseFee: 2500, grossFee: 2500, netFee: 2500, units: 1, discount: 0, sortOrder: 2, unitType: 'PER_TOOTH', category: 'IMPLANT' 
+        selectedTeeth: [8], baseFee: 2500, grossFee: 2500, netFee: 2500, units: 1, discount: 0, sortOrder: 2, unitType: 'PER_TOOTH', category: 'IMPLANT' 
       }
     ]
   }

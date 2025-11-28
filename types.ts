@@ -59,7 +59,7 @@ export interface TreatmentPlanItem {
   category: FeeCategory;
   
   // Selection details
-  selectedTeeth?: string[] | null;
+  selectedTeeth?: number[] | null;
   selectedQuadrants?: ('UR' | 'UL' | 'LL' | 'LR')[] | null;
   selectedArches?: ('UPPER' | 'LOWER')[] | null;
 

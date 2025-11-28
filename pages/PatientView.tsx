@@ -102,7 +102,7 @@ export const PatientView: React.FC = () => {
                     <div>
                       <div className="font-semibold text-gray-900">{item.procedureName}</div>
                       <div className="text-sm text-gray-500 mt-1">
-                        Tooth: {item.selectedTeeth?.join(',') || 'General'}
+                        Tooth: {item.selectedTeeth?.length ? `#${item.selectedTeeth.join(', #')}` : 'General'}
                       </div>
                     </div>
                   </div>

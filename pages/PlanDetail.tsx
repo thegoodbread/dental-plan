@@ -95,10 +95,16 @@ export const PlanDetail: React.FC = () => {
     e.preventDefault();
     if (!plan) return;
     
+    // Parse tooth input: split by comma, trim, convert to number, filter valid
+    const teeth = newItemTooth
+      .split(',')
+      .map(t => parseInt(t.trim()))
+      .filter(n => !isNaN(n) && n >= 1 && n <= 32);
+
     await addItemToPlan(plan.id, {
         procedureCode: newItemCode || 'MISC',
         procedureName: newItemName,
-        selectedTeeth: newItemTooth ? [newItemTooth] : [],
+        selectedTeeth: teeth,
         baseFee: Number(newItemFee),
         sortOrder: (plan.items || []).length + 1
     });
@@ -290,7 +296,9 @@ export const PlanDetail: React.FC = () => {
                       <div>{item.procedureName}</div>
                       {item.notes && <div className="text-xs text-gray-400 mt-0.5">{item.notes}</div>}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{item.selectedTeeth?.join(',') || '-'}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {item.selectedTeeth?.length ? `#${item.selectedTeeth.join(', #')}` : '-'}
+                    </td>
                     <td className="px-6 py-4 text-sm font-medium text-gray-900 text-right">
                       ${item.netFee.toFixed(2)}
                     </td>
@@ -311,7 +319,7 @@ export const PlanDetail: React.FC = () => {
                       <input placeholder="Procedure Name" className="w-full p-1 border rounded text-sm" value={newItemName} onChange={e => setNewItemName(e.target.value)} autoFocus />
                     </td>
                     <td className="px-6 py-4">
-                      <input placeholder="T" className="w-12 p-1 border rounded text-sm" value={newItemTooth} onChange={e => setNewItemTooth(e.target.value)} />
+                      <input placeholder="1, 8, 9" className="w-24 p-1 border rounded text-sm" value={newItemTooth} onChange={e => setNewItemTooth(e.target.value)} />
                     </td>
                     <td className="px-6 py-4 text-right">
                       <input type="number" placeholder="0.00" className="w-24 p-1 border rounded text-sm text-right" value={newItemFee} onChange={e => setNewItemFee(parseFloat(e.target.value))} />
