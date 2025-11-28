@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Calendar, Share2, Printer, CheckCircle, XCircle, 
-  Clock, Activity, Sparkles, AlertCircle 
+  Clock, Activity, Sparkles, AlertCircle, Trash2, Edit2, Save, Plus
 } from 'lucide-react';
-import { getPlanById, updatePlanStatus, createShareLink, getActivityLogs } from '../services/api';
-import { generatePatientFriendlySummary } from '../services/geminiService';
-import { TreatmentPlan, PlanStatus, ActivityLog } from '../types';
+import { 
+  getPlanById, updatePlanStatus, createShareLink, getActivityLogs,
+  addItemToPlan, deletePlanItem, updatePlan, updatePlanItem 
+} from '../services/api';
+import { explainPlanForPatient } from '../services/geminiService';
+import { TreatmentPlan, PlanStatus, ActivityLog, TreatmentPlanItem } from '../types';
 import { StatusBadge } from '../components/ui/StatusBadge';
 
 export const PlanDetail: React.FC = () => {
@@ -16,12 +19,34 @@ export const PlanDetail: React.FC = () => {
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [aiSummary, setAiSummary] = useState<string>('');
   const [generatingAi, setGeneratingAi] = useState(false);
+  
+  // Edit State
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [tempTitle, setTempTitle] = useState('');
+  const [tempNotes, setTempNotes] = useState('');
+
+  // Item Form State
+  const [showItemForm, setShowItemForm] = useState(false);
+  const [newItemCode, setNewItemCode] = useState('');
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemTooth, setNewItemTooth] = useState('');
+  const [newItemFee, setNewItemFee] = useState<number>(0);
+
+  // Insurance State
+  const [tempInsurance, setTempInsurance] = useState<number>(0);
 
   useEffect(() => {
     if (id) loadData(id);
   }, [id]);
+
+  useEffect(() => {
+    if (plan) {
+      setTempTitle(plan.title);
+      setTempNotes(plan.notes_internal || '');
+      setTempInsurance(plan.estimated_insurance || 0);
+    }
+  }, [plan]);
 
   const loadData = async (planId: string) => {
     setLoading(true);
@@ -34,12 +59,18 @@ export const PlanDetail: React.FC = () => {
     setLoading(false);
   };
 
+  const refreshPlan = async () => {
+    if (!id) return;
+    const p = await getPlanById(id);
+    const acts = await getActivityLogs(id);
+    setPlan(p);
+    setActivities(acts);
+  };
+
   const handleStatusChange = async (newStatus: PlanStatus) => {
     if (!plan) return;
-    const updated = await updatePlanStatus(plan.id, newStatus);
-    setPlan(updated);
-    const acts = await getActivityLogs(plan.id);
-    setActivities(acts);
+    await updatePlanStatus(plan.id, newStatus);
+    refreshPlan();
   };
 
   const handleShare = async () => {
@@ -47,14 +78,70 @@ export const PlanDetail: React.FC = () => {
     const token = await createShareLink(plan.id);
     const url = `${window.location.origin}/#/p/${token}`;
     setShareUrl(url);
+    refreshPlan();
   };
 
-  const handleAiSummary = async () => {
+  const handleAiExplanation = async () => {
     if (!plan) return;
     setGeneratingAi(true);
-    const summary = await generatePatientFriendlySummary(plan.items);
-    setAiSummary(summary);
+    const explanation = await explainPlanForPatient(plan);
+    // Save it to the plan
+    await updatePlan(plan.id, { ai_explanation: explanation });
     setGeneratingAi(false);
+    refreshPlan();
+  };
+
+  const handleAddItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!plan) return;
+    
+    await addItemToPlan(plan.id, {
+        procedure_code: newItemCode || 'MISC',
+        procedure_name: newItemName,
+        tooth: newItemTooth,
+        fee: Number(newItemFee),
+        sort_order: plan.items.length + 1
+    });
+
+    // Reset form
+    setNewItemCode('');
+    setNewItemName('');
+    setNewItemTooth('');
+    setNewItemFee(0);
+    setShowItemForm(false);
+    refreshPlan();
+  };
+
+  const handleDeleteItem = async (itemId: string) => {
+    if (!plan) return;
+    if (confirm("Remove this item?")) {
+      await deletePlanItem(plan.id, itemId);
+      refreshPlan();
+    }
+  };
+
+  const saveDetails = async () => {
+    if (!plan) return;
+    await updatePlan(plan.id, {
+      title: tempTitle,
+      notes_internal: tempNotes
+    });
+    setIsEditingTitle(false);
+    refreshPlan();
+  };
+
+  const updateInsurance = async () => {
+     if (!plan) return;
+     // This will trigger a recalc of patient portion in the backend service logic if we wanted,
+     // but currently updatePlan just saves fields. 
+     // We should manually update patient_portion or let the service handle it.
+     // For this simple service, let's update both.
+     const newPatientPortion = plan.total_fee - tempInsurance;
+     await updatePlan(plan.id, { 
+       estimated_insurance: tempInsurance,
+       patient_portion: newPatientPortion 
+     });
+     refreshPlan();
   };
 
   if (loading) return <div className="p-8 text-center">Loading details...</div>;
@@ -68,10 +155,24 @@ export const PlanDetail: React.FC = () => {
           <button onClick={() => navigate('/')} className="text-gray-500 hover:text-gray-700">
             <ArrowLeft size={20} />
           </button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-gray-900">{plan.title}</h1>
-              <StatusBadge status={plan.status} />
+          <div className="flex flex-col">
+            <div className="flex items-center gap-3">
+              {isEditingTitle ? (
+                  <div className="flex items-center gap-2">
+                    <input 
+                      className="text-xl font-bold text-gray-900 border border-gray-300 rounded px-2 py-1"
+                      value={tempTitle}
+                      onChange={e => setTempTitle(e.target.value)}
+                    />
+                    <button onClick={saveDetails} className="text-green-600 hover:text-green-700"><Save size={20}/></button>
+                  </div>
+              ) : (
+                  <div className="flex items-center gap-2 group">
+                    <h1 className="text-xl font-bold text-gray-900">{plan.title}</h1>
+                    <button onClick={() => setIsEditingTitle(true)} className="text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100"><Edit2 size={16}/></button>
+                    <StatusBadge status={plan.status} />
+                  </div>
+              )}
             </div>
             <p className="text-sm text-gray-500">{plan.plan_number} • {plan.patient?.first_name} {plan.patient?.last_name}</p>
           </div>
@@ -83,10 +184,6 @@ export const PlanDetail: React.FC = () => {
           >
             <Share2 size={16} />
             Share
-          </button>
-          <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
-            <Printer size={16} />
-            Print
           </button>
         </div>
       </div>
@@ -134,7 +231,8 @@ export const PlanDetail: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-6 md:p-8">
           
           {shareUrl && (
-            <div className="mb-6 bg-blue-50 border border-blue-200 p-4 rounded-lg flex flex-col gap-2">
+            <div className="mb-6 bg-blue-50 border border-blue-200 p-4 rounded-lg flex flex-col gap-2 relative">
+              <button onClick={() => setShareUrl(null)} className="absolute top-2 right-2 text-blue-400 hover:text-blue-600"><XCircle size={16}/></button>
               <div className="flex items-center gap-2 text-blue-800 font-medium">
                 <CheckCircle size={18} />
                 Share Link Generated
@@ -156,18 +254,21 @@ export const PlanDetail: React.FC = () => {
             <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
               <h2 className="font-semibold text-gray-900">Procedures</h2>
               <button 
-                onClick={handleAiSummary}
-                disabled={generatingAi || aiSummary.length > 0}
-                className="text-xs flex items-center gap-1 text-purple-600 bg-purple-50 hover:bg-purple-100 px-2 py-1 rounded border border-purple-200 transition-colors"
+                onClick={handleAiExplanation}
+                disabled={generatingAi}
+                className="text-xs flex items-center gap-1 text-purple-600 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-lg border border-purple-200 transition-colors"
               >
                 <Sparkles size={14} />
-                {generatingAi ? 'Thinking...' : 'AI Summary'}
+                {generatingAi ? 'Generating...' : plan.ai_explanation ? 'Regenerate AI Explanation' : 'Generate AI Explanation'}
               </button>
             </div>
             
-            {aiSummary && (
-              <div className="px-6 py-3 bg-purple-50 border-b border-purple-100 text-sm text-purple-900 italic">
-                "{aiSummary}"
+            {plan.ai_explanation && (
+              <div className="px-6 py-4 bg-purple-50 border-b border-purple-100">
+                 <h4 className="text-xs font-bold text-purple-800 uppercase mb-1">AI Patient Explanation</h4>
+                <p className="text-sm text-purple-900 italic leading-relaxed">
+                  "{plan.ai_explanation}"
+                </p>
               </div>
             )}
 
@@ -178,11 +279,12 @@ export const PlanDetail: React.FC = () => {
                   <th className="px-6 py-3">Description</th>
                   <th className="px-6 py-3">Tooth</th>
                   <th className="px-6 py-3 text-right">Fee</th>
+                  <th className="px-6 py-3 w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {plan.items.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50">
+                  <tr key={item.id} className="hover:bg-gray-50 group">
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">{item.procedure_code}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">
                       <div>{item.procedure_name}</div>
@@ -192,21 +294,57 @@ export const PlanDetail: React.FC = () => {
                     <td className="px-6 py-4 text-sm font-medium text-gray-900 text-right">
                       ${item.fee.toFixed(2)}
                     </td>
+                    <td className="px-6 py-4 text-right">
+                       <button onClick={() => handleDeleteItem(item.id)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                         <Trash2 size={16} />
+                       </button>
+                    </td>
                   </tr>
                 ))}
+                
+                {showItemForm && (
+                  <tr className="bg-blue-50">
+                    <td className="px-6 py-4">
+                      <input placeholder="Code" className="w-20 p-1 border rounded text-sm" value={newItemCode} onChange={e => setNewItemCode(e.target.value)} />
+                    </td>
+                    <td className="px-6 py-4">
+                      <input placeholder="Procedure Name" className="w-full p-1 border rounded text-sm" value={newItemName} onChange={e => setNewItemName(e.target.value)} autoFocus />
+                    </td>
+                    <td className="px-6 py-4">
+                      <input placeholder="T" className="w-12 p-1 border rounded text-sm" value={newItemTooth} onChange={e => setNewItemTooth(e.target.value)} />
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <input type="number" placeholder="0.00" className="w-24 p-1 border rounded text-sm text-right" value={newItemFee} onChange={e => setNewItemFee(parseFloat(e.target.value))} />
+                    </td>
+                    <td className="px-6 py-4 flex gap-2 justify-end">
+                      <button onClick={handleAddItem} className="text-green-600 hover:text-green-800"><CheckCircle size={18}/></button>
+                      <button onClick={() => setShowItemForm(false)} className="text-gray-400 hover:text-gray-600"><XCircle size={18}/></button>
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
-            <div className="p-4 bg-gray-50 border-t border-gray-200 text-center text-sm text-gray-500">
-              + Add Procedure (Disabled in Demo)
-            </div>
+            
+            {!showItemForm && (
+              <button 
+                onClick={() => setShowItemForm(true)}
+                className="w-full py-3 bg-gray-50 hover:bg-gray-100 border-t border-gray-200 text-center text-sm font-medium text-blue-600 transition-colors flex items-center justify-center gap-2"
+              >
+                <Plus size={16} /> Add Procedure
+              </button>
+            )}
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              <div className="p-4 rounded-lg border border-gray-200 bg-white">
-               <h3 className="font-semibold text-gray-900 mb-2">Internal Notes</h3>
+               <div className="flex justify-between items-center mb-2">
+                 <h3 className="font-semibold text-gray-900">Internal Notes</h3>
+                 <button onClick={saveDetails} className="text-xs text-blue-600 hover:underline">Save Notes</button>
+               </div>
                <textarea 
                   className="w-full h-24 p-2 text-sm border border-gray-300 rounded resize-none focus:ring-1 focus:ring-blue-500 focus:outline-none"
-                  defaultValue={plan.notes_internal || ''}
+                  value={tempNotes}
+                  onChange={e => setTempNotes(e.target.value)}
                   placeholder="Private notes for office staff..."
                />
              </div>
@@ -215,27 +353,27 @@ export const PlanDetail: React.FC = () => {
                 <div className="grid grid-cols-2 gap-2">
                   <button 
                     onClick={() => handleStatusChange(PlanStatus.PRESENTED)}
-                    className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                    className={`flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${plan.status === PlanStatus.PRESENTED ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
                   >
-                    <Clock size={16} /> Mark Presented
+                    <Clock size={16} /> Presented
                   </button>
                   <button 
                      onClick={() => handleStatusChange(PlanStatus.ACCEPTED)}
-                     className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
+                     className={`flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${plan.status === PlanStatus.ACCEPTED ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
                   >
-                    <CheckCircle size={16} /> Mark Accepted
+                    <CheckCircle size={16} /> Accepted
                   </button>
                   <button 
                      onClick={() => handleStatusChange(PlanStatus.DECLINED)}
-                     className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                     className={`flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${plan.status === PlanStatus.DECLINED ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
                   >
-                    <XCircle size={16} /> Mark Declined
+                    <XCircle size={16} /> Declined
                   </button>
                   <button 
                      onClick={() => handleStatusChange(PlanStatus.ON_HOLD)}
-                     className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-yellow-700 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors"
+                     className={`flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${plan.status === PlanStatus.ON_HOLD ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
                   >
-                    <AlertCircle size={16} /> Mark On Hold
+                    <AlertCircle size={16} /> On Hold
                   </button>
                 </div>
              </div>
@@ -254,7 +392,16 @@ export const PlanDetail: React.FC = () => {
               </div>
               <div className="flex justify-between items-center pb-4 border-b border-gray-100">
                 <span className="text-gray-500">Est. Insurance</span>
-                <span className="font-medium text-green-600">-${plan.estimated_insurance.toLocaleString()}</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-green-600 font-medium">-$</span>
+                  <input 
+                    type="number" 
+                    className="w-20 text-right font-medium text-green-600 border-b border-green-200 focus:outline-none focus:border-green-500"
+                    value={tempInsurance}
+                    onChange={(e) => setTempInsurance(parseFloat(e.target.value) || 0)}
+                    onBlur={updateInsurance}
+                  />
+                </div>
               </div>
               <div className="flex justify-between items-center pt-2">
                 <span className="text-gray-900 font-bold text-lg">Patient Portion</span>
@@ -262,7 +409,7 @@ export const PlanDetail: React.FC = () => {
               </div>
             </div>
             <div className="mt-8 bg-gray-50 p-4 rounded-lg text-xs text-gray-500">
-              * Insurance estimates are not a guarantee of payment.
+              * Update insurance amount above and click away to recalculate the patient portion.
             </div>
           </div>
         </div>

@@ -73,10 +73,17 @@ export const PatientView: React.FC = () => {
           {/* Welcome Section */}
           <div className="p-6 md:p-8 border-b border-gray-100">
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Hi {plan.patient?.first_name},</h1>
-            <p className="text-gray-600 leading-relaxed">
+            <p className="text-gray-600 leading-relaxed mb-4">
               Here is the breakdown of the treatment plan we discussed for <strong>{plan.title}</strong>. 
-              Please review the details below.
             </p>
+            
+            {/* AI Explanation Public View */}
+            {plan.ai_explanation && (
+                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-blue-900 mb-2">
+                    <p className="text-sm md:text-base leading-relaxed">{plan.ai_explanation}</p>
+                </div>
+            )}
+
             <div className="mt-4 inline-flex items-center text-sm text-gray-400 bg-gray-50 px-3 py-1 rounded-full">
               Plan #{plan.plan_number} • Issued {new Date(plan.created_at).toLocaleDateString()}
             </div>

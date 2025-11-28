@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, MoreHorizontal } from 'lucide-react';
+import { Plus, Search, Filter, MoreHorizontal, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { getPlans } from '../services/api';
-import { TreatmentPlan, PlanStatus } from '../types';
+import { getPlans, getPatients, createPlan } from '../services/api';
+import { TreatmentPlan, PlanStatus, Patient } from '../types';
 import { StatusBadge } from '../components/ui/StatusBadge';
 
 export const Dashboard: React.FC = () => {
@@ -11,29 +11,62 @@ export const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  
+  // Modal State
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [newPlanPatientId, setNewPlanPatientId] = useState('');
+  const [newPlanTitle, setNewPlanTitle] = useState('');
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    const fetchPlans = async () => {
-      setLoading(true);
-      const data = await getPlans({ search: searchTerm, status: statusFilter });
-      setPlans(data);
-      setLoading(false);
-    };
-
-    const debounce = setTimeout(fetchPlans, 300);
-    return () => clearTimeout(debounce);
+    fetchPlans();
+    fetchPatients();
   }, [searchTerm, statusFilter]);
+
+  const fetchPlans = async () => {
+    setLoading(true);
+    const data = await getPlans({ search: searchTerm, status: statusFilter });
+    setPlans(data);
+    setLoading(false);
+  };
+
+  const fetchPatients = async () => {
+    const data = await getPatients();
+    setPatients(data);
+    if (data.length > 0) setNewPlanPatientId(data[0].id);
+  };
+
+  const handleCreatePlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPlanPatientId || !newPlanTitle) return;
+    
+    setCreating(true);
+    try {
+      const newPlan = await createPlan(newPlanPatientId, newPlanTitle);
+      setShowCreateModal(false);
+      setNewPlanTitle('');
+      navigate(`/plan/${newPlan.id}`);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const tabs = ['ALL', ...Object.values(PlanStatus)];
 
   return (
-    <div className="p-8 max-w-7xl mx-auto w-full">
+    <div className="p-8 max-w-7xl mx-auto w-full relative">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Treatment Plans</h1>
           <p className="text-gray-500 text-sm mt-1">Manage and track patient treatment proposals.</p>
         </div>
-        <button className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors shadow-sm">
+        <button 
+          onClick={() => setShowCreateModal(true)}
+          className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors shadow-sm"
+        >
           <Plus size={18} />
           New Plan
         </button>
@@ -133,6 +166,63 @@ export const Dashboard: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Create Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="flex justify-between items-center p-4 border-b border-gray-200">
+              <h3 className="font-bold text-lg text-gray-900">New Treatment Plan</h3>
+              <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleCreatePlan} className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Select Patient</label>
+                <select 
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  value={newPlanPatientId}
+                  onChange={(e) => setNewPlanPatientId(e.target.value)}
+                  required
+                >
+                  {patients.map(p => (
+                    <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Plan Title</label>
+                <input 
+                  type="text" 
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="e.g. Upper Anterior Crowns"
+                  value={newPlanTitle}
+                  onChange={(e) => setNewPlanTitle(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button 
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="flex-1 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={creating}
+                  className="flex-1 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {creating ? 'Creating...' : 'Create Plan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
