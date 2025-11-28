@@ -1,3 +1,4 @@
+
 import { 
   TreatmentPlan, 
   TreatmentPlanItem, 
@@ -228,6 +229,7 @@ export const createTreatmentPlanItem = (
     unitType: feeEntry.unitType,
     category: feeEntry.category,
     baseFee: data.baseFeeOverride,
+    urgency: 'ELECTIVE', // Default
     sortOrder: 999
   };
 

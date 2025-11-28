@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
-import { TreatmentPlanItem } from '../types';
-import { Trash2, Edit2, Check, X } from 'lucide-react';
+import { TreatmentPlanItem, UrgencyLevel } from '../types';
+import { Trash2, Edit2, Check, X, AlertTriangle, Clock, Smile } from 'lucide-react';
 import { ToothSelector } from './ToothSelector';
 
 interface TreatmentPlanItemRowProps {
@@ -16,12 +17,14 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
   const [selectedTeeth, setSelectedTeeth] = useState<number[]>(item.selectedTeeth || []);
   const [baseFee, setBaseFee] = useState(item.baseFee);
   const [discount, setDiscount] = useState(item.discount);
+  const [urgency, setUrgency] = useState<UrgencyLevel>(item.urgency || 'ELECTIVE');
 
   const handleSave = () => {
     onUpdate(item.id, {
       selectedTeeth,
       baseFee: Number(baseFee),
-      discount: Number(discount)
+      discount: Number(discount),
+      urgency
     });
     setIsEditing(false);
   };
@@ -30,6 +33,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
     setSelectedTeeth(item.selectedTeeth || []);
     setBaseFee(item.baseFee);
     setDiscount(item.discount);
+    setUrgency(item.urgency || 'ELECTIVE');
     setIsEditing(false);
   };
 
@@ -111,12 +115,34 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
     return <span className="text-gray-400 text-xs italic">N/A</span>;
   };
 
+  const renderUrgencyBadge = (u: UrgencyLevel) => {
+    switch (u) {
+      case 'URGENT': return <span className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-100 uppercase"><AlertTriangle size={10} /> Urgent</span>;
+      case 'SOON': return <span className="flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-100 uppercase"><Clock size={10} /> Soon</span>;
+      case 'ELECTIVE': return <span className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 uppercase"><Smile size={10} /> Elective</span>;
+    }
+  };
+
   return (
     <tr className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 group transition-colors ${isEditing ? 'bg-blue-50/30' : ''}`}>
       {/* Procedure */}
       <td className="px-4 py-3 align-top">
         <div className="font-medium text-gray-900 text-sm">{item.procedureName}</div>
-        <div className="text-xs text-gray-500 font-mono">{item.procedureCode}</div>
+        <div className="text-xs text-gray-500 font-mono mb-1">{item.procedureCode}</div>
+        
+        {isEditing ? (
+           <select 
+             value={urgency} 
+             onChange={e => setUrgency(e.target.value as UrgencyLevel)}
+             className="text-xs border border-gray-300 rounded p-1 mt-1 bg-white"
+           >
+             <option value="ELECTIVE">Elective</option>
+             <option value="SOON">Soon</option>
+             <option value="URGENT">Urgent</option>
+           </select>
+        ) : (
+           <div className="mt-1">{renderUrgencyBadge(item.urgency || 'ELECTIVE')}</div>
+        )}
       </td>
 
       {/* Selection Area */}

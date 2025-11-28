@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Share2, Sparkles, CheckCircle, XCircle, 
-  Clock, AlertCircle, Save, Printer
+  Clock, AlertCircle, Printer, Eye, X
 } from 'lucide-react';
 import { 
   getTreatmentPlanById, updateTreatmentPlan, createShareLink,
@@ -13,6 +14,7 @@ import { explainPlanForPatient } from '../services/geminiExplainPlan';
 import { TreatmentPlan, FeeScheduleEntry, TreatmentPlanStatus } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
 import { TreatmentPlanItemsTable } from '../components/TreatmentPlanItemsTable';
+import { PremiumPatientLayout } from '../components/patient/PremiumPatientLayout';
 
 export const TreatmentPlanDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -22,6 +24,7 @@ export const TreatmentPlanDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [generatingAi, setGeneratingAi] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   
   // Local Edit State
   const [title, setTitle] = useState('');
@@ -83,7 +86,11 @@ export const TreatmentPlanDetailPage: React.FC = () => {
   const handleShare = () => {
     if (!plan) return;
     const link = createShareLink(plan.id);
-    const url = `${window.location.origin}/#/p/${link.token}`;
+    
+    // Robust URL construction for HashRouter
+    const baseUrl = window.location.href.split('#')[0]; 
+    const url = `${baseUrl}#/p/${link.token}`;
+    
     setShareUrl(url);
     refreshData();
   };
@@ -101,7 +108,7 @@ export const TreatmentPlanDetailPage: React.FC = () => {
   if (!plan) return <div className="p-8 text-red-600">Plan not found</div>;
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
+    <div className="flex flex-col h-screen bg-gray-50 overflow-hidden relative">
         {/* Header */}
         <div className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm z-10">
             <div className="flex items-center gap-4">
@@ -124,14 +131,14 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                 </div>
             </div>
             <div className="flex gap-2">
+                <button 
+                  onClick={() => setShowPreview(true)}
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 border border-blue-600 rounded-lg hover:bg-blue-700 shadow-sm"
+                >
+                    <Eye size={16} /> Preview
+                </button>
                 <button onClick={handleShare} className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
                     <Share2 size={16} /> Share
-                </button>
-                <button 
-                  onClick={() => window.print()}
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                    <Printer size={16} /> Print
                 </button>
             </div>
         </div>
@@ -213,9 +220,6 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                         onBlur={handleSaveHeader}
                         className="w-full p-2 border border-gray-300 rounded text-right font-mono" 
                     />
-                    <div className="mt-2 text-xs text-gray-500">
-                        Updates "Patient Portion" automatically.
-                    </div>
                 </div>
 
                 {/* Internal Notes */}
@@ -231,6 +235,34 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                 </div>
             </div>
         </div>
+
+        {/* PREVIEW MODAL */}
+        {showPreview && (
+          <div className="fixed inset-0 z-50 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white w-full h-full max-w-6xl rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="flex justify-between items-center px-6 py-4 bg-gray-900 text-white shrink-0">
+                 <div className="flex items-center gap-3">
+                   <div className="bg-blue-600 p-1.5 rounded-lg">
+                      <Eye size={18} className="text-white" />
+                   </div>
+                   <div>
+                      <h2 className="font-bold text-lg leading-tight">Patient Experience Preview</h2>
+                      <div className="text-xs text-gray-400">Viewing as: {plan.patient?.firstName} {plan.patient?.lastName}</div>
+                   </div>
+                 </div>
+                 <button 
+                   onClick={() => setShowPreview(false)}
+                   className="p-2 hover:bg-gray-700 rounded-full transition-colors"
+                 >
+                   <X size={24} />
+                 </button>
+              </div>
+              <div className="flex-1 overflow-auto bg-gray-50">
+                 <PremiumPatientLayout plan={plan} items={plan.items || []} />
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 };

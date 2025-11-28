@@ -1,3 +1,4 @@
+
 // Enums
 export type UserRole = 'DOCTOR' | 'TREATMENT_COORDINATOR' | 'ADMIN';
 
@@ -18,6 +19,8 @@ export type FeeUnitType =
   | 'PER_PROCEDURE';
 
 export type FeeCategory = 'IMPLANT' | 'RESTORATIVE' | 'COSMETIC' | 'ORTHO' | 'PERIO' | 'OTHER';
+
+export type UrgencyLevel = 'URGENT' | 'SOON' | 'ELECTIVE';
 
 // Entities
 
@@ -62,6 +65,11 @@ export interface TreatmentPlanItem {
   selectedTeeth?: number[] | null;
   selectedQuadrants?: ('UR' | 'UL' | 'LL' | 'LR')[] | null;
   selectedArches?: ('UPPER' | 'LOWER')[] | null;
+
+  // Clinical Logic
+  urgency?: UrgencyLevel;
+  estimatedVisits?: number;
+  estimatedDurationWeeks?: number;
 
   // Pricing
   baseFee: number;
