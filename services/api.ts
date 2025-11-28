@@ -1,6 +1,6 @@
 import { 
   TreatmentPlan, 
-  PlanStatus, 
+  TreatmentPlanStatus, 
   ActivityLog, 
   ActivityType, 
   UserRole,
@@ -24,34 +24,38 @@ const SEED_USER: User = {
   id: 'u1',
   name: 'Dr. Sarah Bennett',
   email: 'sarah@dentalpro.com',
-  role: UserRole.DOCTOR,
-  clinic_id: 'c1'
+  role: 'DOCTOR'
 };
 
 const SEED_PATIENTS: Patient[] = [
-  { id: 'p1', clinic_id: 'c1', first_name: 'Alex', last_name: 'Rivera', date_of_birth: '1985-04-12', phone: '555-0123', email: 'alex@example.com' },
-  { id: 'p2', clinic_id: 'c1', first_name: 'Jordan', last_name: 'Lee', date_of_birth: '1990-09-21', phone: '555-0987', email: 'jordan@example.com' },
-  { id: 'p3', clinic_id: 'c1', first_name: 'Casey', last_name: 'Smith', date_of_birth: '1978-11-05', phone: '555-4567', email: 'casey@example.com' },
+  { id: 'p1', firstName: 'Alex', lastName: 'Rivera', dateOfBirth: '1985-04-12', phone: '555-0123', email: 'alex@example.com' },
+  { id: 'p2', firstName: 'Jordan', lastName: 'Lee', dateOfBirth: '1990-09-21', phone: '555-0987', email: 'jordan@example.com' },
+  { id: 'p3', firstName: 'Casey', lastName: 'Smith', dateOfBirth: '1978-11-05', phone: '555-4567', email: 'casey@example.com' },
 ];
 
 const SEED_PLANS: TreatmentPlan[] = [
   {
     id: 'tp1',
-    clinic_id: 'c1',
-    patient_id: 'p1',
-    plan_number: 'TP-2025-0012',
+    patientId: 'p1',
+    planNumber: 'TP-2025-0012',
     title: 'Comprehensive Upper Rehab',
-    status: PlanStatus.DRAFT,
-    created_by_user_id: 'u1',
-    total_fee: 4500,
-    estimated_insurance: 1500,
-    patient_portion: 3000,
-    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updated_at: new Date(Date.now() - 86400000).toISOString(),
-    notes_internal: 'Patient expressed concern about recovery time.',
+    status: 'DRAFT',
+    totalFee: 4500,
+    estimatedInsurance: 1500,
+    patientPortion: 3000,
+    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+    updatedAt: new Date(Date.now() - 86400000).toISOString(),
+    notesInternal: 'Patient expressed concern about recovery time.',
+    itemIds: ['tpi1', 'tpi2'],
     items: [
-      { id: 'tpi1', treatment_plan_id: 'tp1', procedure_code: 'D6010', procedure_name: 'Surgical Placement of Implant Body', tooth: '8', fee: 2000, sort_order: 1 },
-      { id: 'tpi2', treatment_plan_id: 'tp1', procedure_code: 'D6058', procedure_name: 'Abutment supported porcelain/ceramic crown', tooth: '8', fee: 2500, sort_order: 2 }
+      { 
+        id: 'tpi1', treatmentPlanId: 'tp1', feeScheduleEntryId: 'f1', procedureCode: 'D6010', procedureName: 'Surgical Placement of Implant Body', 
+        selectedTeeth: ['8'], baseFee: 2000, grossFee: 2000, netFee: 2000, units: 1, discount: 0, sortOrder: 1, unitType: 'PER_TOOTH', category: 'IMPLANT' 
+      },
+      { 
+        id: 'tpi2', treatmentPlanId: 'tp1', feeScheduleEntryId: 'f2', procedureCode: 'D6058', procedureName: 'Abutment supported porcelain/ceramic crown', 
+        selectedTeeth: ['8'], baseFee: 2500, grossFee: 2500, netFee: 2500, units: 1, discount: 0, sortOrder: 2, unitType: 'PER_TOOTH', category: 'IMPLANT' 
+      }
     ]
   }
 ];
@@ -96,7 +100,7 @@ export const getPlans = async (filters: { search?: string; status?: string } = {
   // Hydrate patients
   let results = allPlans.map(plan => ({
     ...plan,
-    patient: allPatients.find(p => p.id === plan.patient_id)
+    patient: allPatients.find(p => p.id === plan.patientId)
   }));
 
   if (filters.status && filters.status !== 'ALL') {
@@ -106,14 +110,14 @@ export const getPlans = async (filters: { search?: string; status?: string } = {
   if (filters.search) {
     const term = filters.search.toLowerCase();
     results = results.filter(p => 
-      p.plan_number.toLowerCase().includes(term) ||
-      p.patient?.first_name.toLowerCase().includes(term) ||
-      p.patient?.last_name.toLowerCase().includes(term) ||
+      p.planNumber.toLowerCase().includes(term) ||
+      p.patient?.firstName.toLowerCase().includes(term) ||
+      p.patient?.lastName.toLowerCase().includes(term) ||
       p.title.toLowerCase().includes(term)
     );
   }
 
-  return results.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+  return results.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 };
 
 export const getPlanById = async (id: string): Promise<TreatmentPlan | null> => {
@@ -124,7 +128,7 @@ export const getPlanById = async (id: string): Promise<TreatmentPlan | null> => 
   const patients = getStoredPatients();
   return {
     ...plan,
-    patient: patients.find(p => p.id === plan.patient_id)
+    patient: patients.find(p => p.id === plan.patientId)
   };
 };
 
@@ -137,23 +141,22 @@ export const createPlan = async (patientId: string, title: string): Promise<Trea
 
   const newPlan: TreatmentPlan = {
     id: generateId(),
-    clinic_id: 'c1',
-    patient_id: patientId,
-    plan_number: `TP-2025-${Math.floor(1000 + Math.random() * 9000)}`,
+    patientId: patientId,
+    planNumber: `TP-2025-${Math.floor(1000 + Math.random() * 9000)}`,
     title,
-    status: PlanStatus.DRAFT,
-    created_by_user_id: SEED_USER.id,
-    total_fee: 0,
-    estimated_insurance: 0,
-    patient_portion: 0,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    status: 'DRAFT',
+    totalFee: 0,
+    estimatedInsurance: 0,
+    patientPortion: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    itemIds: [],
     items: []
   };
 
   plans.unshift(newPlan);
   saveStoredPlans(plans);
-  await logActivity(newPlan.id, ActivityType.PLAN_CREATED, `Plan created for ${patient.first_name} ${patient.last_name}`);
+  await logActivity(newPlan.id, 'PLAN_CREATED', `Plan created for ${patient.firstName} ${patient.lastName}`);
   
   return { ...newPlan, patient };
 };
@@ -166,7 +169,7 @@ export const updatePlan = async (id: string, updates: Partial<TreatmentPlan>): P
   const updatedPlan = {
     ...plans[idx],
     ...updates,
-    updated_at: new Date().toISOString()
+    updatedAt: new Date().toISOString()
   };
 
   plans[idx] = updatedPlan;
@@ -174,7 +177,7 @@ export const updatePlan = async (id: string, updates: Partial<TreatmentPlan>): P
   return getPlanById(id) as Promise<TreatmentPlan>;
 };
 
-export const updatePlanStatus = async (id: string, status: PlanStatus): Promise<TreatmentPlan> => {
+export const updatePlanStatus = async (id: string, status: TreatmentPlanStatus): Promise<TreatmentPlan> => {
   const plans = getStoredPlans();
   const idx = plans.findIndex(p => p.id === id);
   if (idx === -1) throw new Error("Plan not found");
@@ -182,17 +185,17 @@ export const updatePlanStatus = async (id: string, status: PlanStatus): Promise<
   const now = new Date().toISOString();
   const updates: Partial<TreatmentPlan> = {
     status,
-    updated_at: now,
-    presented_at: status === PlanStatus.PRESENTED ? now : plans[idx].presented_at,
-    decided_at: (status === PlanStatus.ACCEPTED || status === PlanStatus.DECLINED) ? now : plans[idx].decided_at
+    updatedAt: now,
+    presentedAt: status === 'PRESENTED' ? now : plans[idx].presentedAt,
+    decidedAt: (status === 'ACCEPTED' || status === 'DECLINED') ? now : plans[idx].decidedAt
   };
 
   plans[idx] = { ...plans[idx], ...updates };
   saveStoredPlans(plans);
 
   await logActivity(id, 
-    status === PlanStatus.ACCEPTED ? ActivityType.PLAN_ACCEPTED : 
-    status === PlanStatus.DECLINED ? ActivityType.PLAN_DECLINED : ActivityType.PLAN_UPDATED, 
+    status === 'ACCEPTED' ? 'PLAN_ACCEPTED' : 
+    status === 'DECLINED' ? 'PLAN_DECLINED' : 'PLAN_UPDATED', 
     `Plan marked as ${status}`
   );
 
@@ -201,24 +204,41 @@ export const updatePlanStatus = async (id: string, status: PlanStatus): Promise<
 
 // --- ITEM MANAGEMENT ---
 
-export const addItemToPlan = async (planId: string, itemData: Omit<TreatmentPlanItem, 'id' | 'treatment_plan_id'>): Promise<TreatmentPlan> => {
+export const addItemToPlan = async (planId: string, itemData: Partial<TreatmentPlanItem>): Promise<TreatmentPlan> => {
   const plans = getStoredPlans();
   const idx = plans.findIndex(p => p.id === planId);
   if (idx === -1) throw new Error("Plan not found");
 
   const newItem: TreatmentPlanItem = {
     id: generateId(),
-    treatment_plan_id: planId,
+    treatmentPlanId: planId,
+    feeScheduleEntryId: 'manual',
+    procedureCode: 'MISC',
+    procedureName: 'New Procedure',
+    unitType: 'PER_TOOTH',
+    category: 'OTHER',
+    baseFee: 0,
+    units: 1,
+    grossFee: 0,
+    discount: 0,
+    netFee: 0,
+    sortOrder: (plans[idx].items || []).length + 1,
     ...itemData
-  };
+  } as TreatmentPlanItem;
+  
+  // Recalc
+  if (!newItem.grossFee) newItem.grossFee = newItem.baseFee * newItem.units;
+  if (!newItem.netFee) newItem.netFee = newItem.grossFee - newItem.discount;
 
-  plans[idx].items.push(newItem);
+  if (!plans[idx].items) plans[idx].items = [];
+  plans[idx].items!.push(newItem);
+  plans[idx].itemIds.push(newItem.id);
   
   // Recalculate totals
-  const total = plans[idx].items.reduce((sum, i) => sum + i.fee, 0);
-  plans[idx].total_fee = total;
-  plans[idx].patient_portion = total - (plans[idx].estimated_insurance || 0);
-  plans[idx].updated_at = new Date().toISOString();
+  const total = plans[idx].items!.reduce((sum, i) => sum + i.netFee, 0);
+  plans[idx].totalFee = total;
+  plans[idx].patientPortion = total - (plans[idx].estimatedInsurance || 0);
+  plans[idx].updatedAt = new Date().toISOString();
 
   saveStoredPlans(plans);
   return getPlanById(planId) as Promise<TreatmentPlan>;
@@ -229,16 +249,17 @@ export const updatePlanItem = async (planId: string, itemId: string, updates: Pa
   const planIdx = plans.findIndex(p => p.id === planId);
   if (planIdx === -1) throw new Error("Plan not found");
 
-  const itemIdx = plans[planIdx].items.findIndex(i => i.id === itemId);
+  if (!plans[planIdx].items) plans[planIdx].items = [];
+  const itemIdx = plans[planIdx].items!.findIndex(i => i.id === itemId);
   if (itemIdx === -1) throw new Error("Item not found");
 
-  plans[planIdx].items[itemIdx] = { ...plans[planIdx].items[itemIdx], ...updates };
+  plans[planIdx].items![itemIdx] = { ...plans[planIdx].items![itemIdx], ...updates };
   
   // Recalculate totals
-  const total = plans[planIdx].items.reduce((sum, i) => sum + i.fee, 0);
-  plans[planIdx].total_fee = total;
-  plans[planIdx].patient_portion = total - (plans[planIdx].estimated_insurance || 0);
-  plans[planIdx].updated_at = new Date().toISOString();
+  const total = plans[planIdx].items!.reduce((sum, i) => sum + i.netFee, 0);
+  plans[planIdx].totalFee = total;
+  plans[planIdx].patientPortion = total - (plans[planIdx].estimatedInsurance || 0);
+  plans[planIdx].updatedAt = new Date().toISOString();
 
   saveStoredPlans(plans);
   return getPlanById(planId) as Promise<TreatmentPlan>;
@@ -249,13 +270,16 @@ export const deletePlanItem = async (planId: string, itemId: string): Promise<Tr
   const planIdx = plans.findIndex(p => p.id === planId);
   if (planIdx === -1) throw new Error("Plan not found");
 
-  plans[planIdx].items = plans[planIdx].items.filter(i => i.id !== itemId);
+  if (plans[planIdx].items) {
+    plans[planIdx].items = plans[planIdx].items!.filter(i => i.id !== itemId);
+  }
+  plans[planIdx].itemIds = plans[planIdx].itemIds.filter(id => id !== itemId);
   
   // Recalculate totals
-  const total = plans[planIdx].items.reduce((sum, i) => sum + i.fee, 0);
-  plans[planIdx].total_fee = total;
-  plans[planIdx].patient_portion = total - (plans[planIdx].estimated_insurance || 0);
-  plans[planIdx].updated_at = new Date().toISOString();
+  const total = (plans[planIdx].items || []).reduce((sum, i) => sum + i.netFee, 0);
+  plans[planIdx].totalFee = total;
+  plans[planIdx].patientPortion = total - (plans[planIdx].estimatedInsurance || 0);
+  plans[planIdx].updatedAt = new Date().toISOString();
 
   saveStoredPlans(plans);
   return getPlanById(planId) as Promise<TreatmentPlan>;
@@ -267,11 +291,10 @@ export const logActivity = async (planId: string, type: ActivityType, message: s
   const logs = getStoredActivities();
   const newLog: ActivityLog = {
     id: generateId(),
-    clinic_id: 'c1',
-    treatment_plan_id: planId,
+    treatmentPlanId: planId,
     type,
     message,
-    created_at: new Date().toISOString()
+    createdAt: new Date().toISOString()
   };
   logs.unshift(newLog);
   saveStoredActivities(logs);
@@ -279,26 +302,25 @@ export const logActivity = async (planId: string, type: ActivityType, message: s
 
 export const getActivityLogs = async (planId: string): Promise<ActivityLog[]> => {
   const logs = getStoredActivities();
-  return logs.filter(a => a.treatment_plan_id === planId);
+  return logs.filter(a => a.treatmentPlanId === planId);
 };
 
 export const createShareLink = async (planId: string): Promise<string> => {
   const shares = getStoredShares();
   
-  // Invalidate old links for this plan? Optional. Let's keep them valid for now or create new one.
-  const token = generateId() + generateId(); // simple long string
+  const token = generateId() + generateId();
   const newShare: ShareLink = {
     id: generateId(),
-    treatment_plan_id: planId,
+    treatmentPlanId: planId,
     token,
-    expires_at: new Date(Date.now() + 86400000 * 30).toISOString(), // 30 days
-    created_at: new Date().toISOString(),
-    is_active: true
+    expiresAt: new Date(Date.now() + 86400000 * 30).toISOString(),
+    createdAt: new Date().toISOString(),
+    isActive: true
   };
 
   shares.push(newShare);
   saveStoredShares(shares);
-  await logActivity(planId, ActivityType.PLAN_PRESENTED, 'Share link generated');
+  await logActivity(planId, 'PLAN_PRESENTED', 'Share link generated');
   return token;
 };
 
@@ -306,22 +328,20 @@ export const getPlanByToken = async (token: string): Promise<TreatmentPlan | nul
   const shares = getStoredShares();
   const share = shares.find(s => s.token === token);
   
-  if (!share || !share.is_active || new Date(share.expires_at) < new Date()) {
+  if (!share || !share.isActive || (share.expiresAt && new Date(share.expiresAt) < new Date())) {
     return null;
   }
 
   const plans = getStoredPlans();
-  const plan = plans.find(p => p.id === share.treatment_plan_id);
+  const plan = plans.find(p => p.id === share.treatmentPlanId);
   if (!plan) return null;
 
   const patients = getStoredPatients();
   const hydratedPlan = {
     ...plan,
-    patient: patients.find(p => p.id === plan.patient_id)
+    patient: patients.find(p => p.id === plan.patientId)
   };
 
-  // Security: You might want to strip internal notes here before returning
-  // In a real backend, we definitely would.
-  const { notes_internal, ...safePlan } = hydratedPlan;
+  const { notesInternal, ...safePlan } = hydratedPlan;
   return safePlan as TreatmentPlan;
 };

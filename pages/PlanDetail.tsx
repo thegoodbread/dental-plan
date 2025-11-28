@@ -9,7 +9,7 @@ import {
   addItemToPlan, deletePlanItem, updatePlan, updatePlanItem 
 } from '../services/api';
 import { explainPlanForPatient } from '../services/geminiService';
-import { TreatmentPlan, PlanStatus, ActivityLog, TreatmentPlanItem } from '../types';
+import { TreatmentPlan, TreatmentPlanStatus, ActivityLog, TreatmentPlanItem } from '../types';
 import { StatusBadge } from '../components/ui/StatusBadge';
 
 export const PlanDetail: React.FC = () => {
@@ -43,8 +43,8 @@ export const PlanDetail: React.FC = () => {
   useEffect(() => {
     if (plan) {
       setTempTitle(plan.title);
-      setTempNotes(plan.notes_internal || '');
-      setTempInsurance(plan.estimated_insurance || 0);
+      setTempNotes(plan.notesInternal || '');
+      setTempInsurance(plan.estimatedInsurance || 0);
     }
   }, [plan]);
 
@@ -67,7 +67,7 @@ export const PlanDetail: React.FC = () => {
     setActivities(acts);
   };
 
-  const handleStatusChange = async (newStatus: PlanStatus) => {
+  const handleStatusChange = async (newStatus: TreatmentPlanStatus) => {
     if (!plan) return;
     await updatePlanStatus(plan.id, newStatus);
     refreshPlan();
@@ -86,7 +86,7 @@ export const PlanDetail: React.FC = () => {
     setGeneratingAi(true);
     const explanation = await explainPlanForPatient(plan);
     // Save it to the plan
-    await updatePlan(plan.id, { ai_explanation: explanation });
+    await updatePlan(plan.id, { explanationForPatient: explanation });
     setGeneratingAi(false);
     refreshPlan();
   };
@@ -96,11 +96,11 @@ export const PlanDetail: React.FC = () => {
     if (!plan) return;
     
     await addItemToPlan(plan.id, {
-        procedure_code: newItemCode || 'MISC',
-        procedure_name: newItemName,
-        tooth: newItemTooth,
-        fee: Number(newItemFee),
-        sort_order: plan.items.length + 1
+        procedureCode: newItemCode || 'MISC',
+        procedureName: newItemName,
+        selectedTeeth: newItemTooth ? [newItemTooth] : [],
+        baseFee: Number(newItemFee),
+        sortOrder: (plan.items || []).length + 1
     });
 
     // Reset form
@@ -124,7 +124,7 @@ export const PlanDetail: React.FC = () => {
     if (!plan) return;
     await updatePlan(plan.id, {
       title: tempTitle,
-      notes_internal: tempNotes
+      notesInternal: tempNotes
     });
     setIsEditingTitle(false);
     refreshPlan();
@@ -136,10 +136,10 @@ export const PlanDetail: React.FC = () => {
      // but currently updatePlan just saves fields. 
      // We should manually update patient_portion or let the service handle it.
      // For this simple service, let's update both.
-     const newPatientPortion = plan.total_fee - tempInsurance;
+     const newPatientPortion = plan.totalFee - tempInsurance;
      await updatePlan(plan.id, { 
-       estimated_insurance: tempInsurance,
-       patient_portion: newPatientPortion 
+       estimatedInsurance: tempInsurance,
+       patientPortion: newPatientPortion 
      });
      refreshPlan();
   };
@@ -174,7 +174,7 @@ export const PlanDetail: React.FC = () => {
                   </div>
               )}
             </div>
-            <p className="text-sm text-gray-500">{plan.plan_number} • {plan.patient?.first_name} {plan.patient?.last_name}</p>
+            <p className="text-sm text-gray-500">{plan.planNumber} • {plan.patient?.firstName} {plan.patient?.lastName}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -195,16 +195,16 @@ export const PlanDetail: React.FC = () => {
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Patient Details</h3>
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
-                {plan.patient?.first_name[0]}{plan.patient?.last_name[0]}
+                {plan.patient?.firstName[0]}{plan.patient?.lastName[0]}
               </div>
               <div>
-                <div className="font-medium text-gray-900">{plan.patient?.first_name} {plan.patient?.last_name}</div>
+                <div className="font-medium text-gray-900">{plan.patient?.firstName} {plan.patient?.lastName}</div>
                 <div className="text-sm text-gray-500">{plan.patient?.email}</div>
               </div>
             </div>
             <div className="text-sm text-gray-600 grid grid-cols-2 gap-y-2 mt-4">
               <span className="text-gray-400">DOB:</span>
-              <span>{plan.patient?.date_of_birth}</span>
+              <span>{plan.patient?.dateOfBirth}</span>
               <span className="text-gray-400">Phone:</span>
               <span>{plan.patient?.phone}</span>
             </div>
@@ -219,7 +219,7 @@ export const PlanDetail: React.FC = () => {
                   <p className="text-sm text-gray-800 font-medium">{act.message}</p>
                   <span className="text-xs text-gray-500 flex items-center gap-1 mt-1">
                     <Calendar size={10} />
-                    {new Date(act.created_at).toLocaleString()}
+                    {new Date(act.createdAt).toLocaleString()}
                   </span>
                 </div>
               ))}
@@ -259,15 +259,15 @@ export const PlanDetail: React.FC = () => {
                 className="text-xs flex items-center gap-1 text-purple-600 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-lg border border-purple-200 transition-colors"
               >
                 <Sparkles size={14} />
-                {generatingAi ? 'Generating...' : plan.ai_explanation ? 'Regenerate AI Explanation' : 'Generate AI Explanation'}
+                {generatingAi ? 'Generating...' : plan.explanationForPatient ? 'Regenerate AI Explanation' : 'Generate AI Explanation'}
               </button>
             </div>
             
-            {plan.ai_explanation && (
+            {plan.explanationForPatient && (
               <div className="px-6 py-4 bg-purple-50 border-b border-purple-100">
                  <h4 className="text-xs font-bold text-purple-800 uppercase mb-1">AI Patient Explanation</h4>
                 <p className="text-sm text-purple-900 italic leading-relaxed">
-                  "{plan.ai_explanation}"
+                  "{plan.explanationForPatient}"
                 </p>
               </div>
             )}
@@ -283,16 +283,16 @@ export const PlanDetail: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {plan.items.map((item) => (
+                {(plan.items || []).map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50 group">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{item.procedure_code}</td>
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{item.procedureCode}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">
-                      <div>{item.procedure_name}</div>
+                      <div>{item.procedureName}</div>
                       {item.notes && <div className="text-xs text-gray-400 mt-0.5">{item.notes}</div>}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{item.tooth || '-'}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{item.selectedTeeth?.join(',') || '-'}</td>
                     <td className="px-6 py-4 text-sm font-medium text-gray-900 text-right">
-                      ${item.fee.toFixed(2)}
+                      ${item.netFee.toFixed(2)}
                     </td>
                     <td className="px-6 py-4 text-right">
                        <button onClick={() => handleDeleteItem(item.id)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -352,26 +352,26 @@ export const PlanDetail: React.FC = () => {
                 <h3 className="font-semibold text-gray-900 mb-2">Change Status</h3>
                 <div className="grid grid-cols-2 gap-2">
                   <button 
-                    onClick={() => handleStatusChange(PlanStatus.PRESENTED)}
-                    className={`flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${plan.status === PlanStatus.PRESENTED ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                    onClick={() => handleStatusChange('PRESENTED')}
+                    className={`flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${plan.status === 'PRESENTED' ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
                   >
                     <Clock size={16} /> Presented
                   </button>
                   <button 
-                     onClick={() => handleStatusChange(PlanStatus.ACCEPTED)}
-                     className={`flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${plan.status === PlanStatus.ACCEPTED ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                     onClick={() => handleStatusChange('ACCEPTED')}
+                     className={`flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${plan.status === 'ACCEPTED' ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
                   >
                     <CheckCircle size={16} /> Accepted
                   </button>
                   <button 
-                     onClick={() => handleStatusChange(PlanStatus.DECLINED)}
-                     className={`flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${plan.status === PlanStatus.DECLINED ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                     onClick={() => handleStatusChange('DECLINED')}
+                     className={`flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${plan.status === 'DECLINED' ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
                   >
                     <XCircle size={16} /> Declined
                   </button>
                   <button 
-                     onClick={() => handleStatusChange(PlanStatus.ON_HOLD)}
-                     className={`flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${plan.status === PlanStatus.ON_HOLD ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                     onClick={() => handleStatusChange('ON_HOLD')}
+                     className={`flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${plan.status === 'ON_HOLD' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
                   >
                     <AlertCircle size={16} /> On Hold
                   </button>
@@ -388,7 +388,7 @@ export const PlanDetail: React.FC = () => {
             <div className="space-y-4">
               <div className="flex justify-between items-center pb-4 border-b border-gray-100">
                 <span className="text-gray-500">Total Treatment</span>
-                <span className="font-semibold text-gray-900">${plan.total_fee.toLocaleString()}</span>
+                <span className="font-semibold text-gray-900">${plan.totalFee.toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center pb-4 border-b border-gray-100">
                 <span className="text-gray-500">Est. Insurance</span>
@@ -405,7 +405,7 @@ export const PlanDetail: React.FC = () => {
               </div>
               <div className="flex justify-between items-center pt-2">
                 <span className="text-gray-900 font-bold text-lg">Patient Portion</span>
-                <span className="text-blue-600 font-bold text-2xl">${plan.patient_portion.toLocaleString()}</span>
+                <span className="text-blue-600 font-bold text-2xl">${plan.patientPortion.toLocaleString()}</span>
               </div>
             </div>
             <div className="mt-8 bg-gray-50 p-4 rounded-lg text-xs text-gray-500">

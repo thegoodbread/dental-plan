@@ -14,14 +14,14 @@ export const explainPlanForPatient = async (plan: TreatmentPlan): Promise<string
   try {
     const ai = new GoogleGenAI({ apiKey });
     
-    const proceduresText = plan.items.map(i => `- ${i.procedure_name} (Tooth: ${i.tooth || 'N/A'}, Fee: $${i.fee})`).join('\n');
+    const proceduresText = (plan.items || []).map(i => `- ${i.procedureName} (Tooth: ${i.selectedTeeth?.join(', ') || 'N/A'}, Fee: $${i.netFee})`).join('\n');
     const prompt = `
       You are a friendly, empathetic treatment coordinator at a dental clinic.
-      Explain the following treatment plan to the patient, named ${plan.patient?.first_name || 'Patient'}.
+      Explain the following treatment plan to the patient, named ${plan.patient?.firstName || 'Patient'}.
       
       Plan Title: ${plan.title}
-      Total Cost: $${plan.total_fee}
-      Patient Portion: $${plan.patient_portion}
+      Total Cost: $${plan.totalFee}
+      Patient Portion: $${plan.patientPortion}
 
       Procedures:
       ${proceduresText}

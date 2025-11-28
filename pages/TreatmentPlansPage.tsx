@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, MoreHorizontal, X } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { getPlans, getPatients, createPlan } from '../services/api';
-import { TreatmentPlan, TreatmentPlanStatus, Patient } from '../types';
-import { StatusBadge } from '../components/ui/StatusBadge';
+import { getAllTreatmentPlans, getPatients, createTreatmentPlan } from '../services/treatmentPlans';
+import { TreatmentPlan, Patient } from '../types';
+import { StatusBadge } from '../components/StatusBadge';
 
-export const Dashboard: React.FC = () => {
+export const TreatmentPlansPage: React.FC = () => {
   const navigate = useNavigate();
   const [plans, setPlans] = useState<TreatmentPlan[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   
@@ -17,41 +16,37 @@ export const Dashboard: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [newPlanPatientId, setNewPlanPatientId] = useState('');
   const [newPlanTitle, setNewPlanTitle] = useState('');
-  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    fetchPlans();
-    fetchPatients();
-  }, [searchTerm, statusFilter]);
+    loadData();
+  }, []);
 
-  const fetchPlans = async () => {
-    setLoading(true);
-    const data = await getPlans({ search: searchTerm, status: statusFilter });
-    setPlans(data);
-    setLoading(false);
+  const loadData = () => {
+    setPlans(getAllTreatmentPlans());
+    setPatients(getPatients());
   };
 
-  const fetchPatients = async () => {
-    const data = await getPatients();
-    setPatients(data);
-    if (data.length > 0) setNewPlanPatientId(data[0].id);
-  };
+  const filteredPlans = plans.filter(p => {
+    const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter;
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = 
+      p.title.toLowerCase().includes(term) || 
+      p.planNumber.toLowerCase().includes(term) ||
+      p.patient?.firstName.toLowerCase().includes(term) ||
+      p.patient?.lastName.toLowerCase().includes(term);
+    return matchesStatus && matchesSearch;
+  });
 
-  const handleCreatePlan = async (e: React.FormEvent) => {
+  const handleCreatePlan = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPlanPatientId || !newPlanTitle) return;
     
-    setCreating(true);
-    try {
-      const newPlan = await createPlan(newPlanPatientId, newPlanTitle);
-      setShowCreateModal(false);
-      setNewPlanTitle('');
-      navigate(`/plan/${newPlan.id}`);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setCreating(false);
-    }
+    const newPlan = createTreatmentPlan({
+      patientId: newPlanPatientId,
+      title: newPlanTitle
+    });
+    
+    navigate(`/plan/${newPlan.id}`);
   };
 
   const tabs = ['ALL', 'DRAFT', 'PRESENTED', 'ACCEPTED', 'DECLINED', 'ON_HOLD'];
@@ -61,10 +56,13 @@ export const Dashboard: React.FC = () => {
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Treatment Plans</h1>
-          <p className="text-gray-500 text-sm mt-1">Manage and track patient treatment proposals.</p>
+          <p className="text-gray-500 text-sm mt-1">Create and manage patient case proposals.</p>
         </div>
         <button 
-          onClick={() => setShowCreateModal(true)}
+          onClick={() => {
+            setShowCreateModal(true);
+            if (patients.length > 0) setNewPlanPatientId(patients[0].id);
+          }}
           className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors shadow-sm"
         >
           <Plus size={18} />
@@ -79,7 +77,7 @@ export const Dashboard: React.FC = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input
               type="text"
-              placeholder="Search patient, plan number..."
+              placeholder="Search plans..."
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -90,13 +88,13 @@ export const Dashboard: React.FC = () => {
               <button
                 key={tab}
                 onClick={() => setStatusFilter(tab)}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
+                className={`px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap transition-colors ${
                   statusFilter === tab
                     ? 'bg-gray-900 text-white'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                {tab === 'ALL' ? 'All Plans' : tab.charAt(0) + tab.slice(1).toLowerCase()}
+                {tab.replace('_', ' ')}
               </button>
             ))}
           </div>
@@ -107,29 +105,22 @@ export const Dashboard: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Plan Details</th>
+                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Plan info</th>
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient</th>
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Total Fee</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Last Updated</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"></th>
+                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Updated</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {loading ? (
+              {filteredPlans.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                    Loading plans...
-                  </td>
-                </tr>
-              ) : plans.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
                     No plans found matching your criteria.
                   </td>
                 </tr>
               ) : (
-                plans.map((plan) => (
+                filteredPlans.map((plan) => (
                   <tr 
                     key={plan.id} 
                     className="hover:bg-gray-50 cursor-pointer transition-colors"
@@ -137,13 +128,12 @@ export const Dashboard: React.FC = () => {
                   >
                     <td className="px-6 py-4">
                       <div className="font-medium text-gray-900">{plan.title}</div>
-                      <div className="text-xs text-gray-500">{plan.planNumber}</div>
+                      <div className="text-xs text-gray-500 font-mono">{plan.planNumber}</div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="font-medium text-gray-900">
                         {plan.patient?.firstName} {plan.patient?.lastName}
                       </div>
-                      <div className="text-xs text-gray-500">DOB: {plan.patient?.dateOfBirth}</div>
                     </td>
                     <td className="px-6 py-4">
                       <StatusBadge status={plan.status} />
@@ -151,13 +141,8 @@ export const Dashboard: React.FC = () => {
                     <td className="px-6 py-4 text-right font-medium text-gray-900">
                       ${plan.totalFee.toLocaleString()}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
+                    <td className="px-6 py-4 text-right text-sm text-gray-500">
                       {new Date(plan.updatedAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button className="text-gray-400 hover:text-gray-600 p-1">
-                        <MoreHorizontal size={18} />
-                      </button>
                     </td>
                   </tr>
                 ))
@@ -170,7 +155,7 @@ export const Dashboard: React.FC = () => {
       {/* Create Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="flex justify-between items-center p-4 border-b border-gray-200">
               <h3 className="font-bold text-lg text-gray-900">New Treatment Plan</h3>
               <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600">
@@ -186,6 +171,7 @@ export const Dashboard: React.FC = () => {
                   onChange={(e) => setNewPlanPatientId(e.target.value)}
                   required
                 >
+                  <option value="" disabled>-- Select Patient --</option>
                   {patients.map(p => (
                     <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>
                   ))}
@@ -212,17 +198,15 @@ export const Dashboard: React.FC = () => {
                 </button>
                 <button 
                   type="submit"
-                  disabled={creating}
-                  className="flex-1 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  className="flex-1 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700"
                 >
-                  {creating ? 'Creating...' : 'Create Plan'}
+                  Create Plan
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-
     </div>
   );
 };

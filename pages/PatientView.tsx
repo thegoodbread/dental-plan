@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { getPlanByToken } from '../services/api';
-import { TreatmentPlan, PlanStatus } from '../types';
+import { TreatmentPlan } from '../types';
 import { Phone, Calendar, CheckCircle, AlertCircle } from 'lucide-react';
 
 export const PatientView: React.FC = () => {
@@ -37,8 +37,8 @@ export const PatientView: React.FC = () => {
     </div>
   );
 
-  const isAccepted = plan.status === PlanStatus.ACCEPTED;
-  const isDeclined = plan.status === PlanStatus.DECLINED;
+  const isAccepted = plan.status === 'ACCEPTED';
+  const isDeclined = plan.status === 'DECLINED';
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
@@ -72,20 +72,20 @@ export const PatientView: React.FC = () => {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
           {/* Welcome Section */}
           <div className="p-6 md:p-8 border-b border-gray-100">
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Hi {plan.patient?.first_name},</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Hi {plan.patient?.firstName},</h1>
             <p className="text-gray-600 leading-relaxed mb-4">
               Here is the breakdown of the treatment plan we discussed for <strong>{plan.title}</strong>. 
             </p>
             
             {/* AI Explanation Public View */}
-            {plan.ai_explanation && (
+            {plan.explanationForPatient && (
                 <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-blue-900 mb-2">
-                    <p className="text-sm md:text-base leading-relaxed">{plan.ai_explanation}</p>
+                    <p className="text-sm md:text-base leading-relaxed">{plan.explanationForPatient}</p>
                 </div>
             )}
 
             <div className="mt-4 inline-flex items-center text-sm text-gray-400 bg-gray-50 px-3 py-1 rounded-full">
-              Plan #{plan.plan_number} • Issued {new Date(plan.created_at).toLocaleDateString()}
+              Plan #{plan.planNumber} • Issued {new Date(plan.createdAt).toLocaleDateString()}
             </div>
           </div>
 
@@ -93,21 +93,21 @@ export const PatientView: React.FC = () => {
           <div className="p-6 md:p-8">
             <h2 className="text-lg font-bold text-gray-900 mb-4">Treatment Details</h2>
             <div className="space-y-4">
-              {plan.items.map((item, idx) => (
+              {(plan.items || []).map((item, idx) => (
                 <div key={item.id} className="flex flex-col sm:flex-row sm:items-start justify-between py-4 border-b border-gray-100 last:border-0">
                   <div className="flex gap-4">
                     <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm shrink-0">
                       {idx + 1}
                     </div>
                     <div>
-                      <div className="font-semibold text-gray-900">{item.procedure_name}</div>
+                      <div className="font-semibold text-gray-900">{item.procedureName}</div>
                       <div className="text-sm text-gray-500 mt-1">
-                        Tooth: {item.tooth || 'General'}
+                        Tooth: {item.selectedTeeth?.join(',') || 'General'}
                       </div>
                     </div>
                   </div>
                   <div className="mt-2 sm:mt-0 font-medium text-gray-900 pl-12 sm:pl-0">
-                    ${item.fee.toLocaleString()}
+                    ${item.netFee.toLocaleString()}
                   </div>
                 </div>
               ))}
@@ -119,18 +119,18 @@ export const PatientView: React.FC = () => {
             <div className="flex flex-col gap-3">
                <div className="flex justify-between text-gray-500">
                  <span>Total Treatment Fee</span>
-                 <span>${plan.total_fee.toLocaleString()}</span>
+                 <span>${plan.totalFee.toLocaleString()}</span>
                </div>
-               {plan.estimated_insurance > 0 && (
+               {(plan.estimatedInsurance || 0) > 0 && (
                  <div className="flex justify-between text-green-600">
                    <span>Estimated Insurance Benefit</span>
-                   <span>- ${plan.estimated_insurance.toLocaleString()}</span>
+                   <span>- ${(plan.estimatedInsurance || 0).toLocaleString()}</span>
                  </div>
                )}
                <div className="border-t border-gray-200 my-2"></div>
                <div className="flex justify-between items-center">
                  <span className="text-lg font-bold text-gray-900">Your Estimated Portion</span>
-                 <span className="text-2xl font-bold text-blue-600">${plan.patient_portion.toLocaleString()}</span>
+                 <span className="text-2xl font-bold text-blue-600">${plan.patientPortion.toLocaleString()}</span>
                </div>
             </div>
           </div>
