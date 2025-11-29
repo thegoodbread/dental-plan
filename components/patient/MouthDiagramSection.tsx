@@ -21,8 +21,10 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({ items 
 
   const getToothStyle = (tooth: number) => {
     const urgency = data.urgencyMap[tooth];
+    
+    // If no specific per-tooth urgency is mapped, return neutral style
+    // even if the tooth is inside a highlighted quadrant/arch.
     if (!urgency) {
-      // Check if inside a quadrant/arch that is highlighted
       return "bg-white border-gray-200 text-gray-300";
     }
     
@@ -42,11 +44,13 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({ items 
     const qLeftUrgency = data.quadrantUrgency[quadLeft];
     const qRightUrgency = data.quadrantUrgency[quadRight];
 
+    const isUpper = arch === 'UPPER';
+
     return (
-      <div className="relative pt-6 pb-2">
+      <div className={`relative ${isUpper ? 'pt-6 pb-2' : 'pt-2 pb-6'}`}>
          {/* Arch Bar */}
          {archUrgency && (
-           <div className={`absolute top-0 left-4 right-4 h-2 rounded-full ${getUrgencyColor(archUrgency)} opacity-50`}></div>
+           <div className={`absolute ${isUpper ? 'top-0' : 'bottom-0'} left-4 right-4 h-2 rounded-full ${getUrgencyColor(archUrgency)} opacity-50`}></div>
          )}
 
          <div className="flex gap-2 justify-center">

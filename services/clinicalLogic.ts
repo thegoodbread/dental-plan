@@ -46,6 +46,12 @@ export interface DiagramData {
   archUrgency: Record<string, UrgencyLevel>;
 }
 
+const urgencyPriority = (u: UrgencyLevel): number => {
+  if (u === 'URGENT') return 3;
+  if (u === 'SOON') return 2;
+  return 1;
+};
+
 export const mapPlanToDiagram = (items: TreatmentPlanItem[]): DiagramData => {
   const data: DiagramData = {
     teeth: [],
@@ -59,11 +65,11 @@ export const mapPlanToDiagram = (items: TreatmentPlanItem[]): DiagramData => {
   items.forEach(item => {
     const urgency = item.urgency || 'ELECTIVE';
 
-    // Map Teeth
-    if (item.selectedTeeth) {
+    // 1. PER TOOTH: Only colors the specific teeth chips
+    if (item.unitType === 'PER_TOOTH' && item.selectedTeeth) {
       item.selectedTeeth.forEach(t => {
         if (!data.teeth.includes(t)) data.teeth.push(t);
-        // Compare urgency (URGENT > SOON > ELECTIVE)
+        
         const current = data.urgencyMap[t];
         if (!current || urgencyPriority(urgency) > urgencyPriority(current)) {
           data.urgencyMap[t] = urgency;
@@ -71,40 +77,27 @@ export const mapPlanToDiagram = (items: TreatmentPlanItem[]): DiagramData => {
       });
     }
 
-    // Map Quadrants
-    if (item.selectedQuadrants) {
+    // 2. PER QUADRANT: Only colors the quadrant zone (outline)
+    if (item.unitType === 'PER_QUADRANT' && item.selectedQuadrants) {
       item.selectedQuadrants.forEach(q => {
         if (!data.quadrants.includes(q)) data.quadrants.push(q);
+        
         const current = data.quadrantUrgency[q];
         if (!current || urgencyPriority(urgency) > urgencyPriority(current)) {
           data.quadrantUrgency[q] = urgency;
         }
-        // Also map implicitly to teeth for visualization fallback
-        QUADRANT_MAP[q].forEach(t => {
-           const curT = data.urgencyMap[t];
-           if (!curT || urgencyPriority(urgency) > urgencyPriority(curT)) {
-             data.urgencyMap[t] = urgency;
-           }
-        });
       });
     }
 
-    // Map Arches
-    if (item.selectedArches) {
+    // 3. PER ARCH / MOUTH: Only colors the arch bar
+    if ((item.unitType === 'PER_ARCH' || item.unitType === 'PER_MOUTH') && item.selectedArches) {
       item.selectedArches.forEach(a => {
         if (!data.arches.includes(a)) data.arches.push(a);
+
         const current = data.archUrgency[a];
         if (!current || urgencyPriority(urgency) > urgencyPriority(current)) {
           data.archUrgency[a] = urgency;
         }
-         // Also map implicitly to teeth
-         const archTeeth = a === 'UPPER' ? TEETH_UPPER : TEETH_LOWER;
-         archTeeth.forEach(t => {
-            const curT = data.urgencyMap[t];
-            if (!curT || urgencyPriority(urgency) > urgencyPriority(curT)) {
-              data.urgencyMap[t] = urgency;
-            }
-         });
       });
     }
   });
@@ -112,11 +105,6 @@ export const mapPlanToDiagram = (items: TreatmentPlanItem[]): DiagramData => {
   return data;
 };
 
-const urgencyPriority = (u: UrgencyLevel): number => {
-  if (u === 'URGENT') return 3;
-  if (u === 'SOON') return 2;
-  return 1;
-};
 
 // --- EXPLANATION GENERATION ---
 

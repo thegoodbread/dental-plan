@@ -6,14 +6,12 @@ interface SummaryMetricsSectionProps {
   visitCount: number;
   phaseCount: number;
   procedureCount: number;
-  teethCount: number;
 }
 
 export const SummaryMetricsSection: React.FC<SummaryMetricsSectionProps> = ({ 
   visitCount, 
   phaseCount, 
-  procedureCount, 
-  teethCount 
+  procedureCount
 }) => {
   
   const MetricCard = ({ label, value }: { label: string, value: number }) => (
@@ -34,11 +32,10 @@ export const SummaryMetricsSection: React.FC<SummaryMetricsSectionProps> = ({
             <p className="text-gray-500">Estimated commitment for your treatment.</p>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <MetricCard label="Est. Visits" value={visitCount} />
           <MetricCard label="Phases" value={phaseCount} />
           <MetricCard label="Procedures" value={procedureCount} />
-          <MetricCard label="Teeth" value={teethCount} />
         </div>
       </div>
     </section>

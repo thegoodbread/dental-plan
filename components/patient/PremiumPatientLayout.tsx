@@ -79,7 +79,6 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
         visitCount={metrics.visitCount}
         phaseCount={phases.length}
         procedureCount={items.length}
-        teethCount={metrics.teethCount}
       />
 
       <PaymentEstimatorSection 

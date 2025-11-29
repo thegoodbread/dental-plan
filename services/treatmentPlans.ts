@@ -9,24 +9,20 @@ import {
   TreatmentPlanStatus,
   FeeUnitType
 } from '../types';
+import { DEMO_PLANS, DEMO_PATIENTS, DEMO_ITEMS, DEMO_SHARES } from '../mock/seedPlans';
 
-// --- KEYS ---
-const KEY_PLANS = 'dental_plans_v2';
-const KEY_ITEMS = 'dental_plan_items_v2';
-const KEY_PATIENTS = 'dental_patients_v2';
-const KEY_FEE_SCHEDULE = 'dental_fee_schedule_v2';
-const KEY_SHARES = 'dental_shares_v2';
-const KEY_LOGS = 'dental_logs_v2';
+// --- KEYS (Bumped to v5 to force re-seed) ---
+const KEY_PLANS = 'dental_plans_v5';
+const KEY_ITEMS = 'dental_plan_items_v5';
+const KEY_PATIENTS = 'dental_patients_v5';
+const KEY_FEE_SCHEDULE = 'dental_fee_schedule_v5';
+const KEY_SHARES = 'dental_shares_v5';
+const KEY_LOGS = 'dental_logs_v5';
 
 // --- UTILS ---
 const generateId = () => Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
 
-// --- SEED DATA ---
-const SEED_PATIENTS: Patient[] = [
-  { id: 'p1', firstName: 'Alex', lastName: 'Rivera', dateOfBirth: '1985-04-12', phone: '555-0123', email: 'alex@example.com' },
-  { id: 'p2', firstName: 'Jordan', lastName: 'Lee', dateOfBirth: '1990-09-21', phone: '555-0987', email: 'jordan@example.com' },
-];
-
+// --- FEE SEED ---
 const SEED_FEES: FeeScheduleEntry[] = [
   { id: 'f1', procedureCode: 'D0150', procedureName: 'Comprehensive Oral Eval', category: 'OTHER', unitType: 'PER_PROCEDURE', baseFee: 120, isActive: true },
   { id: 'f2', procedureCode: 'D0210', procedureName: 'Intraoral - complete series', category: 'OTHER', unitType: 'PER_PROCEDURE', baseFee: 150, isActive: true },
@@ -39,6 +35,8 @@ const SEED_FEES: FeeScheduleEntry[] = [
   { id: 'f9', procedureCode: 'D4341', procedureName: 'Perio scaling & root planing - 4+ teeth', category: 'PERIO', unitType: 'PER_QUADRANT', baseFee: 250, isActive: true },
   { id: 'f10', procedureCode: 'D5110', procedureName: 'Complete denture - maxillary', category: 'RESTORATIVE', unitType: 'PER_ARCH', baseFee: 1800, isActive: true },
   { id: 'f11', procedureCode: 'D5120', procedureName: 'Complete denture - mandibular', category: 'RESTORATIVE', unitType: 'PER_ARCH', baseFee: 1800, isActive: true },
+  { id: 'f12', procedureCode: 'D3330', procedureName: 'Root Canal Therapy', category: 'RESTORATIVE', unitType: 'PER_TOOTH', baseFee: 1100, isActive: true },
+  { id: 'f13', procedureCode: 'D7140', procedureName: 'Extraction', category: 'OTHER', unitType: 'PER_TOOTH', baseFee: 200, isActive: true },
 ];
 
 // --- PRICING LOGIC ---
@@ -85,16 +83,20 @@ export const computeItemPricing = (
 // --- INITIALIZATION ---
 
 export const initServices = () => {
-  if (!localStorage.getItem(KEY_PATIENTS)) {
-    localStorage.setItem(KEY_PATIENTS, JSON.stringify(SEED_PATIENTS));
-  }
-  if (!localStorage.getItem(KEY_FEE_SCHEDULE)) {
+  const hasData = localStorage.getItem(KEY_PLANS);
+  
+  // FORCE SEED if no data or if we just bumped version
+  if (!hasData) {
+    console.log("Seeding Demo Data V5...");
+    localStorage.setItem(KEY_PATIENTS, JSON.stringify(DEMO_PATIENTS));
+    localStorage.setItem(KEY_PLANS, JSON.stringify(DEMO_PLANS));
+    localStorage.setItem(KEY_ITEMS, JSON.stringify(DEMO_ITEMS));
+    localStorage.setItem(KEY_SHARES, JSON.stringify(DEMO_SHARES));
+    
+    // Fee schedule standard init
     localStorage.setItem(KEY_FEE_SCHEDULE, JSON.stringify(SEED_FEES));
+    localStorage.setItem(KEY_LOGS, JSON.stringify([]));
   }
-  if (!localStorage.getItem(KEY_PLANS)) localStorage.setItem(KEY_PLANS, '[]');
-  if (!localStorage.getItem(KEY_ITEMS)) localStorage.setItem(KEY_ITEMS, '[]');
-  if (!localStorage.getItem(KEY_SHARES)) localStorage.setItem(KEY_SHARES, '[]');
-  if (!localStorage.getItem(KEY_LOGS)) localStorage.setItem(KEY_LOGS, '[]');
 };
 
 // --- FEE SCHEDULE ---
@@ -116,6 +118,7 @@ export const getPatients = (): Patient[] => {
 // --- PLAN CRUD ---
 
 export const getAllTreatmentPlans = (): TreatmentPlan[] => {
+  // Re-hydrate plans (strip items to keep list lightweight, hydrate patient)
   const plans: TreatmentPlan[] = JSON.parse(localStorage.getItem(KEY_PLANS) || '[]');
   const patients = getPatients();
   
@@ -133,10 +136,13 @@ export const getTreatmentPlanById = (id: string): TreatmentPlan | undefined => {
   const patients = getPatients();
   const allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
   
-  // Hydrate
+  // Hydrate items
   const planItems = plan.itemIds
     .map(itemId => allItems.find(i => i.id === itemId))
     .filter((i): i is TreatmentPlanItem => !!i);
+  
+  // Sort items by sortOrder
+  planItems.sort((a, b) => a.sortOrder - b.sortOrder);
 
   return {
     ...plan,
@@ -260,7 +266,7 @@ export const updateTreatmentPlanItem = (id: string, updates: Partial<TreatmentPl
   
   // Re-run pricing logic
   const mergedForCalc = { ...currentItem, ...updates };
-  const computed = computeItemPricing(mergedForCalc); // No need for fee entry lookup if we trust stored data, or we could look it up
+  const computed = computeItemPricing(mergedForCalc); // No need for fee entry lookup if we trust stored data
 
   allItems[idx] = computed as TreatmentPlanItem;
   localStorage.setItem(KEY_ITEMS, JSON.stringify(allItems));
@@ -292,8 +298,6 @@ export const reorderTreatmentPlanItems = (planId: string, orderedIds: string[]) 
     
     plan.itemIds = orderedIds;
     savePlan(plan);
-    
-    // Also update sortOrder on items if strictly needed, but order in plan.itemIds is usually enough
 };
 
 // --- SHARING ---
