@@ -17,6 +17,94 @@ export const ARCH_MAP = {
   'LOWER': TEETH_LOWER
 };
 
+// --- HELPERS FOR INTERACTION LOGIC ---
+
+export const getToothQuadrant = (tooth: number): 'UR' | 'UL' | 'LL' | 'LR' | undefined => {
+  if (tooth >= 1 && tooth <= 8) return 'UR';
+  if (tooth >= 9 && tooth <= 16) return 'UL';
+  if (tooth >= 17 && tooth <= 24) return 'LL';
+  if (tooth >= 25 && tooth <= 32) return 'LR';
+  return undefined;
+};
+
+export const getToothArch = (tooth: number): 'UPPER' | 'LOWER' => {
+  return tooth <= 16 ? 'UPPER' : 'LOWER';
+};
+
+export const urgencyWeight = (u?: string): number => {
+  switch (u) {
+    case 'URGENT': return 3;
+    case 'SOON': return 2;
+    case 'ELECTIVE': return 1;
+    default: return 0;
+  }
+};
+
+/**
+ * Returns all items relevant to a specific tooth.
+ * Order: PER_TOOTH > PER_QUADRANT (Arch/Mouth excluded per requirements)
+ * Secondary Sort: Urgency > Name
+ */
+export const getItemsOnTooth = (tooth: number, items: TreatmentPlanItem[]): TreatmentPlanItem[] => {
+  const toothQuad = getToothQuadrant(tooth);
+  // const toothArch = getToothArch(tooth); // Separated logic
+
+  return items.filter(i => {
+    if (i.unitType === 'PER_TOOTH' && i.selectedTeeth?.includes(tooth)) return true;
+    if (i.unitType === 'PER_QUADRANT' && toothQuad && i.selectedQuadrants?.includes(toothQuad)) return true;
+    
+    // EXCLUDED per user request to separate Arch/Bar services from Tooth tooltip
+    // if (i.unitType === 'PER_ARCH' && i.selectedArches?.includes(toothArch)) return true;
+    // if (i.unitType === 'PER_MOUTH') return true; 
+
+    return false;
+  }).sort((a, b) => {
+    // 1. Specificity
+    const typeScore = (type: string) => {
+      if (type === 'PER_TOOTH') return 4;
+      if (type === 'PER_QUADRANT') return 3;
+      if (type === 'PER_ARCH') return 2;
+      return 1;
+    };
+    const scoreA = typeScore(a.unitType);
+    const scoreB = typeScore(b.unitType);
+    if (scoreA !== scoreB) return scoreB - scoreA; // Higher specificity first
+
+    // 2. Urgency
+    const urgA = urgencyWeight(a.urgency);
+    const urgB = urgencyWeight(b.urgency);
+    if (urgA !== urgB) return urgB - urgA; // Higher urgency first
+
+    // 3. Name (Stable sort)
+    return a.procedureName.localeCompare(b.procedureName);
+  });
+};
+
+/**
+ * Returns items specifically targeted at a quadrant (excluding PER_TOOTH items in that quadrant).
+ * Used for "Secondary Interaction" (Hovering quadrant area).
+ */
+export const getItemsOnQuadrant = (quad: string, items: TreatmentPlanItem[]): TreatmentPlanItem[] => {
+  return items.filter(i => 
+    i.unitType === 'PER_QUADRANT' && i.selectedQuadrants?.includes(quad as any)
+  ).sort((a, b) => urgencyWeight(b.urgency) - urgencyWeight(a.urgency));
+};
+
+/**
+ * Returns items specifically targeted at an arch (PER_ARCH or PER_MOUTH).
+ */
+export const getItemsOnArch = (arch: 'UPPER' | 'LOWER', items: TreatmentPlanItem[]): TreatmentPlanItem[] => {
+  return items.filter(i => 
+    (i.unitType === 'PER_ARCH' && i.selectedArches?.includes(arch)) ||
+    (i.unitType === 'PER_MOUTH')
+  ).sort((a, b) => {
+    const wA = urgencyWeight(a.urgency);
+    const wB = urgencyWeight(b.urgency);
+    if (wA !== wB) return wB - wA;
+    return a.procedureName.localeCompare(b.procedureName);
+  });
+};
+
 // --- VISIT ESTIMATION ---
 export const estimateVisits = (item: TreatmentPlanItem): number => {
   if (item.estimatedVisits) return item.estimatedVisits;

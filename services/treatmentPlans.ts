@@ -1,4 +1,5 @@
 
+
 import { 
   TreatmentPlan, 
   TreatmentPlanItem, 
@@ -199,6 +200,7 @@ export const getTreatmentPlanById = (id: string): TreatmentPlan | undefined => {
 
   return {
     ...plan,
+    // FIX: Changed p.patientId to plan.patientId to fix reference error.
     patient: patients.find(pat => pat.id === plan.patientId),
     items: planItems
   };
@@ -334,21 +336,60 @@ export const updateTreatmentPlanItem = (id: string, updates: Partial<TreatmentPl
   return allItems[idx];
 };
 
-export const deleteTreatmentPlanItem = (id: string) => {
-  const allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
-  const item = allItems.find(i => i.id === id);
-  if (!item) return;
+export const deleteTreatmentPlanItem = (itemIdToDelete: string) => {
+  // Step 1: Read all data from localStorage. This is an atomic operation.
+  let allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
+  let allPlans: TreatmentPlan[] = JSON.parse(localStorage.getItem(KEY_PLANS) || '[]');
 
-  const newItems = allItems.filter(i => i.id !== id);
-  localStorage.setItem(KEY_ITEMS, JSON.stringify(newItems));
-
-  const plan = getTreatmentPlanById(item.treatmentPlanId);
-  if (plan) {
-    plan.itemIds = plan.itemIds.filter(itemId => itemId !== id);
-    savePlan(plan);
-    recalculatePlanTotals(plan.id);
+  // Step 2: Find the item and its parent plan.
+  const itemToDelete = allItems.find(i => i.id === itemIdToDelete);
+  if (!itemToDelete) {
+    console.error(`DELETE FAILED: Item with ID "${itemIdToDelete}" not found.`);
+    return; // Exit if the item doesn't exist.
   }
+
+  const planIndex = allPlans.findIndex(p => p.id === itemToDelete.treatmentPlanId);
+  
+  // Step 3: Perform modifications in memory.
+
+  // Create the new, filtered list of items.
+  const updatedItems = allItems.filter(i => i.id !== itemIdToDelete);
+
+  // If a parent plan exists, update it.
+  if (planIndex !== -1) {
+    const originalPlan = allPlans[planIndex];
+    
+    // Create a new plan object to avoid direct mutation.
+    const updatedPlan = {
+      ...originalPlan,
+      // Remove the item's ID from the plan's list.
+      itemIds: originalPlan.itemIds.filter(id => id !== itemIdToDelete),
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Recalculate totals using only the items that remain in this plan.
+    const remainingItemsForPlan = updatedItems.filter(i => updatedPlan.itemIds.includes(i.id));
+    const newTotalFee = remainingItemsForPlan.reduce((sum, item) => sum + item.netFee, 0);
+
+    // Preserve any manually set discount by calculating the difference from the original plan.
+    const currentGlobalDiscount = Math.max(0, originalPlan.totalFee - (originalPlan.estimatedInsurance || 0) - originalPlan.patientPortion);
+    
+    // Apply the totals and preserved discount to the updated plan.
+    updatedPlan.totalFee = newTotalFee;
+    updatedPlan.patientPortion = Math.max(0, newTotalFee - (updatedPlan.estimatedInsurance || 0) - currentGlobalDiscount);
+
+    // Replace the old plan in the array with the updated version.
+    allPlans[planIndex] = updatedPlan;
+  } else {
+    // If the plan is not found, the item was an orphan. We'll still remove it from the master list.
+    console.warn(`Orphaned item removed. ID: ${itemIdToDelete}`);
+  }
+
+  // Step 4: Write both updated lists back to localStorage.
+  localStorage.setItem(KEY_ITEMS, JSON.stringify(updatedItems));
+  localStorage.setItem(KEY_PLANS, JSON.stringify(allPlans));
 };
+
 
 export const reorderTreatmentPlanItems = (planId: string, orderedIds: string[]) => {
     const plan = getTreatmentPlanById(planId);

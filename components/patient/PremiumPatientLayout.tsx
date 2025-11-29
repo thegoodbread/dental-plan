@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { TreatmentPlan, TreatmentPlanItem } from '../../types';
 import { DollarSign } from 'lucide-react';
 import { calculateClinicalMetrics } from '../../services/clinicalLogic';
@@ -21,6 +21,42 @@ interface PremiumPatientLayoutProps {
 
 export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan, items }) => {
   
+  // --- SHARED HOVER STATE ---
+  const [hoveredTooth, setHoveredTooth] = useState<number | null>(null);
+  const [hoveredQuadrant, setHoveredQuadrant] = useState<string | null>(null);
+  const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
+
+  // --- HANDLERS ---
+  
+  // 1. Tooth Hover (Primary)
+  const handleToothHover = (tooth: number | null) => {
+    setHoveredTooth(tooth);
+    if (tooth) {
+      setHoveredQuadrant(null); // Tooth takes precedence
+      // We do not clear hoveredItemId to allow "locking" if we wanted, 
+      // but for this interaction model, we usually want diagram exploration 
+      // to override item list selection or vice-versa. 
+      // The prompt requests: "Do NOT set hoveredItemId here."
+    }
+  };
+
+  // 2. Quadrant Hover (Secondary)
+  const handleQuadrantHover = (quad: string | null) => {
+    // Only apply if not on a tooth
+    setHoveredQuadrant(quad);
+    if (quad) {
+      setHoveredTooth(null);
+      setHoveredItemId(null);
+    }
+  };
+
+  // 3. Item Hover (Reverse)
+  const handleItemHover = (itemId: string | null) => {
+    setHoveredItemId(itemId);
+    // Do not change tooth/quadrant state, but the visual logic in diagram 
+    // will prioritize this if tooth is null
+  };
+
   // --- CLINICAL LOGIC INTEGRATION ---
   const metrics = calculateClinicalMetrics(items);
 
@@ -66,12 +102,27 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
         planNumber={plan.planNumber}
       />
 
-      {/* Replaced logic with new Layered Diagram Component */}
-      <MouthDiagramSection items={items} />
+      {/* Diagram with Hover State */}
+      <MouthDiagramSection 
+        items={items}
+        hoveredTooth={hoveredTooth}
+        hoveredQuadrant={hoveredQuadrant}
+        hoveredItemId={hoveredItemId}
+        onHoverTooth={handleToothHover}
+        onHoverQuadrant={handleQuadrantHover}
+      />
 
       <TreatmentTimelineSection phases={phases} />
 
-      <ProcedureBreakdownSection items={items} phases={phases} />
+      {/* Procedure List with Hover State */}
+      <ProcedureBreakdownSection 
+        items={items} 
+        phases={phases}
+        hoveredTooth={hoveredTooth}
+        hoveredQuadrant={hoveredQuadrant}
+        hoveredItemId={hoveredItemId}
+        onHoverItem={handleItemHover}
+      />
 
       <WhyItMattersSection items={items} explanation={plan.explanationForPatient} />
 
