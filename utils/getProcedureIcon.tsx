@@ -1,9 +1,16 @@
 
 import React from 'react';
-import { TreatmentPlanItem } from '../types';
+import { TreatmentPlanItem, FeeCategory } from '../types';
 import * as Icons from '../components/icons/ProcedureIcons';
 
-export const getProcedureIcon = (item: TreatmentPlanItem): React.FC<React.SVGProps<SVGSVGElement>> => {
+// Interface compatible with both TreatmentPlanItem and FeeScheduleEntry
+interface ProcedureIconInput {
+  procedureCode: string;
+  procedureName: string;
+  category?: string;
+}
+
+export const getProcedureIcon = (item: ProcedureIconInput): React.FC<React.SVGProps<SVGSVGElement>> => {
   const code = item.procedureCode.toUpperCase();
   const name = item.procedureName.toLowerCase();
   const category = item.category || 'OTHER';
