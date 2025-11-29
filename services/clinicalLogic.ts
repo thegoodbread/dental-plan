@@ -24,13 +24,17 @@ export const estimateVisits = (item: TreatmentPlanItem): number => {
   // Fallback heuristics based on category
   switch (item.category) {
     case 'IMPLANT': return 3;
-    case 'PERIO': return 1; // usually 1 per quad, or 2 for full mouth
+    case 'PERIO': return 2;
+    case 'ENDODONTIC': return 2;
+    case 'PROSTHETIC': return 4; // Dentures, bridges take time
     case 'RESTORATIVE': 
         if (item.procedureName.toLowerCase().includes('crown')) return 2;
         if (item.procedureName.toLowerCase().includes('bridge')) return 2;
         return 1;
-    case 'ORTHO': return 12; // Placeholder
+    case 'ORTHO': return 12;
     case 'COSMETIC': return 2;
+    case 'PREVENTIVE': return 1;
+    case 'DIAGNOSTIC': return 1;
     default: return 1;
   }
 };

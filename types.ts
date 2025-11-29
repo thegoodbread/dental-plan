@@ -18,7 +18,17 @@ export type FeeUnitType =
   | 'PER_MOUTH'
   | 'PER_PROCEDURE';
 
-export type FeeCategory = 'IMPLANT' | 'RESTORATIVE' | 'COSMETIC' | 'ORTHO' | 'PERIO' | 'OTHER';
+export type FeeCategory = 
+  | 'DIAGNOSTIC'
+  | 'PREVENTIVE'
+  | 'RESTORATIVE'
+  | 'ENDODONTIC'
+  | 'PERIO'
+  | 'IMPLANT'
+  | 'PROSTHETIC'
+  | 'ORTHO'
+  | 'COSMETIC'
+  | 'OTHER';
 
 export type UrgencyLevel = 'URGENT' | 'SOON' | 'ELECTIVE';
 

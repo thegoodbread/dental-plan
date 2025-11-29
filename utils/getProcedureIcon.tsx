@@ -9,8 +9,12 @@ export const getProcedureIcon = (item: TreatmentPlanItem): React.FC<React.SVGPro
   const category = item.category || 'OTHER';
 
   // 1. Check Specific Codes
+  if (code.startsWith('AO4')) return Icons.IconBridge; // All-on-4 is basically a big bridge
+  
   if (code.startsWith('D01')) return Icons.IconExam;
   if (code.startsWith('D02')) return Icons.IconXray;
+  if (code.startsWith('D03')) return Icons.IconXray;
+  if (code.startsWith('D1')) return Icons.IconPerio; // Preventive/Hygiene
   
   if (code.startsWith('D23')) return Icons.IconFilling; // Composites
   if (code.startsWith('D21')) return Icons.IconFilling; // Amalgams
@@ -31,7 +35,11 @@ export const getProcedureIcon = (item: TreatmentPlanItem): React.FC<React.SVGPro
   
   if (code.startsWith('D8')) return Icons.IconOrtho; // Ortho
   
+  if (code.startsWith('D994')) return Icons.IconNightguard; // Guards
+  if (code.startsWith('D997')) return Icons.IconWhitening; // Whitening
+
   // 2. Check Keywords in Name
+  if (name.includes('all-on-4') || name.includes('all on 4')) return Icons.IconBridge;
   if (name.includes('exam') || name.includes('evaluation')) return Icons.IconExam;
   if (name.includes('x-ray') || name.includes('radiograph') || name.includes('image')) return Icons.IconXray;
   if (name.includes('clean') || name.includes('prophy') || name.includes('scaling')) return Icons.IconPerio;
@@ -51,9 +59,13 @@ export const getProcedureIcon = (item: TreatmentPlanItem): React.FC<React.SVGPro
   switch (category) {
     case 'IMPLANT': return Icons.IconImplant;
     case 'PERIO': return Icons.IconPerio;
-    case 'RESTORATIVE': return Icons.IconFilling; // Generic fallback for restorative
+    case 'RESTORATIVE': return Icons.IconFilling;
+    case 'ENDODONTIC': return Icons.IconRootCanal;
+    case 'PROSTHETIC': return Icons.IconBridge;
     case 'ORTHO': return Icons.IconOrtho;
     case 'COSMETIC': return Icons.IconVeneer;
+    case 'DIAGNOSTIC': return Icons.IconExam;
+    case 'PREVENTIVE': return Icons.IconPerio;
     default: return Icons.IconExam;
   }
 };

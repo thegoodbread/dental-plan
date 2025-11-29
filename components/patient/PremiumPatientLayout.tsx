@@ -26,9 +26,9 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
 
   // Phases Logic (Simple Heuristic for now, could be in service)
   const phases = [];
-  const hasPerio = items.some(i => i.category === 'PERIO' || i.category === 'OTHER');
-  const hasRestorative = items.some(i => i.category === 'RESTORATIVE');
-  const hasImplant = items.some(i => i.category === 'IMPLANT');
+  const hasPerio = items.some(i => i.category === 'PERIO' || i.category === 'PREVENTIVE');
+  const hasRestorative = items.some(i => i.category === 'RESTORATIVE' || i.category === 'ENDODONTIC');
+  const hasImplant = items.some(i => i.category === 'IMPLANT' || i.category === 'PROSTHETIC' || i.category === 'OTHER');
 
   if (hasPerio) {
      phases.push({ 
