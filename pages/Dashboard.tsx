@@ -57,15 +57,15 @@ export const Dashboard: React.FC = () => {
   const tabs = ['ALL', 'DRAFT', 'PRESENTED', 'ACCEPTED', 'DECLINED', 'ON_HOLD'];
 
   return (
-    <div className="p-8 max-w-7xl mx-auto w-full relative">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto w-full relative">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Treatment Plans</h1>
           <p className="text-gray-500 text-sm mt-1">Manage and track patient treatment proposals.</p>
         </div>
         <button 
           onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors shadow-sm"
+          className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors shadow-sm w-full md:w-auto"
         >
           <Plus size={18} />
           New Plan
@@ -85,7 +85,7 @@ export const Dashboard: React.FC = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0">
+          <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 scrollbar-hide">
             {tabs.map((tab) => (
               <button
                 key={tab}
@@ -102,8 +102,8 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -165,6 +165,46 @@ export const Dashboard: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile Cards */}
+        <div className="md:hidden divide-y divide-gray-200">
+           {loading ? (
+              <div className="p-8 text-center text-gray-500">Loading plans...</div>
+           ) : plans.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">No plans found.</div>
+           ) : (
+             plans.map((plan) => (
+                <div 
+                  key={plan.id} 
+                  className="p-4 bg-white active:bg-gray-50 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/plan/${plan.id}`)}
+                >
+                   <div className="flex justify-between items-start mb-2">
+                     <div>
+                        <div className="font-bold text-gray-900">{plan.title}</div>
+                        <div className="text-xs text-gray-500">{plan.planNumber}</div>
+                     </div>
+                     <StatusBadge status={plan.status} />
+                   </div>
+                   
+                   <div className="flex justify-between items-center text-sm mb-2">
+                      <div className="text-gray-600">
+                        {plan.patient?.firstName} {plan.patient?.lastName}
+                      </div>
+                      <div className="font-bold text-gray-900">
+                         ${plan.totalFee.toLocaleString()}
+                      </div>
+                   </div>
+                   
+                   <div className="flex justify-between items-center text-xs text-gray-400">
+                      <span>Updated {new Date(plan.updatedAt).toLocaleDateString()}</span>
+                      <MoreHorizontal size={16} />
+                   </div>
+                </div>
+             ))
+           )}
+        </div>
+
       </div>
 
       {/* Create Modal */}

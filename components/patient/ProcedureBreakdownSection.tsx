@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { TreatmentPlanItem } from '../../types';
 import { Calendar, AlertTriangle, Shield, Smile, CheckCircle2 } from 'lucide-react';
@@ -12,7 +11,7 @@ interface ProcedureBreakdownSectionProps {
 
 export const ProcedureBreakdownSection: React.FC<ProcedureBreakdownSectionProps> = ({ items, phases }) => {
   
-  // Grouping logic
+  // Grouping logic (simplified)
   const getItemsForPhase = (phaseTitle: string) => {
     if (phaseTitle.includes('Hygiene') || phaseTitle.includes('Foundation')) 
         return items.filter(i => i.category === 'PERIO' || i.category === 'OTHER');
@@ -43,7 +42,7 @@ export const ProcedureBreakdownSection: React.FC<ProcedureBreakdownSectionProps>
 
   const renderLocation = (item: TreatmentPlanItem) => {
     if (item.selectedTeeth && item.selectedTeeth.length > 0) return `Teeth: ${item.selectedTeeth.join(', ')}`;
-    if (item.selectedQuadrants && item.selectedQuadrants.length > 0) return `Quadrants: ${item.selectedQuadrants.join(', ')}`;
+    if (item.selectedQuadrants && item.selectedQuadrants.length > 0) return `Quads: ${item.selectedQuadrants.join(', ')}`;
     if (item.selectedArches && item.selectedArches.length > 0) return `Arch: ${item.selectedArches.join(', ')}`;
     return 'Full Mouth';
   };
@@ -65,17 +64,17 @@ export const ProcedureBreakdownSection: React.FC<ProcedureBreakdownSectionProps>
   };
 
   return (
-    <section className="py-16 px-6 bg-gray-50 border-b border-gray-200">
+    <section className="py-12 md:py-16 px-4 md:px-6 bg-gray-50 border-b border-gray-200">
       <div className="max-w-4xl mx-auto">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">What We'll Do</h2>
-        <p className="text-gray-500 mb-10">Your personalized treatment plan, organized by priority.</p>
+        <p className="text-gray-500 mb-8 md:mb-10">Your personalized treatment plan, organized by priority.</p>
         
-        <div className="space-y-12">
+        <div className="space-y-8 md:space-y-12">
           {displayGroups.map((group, idx) => (
              group.items.length > 0 && (
               <div key={idx} className="relative">
                 {/* Phase Header */}
-                <div className="flex items-center gap-4 mb-6 sticky top-0 bg-gray-50 z-10 py-2">
+                <div className="flex items-center gap-4 mb-4 md:mb-6 sticky top-0 bg-gray-50 z-10 py-2">
                     <div className="w-8 h-8 rounded-full bg-gray-900 text-white font-bold flex items-center justify-center text-sm shadow-sm">
                         {idx + 1}
                     </div>
@@ -83,39 +82,38 @@ export const ProcedureBreakdownSection: React.FC<ProcedureBreakdownSectionProps>
                 </div>
 
                 {/* Cards */}
-                <div className="grid gap-4">
+                <div className="grid gap-3 md:gap-4">
                   {group.items.map(item => {
                     const ProcedureIcon = getProcedureIcon(item);
                     
                     return (
-                      <div key={item.id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="flex items-start gap-5">
+                      <div key={item.id} className="bg-white p-4 md:p-5 rounded-xl border border-gray-200 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow">
+                        <div className="flex items-start gap-4">
                           {/* SVG Icon */}
-                          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
-                             <ProcedureIcon width={24} height={24} />
+                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100 mt-1">
+                             <ProcedureIcon width={20} height={20} className="md:w-6 md:h-6" />
                           </div>
 
-                          <div>
-                             <div className="flex items-center gap-2 flex-wrap">
-                               <div className="font-bold text-gray-900 text-base">{item.procedureName}</div>
+                          <div className="flex-1 min-w-0">
+                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                               <div className="font-bold text-gray-900 text-base leading-tight">{item.procedureName}</div>
+                               
+                               <div className="flex items-center gap-2 mt-1 md:mt-0">
+                                   <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{item.category}</div>
+                                   <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getUrgencyClass(item.urgency)}`}>
+                                     {getUrgencyIcon(item.urgency)}
+                                     {item.urgency || 'Elective'}
+                                   </span>
+                               </div>
                              </div>
                              
-                             <div className="text-sm text-gray-500 mt-1 font-medium flex items-center gap-3">
-                               <span>{renderLocation(item)}</span>
-                               <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-                               <span className="flex items-center gap-1 text-gray-400">
+                             <div className="text-sm text-gray-500 mt-2 font-medium flex flex-wrap items-center gap-3">
+                               <span className="bg-gray-100 px-2 py-0.5 rounded text-xs text-gray-600">{renderLocation(item)}</span>
+                               <span className="flex items-center gap-1 text-gray-400 text-xs">
                                  <Calendar size={12} /> {estimateVisits(item)} visit(s)
                                </span>
                              </div>
                           </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-3 sm:text-right pl-[4.25rem] sm:pl-0">
-                           <div className="text-xs font-bold text-gray-400 uppercase tracking-widest hidden sm:block">{item.category}</div>
-                           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getUrgencyClass(item.urgency)}`}>
-                             {getUrgencyIcon(item.urgency)}
-                             {item.urgency || 'Elective'}
-                           </span>
                         </div>
                       </div>
                     );

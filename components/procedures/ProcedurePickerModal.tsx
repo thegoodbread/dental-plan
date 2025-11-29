@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, X, Clock, Command } from 'lucide-react';
 import { FeeScheduleEntry, FeeCategory } from '../../types';
@@ -81,11 +80,8 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
   }, [recentCodes, library, searchTerm, selectedCategory]);
 
   // Combined display list (Recents + Filtered)
-  // If showing recents, we want them at the top, but we don't want duplicates if they appear in filteredItems
   const displayList = useMemo(() => {
     if (searchTerm || selectedCategory !== 'ALL') return filteredItems;
-    
-    // Default view: Recents followed by all items
     const recentIds = new Set(recentItems.map(r => r.id));
     const others = filteredItems.filter(i => !recentIds.has(i.id));
     return [...recentItems, ...others];
@@ -140,7 +136,6 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
   };
 
   const handleSelect = (item: FeeScheduleEntry) => {
-    // Update Recents
     const newRecents = [item.procedureCode, ...recentCodes.filter(c => c !== item.procedureCode)].slice(0, 8);
     setRecentCodes(newRecents);
     localStorage.setItem(RECENT_KEY, JSON.stringify(newRecents));
@@ -152,9 +147,9 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-start justify-center pt-[10vh] px-4">
+    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-end md:items-start justify-center pt-0 md:pt-[10vh] px-0 md:px-4 pb-0 md:pb-4">
       <div 
-        className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden border border-gray-200 flex flex-col max-h-[80vh] animate-in fade-in zoom-in-95 duration-200"
+        className="bg-white w-full md:max-w-4xl h-[90vh] md:h-auto md:max-h-[80vh] rounded-t-2xl md:rounded-2xl shadow-2xl overflow-hidden border border-gray-200 flex flex-col animate-in slide-in-from-bottom-4 md:slide-in-from-bottom-0 md:fade-in md:zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search Header */}
@@ -163,23 +158,18 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
           <input
             ref={searchInputRef}
             type="text"
-            className="flex-1 text-xl outline-none placeholder:text-gray-300 font-medium"
-            placeholder="Search procedures (e.g. Crown, D2740, Implant)..."
+            className="flex-1 text-lg md:text-xl outline-none placeholder:text-gray-400 font-medium bg-transparent text-gray-900"
+            placeholder="Search procedures..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
-          <div className="flex items-center gap-2">
-            <kbd className="hidden md:inline-flex h-6 items-center gap-1 rounded border border-gray-200 bg-gray-50 px-2 font-mono text-[10px] font-medium text-gray-500">
-              ESC
-            </kbd>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100">
-              <X size={20} />
-            </button>
-          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-100 bg-gray-50 md:bg-transparent">
+             <X size={20} />
+          </button>
         </div>
 
         {/* Categories */}
-        <div className="px-4 py-3 bg-gray-50/80 border-b border-gray-100 flex flex-wrap gap-2 shrink-0 backdrop-blur-sm">
+        <div className="px-4 py-3 bg-gray-50/80 border-b border-gray-100 flex flex-wrap gap-2 shrink-0 backdrop-blur-sm max-h-32 overflow-y-auto">
           <button
             onClick={() => setSelectedCategory('ALL')}
             className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
@@ -208,7 +198,7 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
         {/* Results List */}
         <div 
           ref={listRef}
-          className="flex-1 overflow-y-auto p-0 scroll-smooth"
+          className="flex-1 overflow-y-auto p-0 scroll-smooth pb-8"
         >
           {displayList.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-gray-400">
@@ -217,7 +207,6 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
             </div>
           ) : (
             <div className="divide-y divide-gray-50">
-              {/* If showing recents section explicitly, we could add a header, but simple list is cleaner */}
               {displayList.map((item, idx) => {
                 const Icon = getProcedureIcon(item);
                 const isSelected = idx === highlightedIndex;
@@ -230,7 +219,7 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
                     onClick={() => handleSelect(item)}
                     onMouseEnter={() => setHighlightedIndex(idx)}
                     className={`
-                      px-6 py-4 flex items-center justify-between cursor-pointer transition-colors
+                      px-4 md:px-6 py-4 flex items-center justify-between cursor-pointer transition-colors active:bg-blue-50
                       ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}
                     `}
                   >
@@ -265,22 +254,13 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
                     </div>
 
                     <div className={`font-mono font-medium ${isSelected ? 'text-blue-700' : 'text-gray-600'}`}>
-                      ${item.baseFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      ${item.baseFee.toLocaleString('en-US', { minimumFractionDigits: 0 })}
                     </div>
                   </div>
                 );
               })}
             </div>
           )}
-        </div>
-        
-        {/* Footer Hint */}
-        <div className="bg-gray-50 border-t border-gray-100 px-4 py-2 flex justify-between items-center text-[10px] text-gray-400 font-medium uppercase tracking-wider">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1"><kbd className="bg-white border border-gray-200 rounded px-1 shadow-sm">↑</kbd> <kbd className="bg-white border border-gray-200 rounded px-1 shadow-sm">↓</kbd> to navigate</span>
-            <span className="flex items-center gap-1"><kbd className="bg-white border border-gray-200 rounded px-1 shadow-sm">↵</kbd> to select</span>
-          </div>
-          <span>Procedures Library</span>
         </div>
       </div>
     </div>
