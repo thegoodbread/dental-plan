@@ -14,8 +14,8 @@ export const SummaryMetricsSection: React.FC<SummaryMetricsSectionProps> = ({
 }) => {
   
   const MetricCard = ({ label, value }: { label: string, value: number }) => (
-    <div className="bg-purple-50 p-3 md:p-8 rounded-2xl md:rounded-3xl text-center border border-purple-100">
-      <div className="text-[10px] md:text-xs font-bold text-purple-400 uppercase tracking-widest mb-1 md:mb-2 truncate">{label}</div>
+    <div className="bg-purple-50 p-3 md:p-8 rounded-2xl md:rounded-3xl text-center border border-purple-100 flex flex-col items-center justify-center">
+      <div className="text-[10px] md:text-xs font-bold text-purple-400 uppercase tracking-widest mb-1 md:mb-2 truncate w-full">{label}</div>
       <div className="text-2xl md:text-4xl font-black text-purple-900">{value}</div>
     </div>
   );

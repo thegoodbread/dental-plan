@@ -72,7 +72,7 @@ export const TreatmentTimelineSection: React.FC<TreatmentTimelineSectionProps> =
                 )}
                 
                 {/* Number Circle */}
-                <div className="relative z-10 w-10 h-10 rounded-full bg-blue-600 text-white font-bold text-lg flex items-center justify-center shrink-0 shadow-lg shadow-blue-200">
+                <div className="relative z-10 w-10 h-10 rounded-full bg-blue-600 text-white font-bold text-lg flex items-center justify-center shrink-0 shadow-lg shadow-blue-200 ring-4 ring-white">
                   {idx + 1}
                 </div>
 

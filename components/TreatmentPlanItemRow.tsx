@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { TreatmentPlanItem, UrgencyLevel } from '../types';
 import { Trash2, Edit2, Check, X, AlertTriangle, Clock, Smile } from 'lucide-react';
@@ -16,14 +15,13 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
   // Local state for edit mode
   const [selectedTeeth, setSelectedTeeth] = useState<number[]>(item.selectedTeeth || []);
   const [baseFee, setBaseFee] = useState(item.baseFee);
-  const [discount, setDiscount] = useState(item.discount);
+  // discount no longer edited per row in this view
   const [urgency, setUrgency] = useState<UrgencyLevel>(item.urgency || 'ELECTIVE');
 
   const handleSave = () => {
     onUpdate(item.id, {
       selectedTeeth,
       baseFee: Number(baseFee),
-      discount: Number(discount),
       urgency
     });
     setIsEditing(false);
@@ -32,7 +30,6 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
   const handleCancel = () => {
     setSelectedTeeth(item.selectedTeeth || []);
     setBaseFee(item.baseFee);
-    setDiscount(item.discount);
     setUrgency(item.urgency || 'ELECTIVE');
     setIsEditing(false);
   };
@@ -134,7 +131,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
            <select 
              value={urgency} 
              onChange={e => setUrgency(e.target.value as UrgencyLevel)}
-             className="text-xs border border-gray-300 rounded p-1 mt-1 bg-white"
+             className="text-xs border border-gray-300 rounded p-1 mt-1 bg-white text-gray-900 shadow-sm outline-none focus:ring-1 focus:ring-blue-500 block w-full"
            >
              <option value="ELECTIVE">Elective</option>
              <option value="SOON">Soon</option>
@@ -150,47 +147,23 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
         {renderSelectionInput()}
       </td>
 
-      {/* Unit Type */}
-      <td className="px-4 py-3 text-xs text-gray-500 align-top pt-4">
-        {item.unitType.replace('PER_', '').toLowerCase()}
-      </td>
-
-      {/* Base Fee */}
+      {/* Cost (Base Fee) */}
       <td className="px-4 py-3 text-right text-sm align-top pt-3">
         {isEditing ? (
           <input 
             type="number" 
-            className="w-20 text-right border border-gray-300 rounded px-1 py-1"
+            className="w-20 text-right border border-gray-300 rounded px-1 py-1 text-gray-900 bg-white shadow-sm outline-none focus:ring-1 focus:ring-blue-500"
             value={baseFee}
             onChange={e => setBaseFee(Number(e.target.value))}
           />
         ) : (
-          <span>${item.baseFee.toFixed(2)}</span>
+          <span className="text-gray-900">${item.baseFee.toFixed(2)}</span>
         )}
       </td>
 
       {/* Units */}
       <td className="px-4 py-3 text-center text-sm font-medium text-gray-700 align-top pt-3">
         {item.units}
-      </td>
-
-      {/* Gross Fee */}
-      <td className="px-4 py-3 text-right text-sm text-gray-500 align-top pt-3">
-        ${item.grossFee.toFixed(2)}
-      </td>
-
-      {/* Discount */}
-      <td className="px-4 py-3 text-right text-sm align-top pt-3">
-        {isEditing ? (
-          <input 
-            type="number" 
-            className="w-16 text-right border border-gray-300 rounded px-1 py-1 text-red-600"
-            value={discount}
-            onChange={e => setDiscount(Number(e.target.value))}
-          />
-        ) : (
-          item.discount > 0 ? <span className="text-red-500">-${item.discount.toFixed(2)}</span> : '-'
-        )}
       </td>
 
       {/* Net Fee */}
@@ -206,7 +179,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
             <button onClick={handleCancel} className="p-1 text-gray-400 hover:bg-gray-100 rounded"><X size={16}/></button>
           </div>
         ) : (
-          <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex justify-end gap-2">
             <button onClick={() => setIsEditing(true)} className="p-1 text-blue-600 hover:bg-blue-100 rounded"><Edit2 size={16}/></button>
             <button onClick={() => onDelete(item.id)} className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16}/></button>
           </div>

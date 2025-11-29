@@ -75,7 +75,7 @@ export const ProcedureBreakdownSection: React.FC<ProcedureBreakdownSectionProps>
               <div key={idx} className="relative">
                 {/* Phase Header */}
                 <div className="flex items-center gap-4 mb-4 md:mb-6 sticky top-0 bg-gray-50 z-10 py-2">
-                    <div className="w-8 h-8 rounded-full bg-gray-900 text-white font-bold flex items-center justify-center text-sm shadow-sm">
+                    <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-sm shadow-md shadow-blue-200">
                         {idx + 1}
                     </div>
                     <h3 className="font-bold text-xl text-gray-900">{group.title}</h3>

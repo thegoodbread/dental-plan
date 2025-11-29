@@ -244,9 +244,11 @@ export const updateTreatmentPlan = (id: string, updates: Partial<TreatmentPlan>)
 
   const updatedPlan = { ...plan, ...updates, updatedAt: new Date().toISOString() };
   
-  // Recalculate patient portion if financials changed
-  if (updates.estimatedInsurance !== undefined || updates.totalFee !== undefined) {
-    updatedPlan.patientPortion = Math.max(0, updatedPlan.totalFee - (updatedPlan.estimatedInsurance || 0));
+  // Recalculate patient portion ONLY if financials changed AND patientPortion wasn't explicitly provided in updates
+  // This allows manual overrides (e.g. for global discount logic)
+  if ((updates.estimatedInsurance !== undefined || updates.totalFee !== undefined) && updates.patientPortion === undefined) {
+     const oldDiscount = Math.max(0, plan.totalFee - (plan.estimatedInsurance || 0) - plan.patientPortion);
+     updatedPlan.patientPortion = Math.max(0, updatedPlan.totalFee - (updatedPlan.estimatedInsurance || 0) - oldDiscount);
   }
 
   savePlan(updatedPlan);
@@ -260,7 +262,10 @@ const recalculatePlanTotals = (planId: string) => {
   if (!plan || !plan.items) return;
 
   const totalFee = plan.items.reduce((sum, item) => sum + item.netFee, 0);
-  const patientPortion = Math.max(0, totalFee - (plan.estimatedInsurance || 0));
+  
+  // Preserve existing discount logic when totals change
+  const currentDiscount = Math.max(0, plan.totalFee - (plan.estimatedInsurance || 0) - plan.patientPortion);
+  const patientPortion = Math.max(0, totalFee - (plan.estimatedInsurance || 0) - currentDiscount);
 
   updateTreatmentPlan(planId, { totalFee, patientPortion });
 };

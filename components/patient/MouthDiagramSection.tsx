@@ -51,16 +51,16 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({ items 
            <div className={`absolute ${isUpper ? 'top-0' : 'bottom-0'} left-4 right-4 h-1.5 md:h-2 rounded-full ${getUrgencyColor(archUrgency)} opacity-50`}></div>
          )}
 
-         <div className="flex gap-0.5 md:gap-2 justify-center w-full">
+         <div className="flex gap-2 md:gap-4 justify-center w-full">
             {/* Left Quadrant Container */}
-            <div className={`flex gap-0.5 md:gap-1 p-0.5 md:p-2 rounded-xl transition-colors ${qLeftUrgency ? getUrgencyColor(qLeftUrgency) + ' bg-opacity-10 border-dashed border-2' : ''}`}>
+            <div className={`flex-1 flex gap-px md:gap-1 p-1.5 md:p-2 rounded-xl transition-colors ${qLeftUrgency ? getUrgencyColor(qLeftUrgency) + ' bg-opacity-10 border-dashed border-2' : ''}`}>
                {teeth.slice(0, 8).map(t => (
                   <Tooth key={t} num={t} className={getToothStyle(t)} />
                ))}
             </div>
 
             {/* Right Quadrant Container */}
-             <div className={`flex gap-0.5 md:gap-1 p-0.5 md:p-2 rounded-xl transition-colors ${qRightUrgency ? getUrgencyColor(qRightUrgency) + ' bg-opacity-10 border-dashed border-2' : ''}`}>
+             <div className={`flex-1 flex gap-px md:gap-1 p-1.5 md:p-2 rounded-xl transition-colors ${qRightUrgency ? getUrgencyColor(qRightUrgency) + ' bg-opacity-10 border-dashed border-2' : ''}`}>
                {teeth.slice(8, 16).map(t => (
                   <Tooth key={t} num={t} className={getToothStyle(t)} />
                ))}
@@ -83,15 +83,15 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({ items 
             </div>
             
             {/* Legend - Compact for mobile */}
-            <div className="flex flex-wrap gap-2 md:gap-6 text-[10px] md:text-sm font-medium bg-gray-50 p-2 md:p-0 rounded-lg md:bg-transparent">
+            <div className="flex flex-wrap gap-4 text-xs md:text-sm font-medium bg-gray-50 p-3 rounded-lg md:bg-transparent md:p-0">
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-md bg-red-500 shadow-sm shadow-red-200"></span> Urgent
+                <span className="w-3 h-3 rounded-md bg-red-500 shadow-sm shadow-red-200"></span> Urgent
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-md bg-orange-400 shadow-sm shadow-orange-100"></span> Soon
+                <span className="w-3 h-3 rounded-md bg-orange-400 shadow-sm shadow-orange-100"></span> Soon
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-md bg-blue-500 shadow-sm shadow-blue-100"></span> Elective
+                <span className="w-3 h-3 rounded-md bg-blue-500 shadow-sm shadow-blue-100"></span> Elective
               </div>
             </div>
           </div>
@@ -113,12 +113,12 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({ items 
 };
 
 const Tooth = ({ num, className }: { num: number, className: string }) => (
-  <div className="flex flex-col items-center gap-0.5 group relative shrink-0">
+  <div className="flex-1 flex flex-col items-center gap-0.5 group relative">
     <div 
       className={`
-        w-[18px] h-[26px] text-[8px] rounded-[3px]
-        sm:w-6 sm:h-9 sm:text-[10px] sm:rounded-md
-        md:w-10 md:h-14 md:text-sm md:rounded-lg
+        w-full h-8 text-[9px] rounded-[2px]
+        sm:h-10 sm:text-[10px] sm:rounded-md
+        md:h-14 md:text-sm md:rounded-lg
         border flex items-center justify-center 
         transition-all duration-300
         ${className}

@@ -22,25 +22,22 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
     <div className="bg-white md:rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full relative rounded-lg">
       
       {/* DESKTOP TABLE VIEW */}
-      <div className="hidden md:block overflow-x-auto flex-1">
+      <div className="hidden md:block overflow-x-auto flex-1 relative">
         <table className="w-full text-left border-collapse">
-          <thead>
+          <thead className="sticky top-0 z-10 shadow-sm">
             <tr className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
-              <th className="px-4 py-3 w-64">Procedure</th>
-              <th className="px-4 py-3 w-48">Tooth / Area</th>
-              <th className="px-4 py-3 w-24">Unit Type</th>
-              <th className="px-4 py-3 text-right w-24">Base Fee</th>
-              <th className="px-4 py-3 text-center w-16">Qty</th>
-              <th className="px-4 py-3 text-right w-24">Gross</th>
-              <th className="px-4 py-3 text-right w-24">Disc</th>
+              <th className="px-4 py-3 w-64 bg-gray-50">Procedure</th>
+              <th className="px-4 py-3 w-48 bg-gray-50">Tooth / Area</th>
+              <th className="px-4 py-3 text-right w-24 bg-gray-50">Cost</th>
+              <th className="px-4 py-3 text-center w-16 bg-gray-50">Qty</th>
               <th className="px-4 py-3 text-right w-24 bg-gray-50">Net Fee</th>
-              <th className="px-4 py-3 w-20"></th>
+              <th className="px-4 py-3 w-20 bg-gray-50"></th>
             </tr>
           </thead>
           <tbody className="bg-white">
             {items.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-6 py-12 text-center">
+                <td colSpan={6} className="px-6 py-12 text-center">
                   <div className="flex flex-col items-center gap-3">
                     <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center">
                       <Search size={24} />
@@ -97,7 +94,7 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
       </div>
 
       {/* Footer / Add Button */}
-      <div className="border-t border-gray-200 p-4 bg-gray-50 flex flex-col md:flex-row justify-between items-center gap-4">
+      <div className="border-t border-gray-200 p-4 bg-gray-50 flex flex-col md:flex-row justify-between items-center gap-4 sticky bottom-0 z-20 md:relative">
         <button 
           onClick={() => setIsPickerOpen(true)}
           className="w-full md:w-auto flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm px-4 py-2.5 rounded-lg shadow-sm shadow-blue-200 transition-all hover:scale-[1.02]"
@@ -136,7 +133,7 @@ const MobileItemCard: React.FC<{
   onDelete: (id: string) => void;
 }> = ({ item, onUpdate, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [discount, setDiscount] = useState(item.discount);
+  const [baseFee, setBaseFee] = useState(item.baseFee);
 
   // Helper to determine location display
   const getLocation = () => {
@@ -147,7 +144,7 @@ const MobileItemCard: React.FC<{
   };
 
   const handleSave = () => {
-    onUpdate(item.id, { discount: Number(discount) });
+    onUpdate(item.id, { baseFee: Number(baseFee) });
     setIsEditing(false);
   };
 
@@ -174,10 +171,10 @@ const MobileItemCard: React.FC<{
               <div className="flex items-center gap-2">
                  <input 
                    type="number" 
-                   className="w-16 p-1 border rounded text-right text-sm"
-                   placeholder="Disc"
-                   value={discount}
-                   onChange={e => setDiscount(Number(e.target.value))}
+                   className="w-20 p-1 border rounded text-right text-sm text-gray-900 bg-white"
+                   placeholder="Cost"
+                   value={baseFee}
+                   onChange={e => setBaseFee(Number(e.target.value))}
                  />
                  <button onClick={handleSave} className="text-green-600 font-bold text-xs uppercase">Save</button>
               </div>

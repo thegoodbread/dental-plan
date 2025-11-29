@@ -28,6 +28,7 @@ export const TreatmentPlanDetailPage: React.FC = () => {
   // Local Edit State
   const [title, setTitle] = useState('');
   const [insurance, setInsurance] = useState(0);
+  const [discount, setDiscount] = useState(0);
   const [notes, setNotes] = useState('');
 
   useEffect(() => {
@@ -41,16 +42,25 @@ export const TreatmentPlanDetailPage: React.FC = () => {
     if (p) {
         setTitle(p.title);
         setInsurance(p.estimatedInsurance || 0);
+        // Infer discount from the stored patient portion
+        const impliedDiscount = Math.max(0, p.totalFee - (p.estimatedInsurance || 0) - p.patientPortion);
+        setDiscount(impliedDiscount);
         setNotes(p.notesInternal || '');
     }
     setLoading(false);
   };
 
-  const handleSaveHeader = () => {
+  const handleFinancialUpdate = () => {
     if (!plan) return;
+    const insuranceVal = Number(insurance) || 0;
+    const discountVal = Number(discount) || 0;
+    // Calculate new portion based on discount
+    const newPatientPortion = Math.max(0, plan.totalFee - insuranceVal - discountVal);
+    
     updateTreatmentPlan(plan.id, { 
         title, 
-        estimatedInsurance: Number(insurance), 
+        estimatedInsurance: insuranceVal,
+        patientPortion: newPatientPortion,
         notesInternal: notes 
     });
     refreshData();
@@ -119,7 +129,7 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                         <input 
                             value={title} 
                             onChange={(e) => setTitle(e.target.value)}
-                            onBlur={handleSaveHeader}
+                            onBlur={handleFinancialUpdate}
                             className="font-bold text-lg md:text-xl text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none bg-transparent max-w-[200px] md:max-w-md"
                         />
                         <StatusBadge status={plan.status} />
@@ -214,11 +224,25 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                               type="number" 
                               value={insurance}
                               onChange={e => setInsurance(parseFloat(e.target.value))}
-                              onBlur={handleSaveHeader}
+                              onBlur={handleFinancialUpdate}
                               className="w-full p-2 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
                           />
                       </div>
+                      
+                      {/* Plan Discount Input */}
                       <div>
+                          <h3 className="text-xs font-bold text-gray-500 uppercase mb-3 md:mt-2">Plan Discount</h3>
+                          <label className="block text-sm text-gray-700 mb-1">Adjustment ($)</label>
+                          <input 
+                              type="number" 
+                              value={discount}
+                              onChange={e => setDiscount(parseFloat(e.target.value))}
+                              onBlur={handleFinancialUpdate}
+                              className="w-full p-2 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                          />
+                      </div>
+
+                      <div className="md:pt-2">
                         <h3 className="text-xs font-bold text-gray-500 uppercase mb-3 md:mt-2">Patient Portion</h3>
                         <div className="text-2xl font-bold text-blue-600 text-right">${plan.patientPortion.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
                       </div>
@@ -243,7 +267,7 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                         className="w-full h-24 md:h-32 p-2 text-sm bg-white text-gray-900 border border-gray-300 rounded resize-none focus:ring-1 focus:ring-blue-500 outline-none placeholder-gray-400"
                         value={notes}
                         onChange={e => setNotes(e.target.value)}
-                        onBlur={handleSaveHeader}
+                        onBlur={handleFinancialUpdate}
                         placeholder="Private notes for staff..."
                     />
                 </div>

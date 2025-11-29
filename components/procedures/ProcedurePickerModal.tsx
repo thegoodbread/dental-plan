@@ -153,7 +153,7 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search Header */}
-        <div className="p-4 border-b border-gray-100 flex items-center gap-3 bg-white sticky top-0 z-20">
+        <div className="p-4 border-b border-gray-100 flex items-center gap-3 bg-white sticky top-0 z-30">
           <Search className="text-gray-400" size={24} />
           <input
             ref={searchInputRef}
