@@ -45,7 +45,7 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({ items 
     const isUpper = arch === 'UPPER';
 
     return (
-      <div className={`relative w-full ${isUpper ? 'pt-4 md:pt-6 pb-2' : 'pt-2 pb-4 md:pb-6'}`}>
+      <div className={`relative w-full md:max-w-3xl md:mx-auto ${isUpper ? 'pt-4 md:pt-6 pb-2' : 'pt-2 pb-4 md:pb-6'}`}>
          {/* Arch Bar */}
          {archUrgency && (
            <div className={`absolute ${isUpper ? 'top-0' : 'bottom-0'} left-4 right-4 h-1.5 md:h-2 rounded-full ${getUrgencyColor(archUrgency)} opacity-50`}></div>
