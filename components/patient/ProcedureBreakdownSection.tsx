@@ -100,7 +100,7 @@ const PhaseGroup: React.FC<{
                                     bg-white p-4 md:p-5 border transition-all duration-300
                                     ${isExpanded ? 'rounded-t-xl' : 'rounded-xl'}
                                     ${highlighted
-                                        ? 'border-blue-500 shadow-lg scale-[1.02] ring-2 ring-blue-200/50'
+                                        ? 'border-gray-300 shadow-md' // POLISH: Softer hover highlight
                                         : dimmed
                                             ? 'border-gray-100 opacity-40 grayscale'
                                             : 'border-gray-200 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-md hover:border-gray-300'
@@ -108,7 +108,7 @@ const PhaseGroup: React.FC<{
                                 `}
                             >
                                 <div className="flex items-start gap-4">
-                                    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shrink-0 border mt-1 ${highlighted ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
+                                    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shrink-0 border mt-1 ${highlighted ? 'bg-gray-100 text-gray-700 border-gray-200' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
                                         <ProcedureIcon width={20} height={20} className="md:w-6 md:h-6" />
                                     </div>
                                     <div className="flex-1 min-w-0">
@@ -130,8 +130,8 @@ const PhaseGroup: React.FC<{
                             </div>
                             {/* Expandable Financial Row */}
                             <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-20' : 'max-h-0'}`}>
-                                <div className="px-5 pt-2 pb-3 text-sm text-gray-500 bg-gray-50/50 rounded-b-xl border-x border-b border-gray-200 -mt-px flex justify-between items-center">
-                                    <span>
+                                <div className="px-5 py-3 text-xs text-gray-500 bg-slate-50/80 rounded-b-xl border-x border-b border-gray-200 border-t border-slate-200 flex justify-between items-center">
+                                    <span className="font-medium">
                                         {item.units} × ${item.baseFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                                     </span>
                                     <span className="font-bold text-gray-700">
@@ -146,7 +146,7 @@ const PhaseGroup: React.FC<{
 
             {/* Expanded Phase Summary */}
             <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-48' : 'max-h-0'}`}>
-                <div className="mt-4 bg-white border border-gray-200/80 rounded-lg p-4 text-sm space-y-2 shadow-sm">
+                <div className="mt-4 bg-slate-50/80 border border-gray-200/80 rounded-lg p-4 text-sm space-y-2 shadow-sm">
                     <div className="flex justify-between font-medium">
                         <span className="text-gray-600">Phase Subtotal</span>
                         <span className="text-gray-900">${phaseSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
@@ -154,12 +154,12 @@ const PhaseGroup: React.FC<{
                     {phaseInsurance > 0 && (
                         <div className="flex justify-between">
                             <span className="text-gray-500">Est. Insurance for this phase</span>
-                            <span className="text-gray-700">-${phaseInsurance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                            <span className="text-gray-700">-${Math.round(phaseInsurance).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
                         </div>
                     )}
-                    <div className="flex justify-between font-bold pt-2 border-t border-gray-100">
+                    <div className="flex justify-between font-bold pt-2 border-t border-slate-200">
                         <span className="text-blue-700">Est. Patient Portion for this phase</span>
-                        <span className="text-blue-600">${phasePatientPortion.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                        <span className="text-blue-600">${Math.round(phasePatientPortion).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
                     </div>
                 </div>
             </div>
