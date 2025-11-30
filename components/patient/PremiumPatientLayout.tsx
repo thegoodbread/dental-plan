@@ -1,5 +1,6 @@
 
 
+
 import React, { useState } from 'react';
 import { TreatmentPlan, TreatmentPlanItem } from '../../types';
 import { DollarSign } from 'lucide-react';
@@ -117,6 +118,7 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
 
       {/* Procedure List with Hover State */}
       <ProcedureBreakdownSection 
+        plan={plan}
         items={items} 
         phases={phases}
         hoveredTooth={hoveredTooth}
