@@ -27,7 +27,7 @@ export const ToothSelector: React.FC<ToothSelectorProps> = ({
   };
 
   const renderRow = (teeth: number[]) => (
-    <div className="flex flex-nowrap gap-px md:gap-1 justify-center">
+    <div className="flex flex-nowrap gap-px md:gap-1.5 justify-center">
       {teeth.map((tooth) => {
         const active = selectedTeeth.includes(tooth);
         return (
@@ -36,9 +36,9 @@ export const ToothSelector: React.FC<ToothSelectorProps> = ({
             type="button"
             disabled={disabled}
             className={`
-              w-6 h-6 md:w-7 md:h-7 rounded-full border text-[10px] md:text-xs flex items-center justify-center transition-all
+              w-6 h-6 md:w-11 md:h-11 rounded-full border text-[10px] md:text-base flex items-center justify-center transition-all
               ${active 
-                ? 'bg-blue-600 border-blue-600 text-white font-bold shadow-sm scale-105 md:scale-110' 
+                ? 'bg-blue-600 border-blue-600 text-white font-bold shadow-sm scale-105 md:scale-115' 
                 : 'bg-white border-gray-300 text-gray-700 hover:border-blue-400 hover:text-blue-600'
               }
               ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}

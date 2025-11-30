@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry } from '../types';
 import { TreatmentPlanItemRow } from './TreatmentPlanItemRow';
@@ -150,7 +151,6 @@ const MobileItemCard: React.FC<{
   const [baseFee, setBaseFee] = useState(item.baseFee);
   const [isToothSelectorOpen, setIsToothSelectorOpen] = useState(false);
 
-  // Helper to determine location display
   const getLocation = () => {
     if (item.selectedTeeth?.length) return `Tooth: ${item.selectedTeeth.join(', ')}`;
     if (item.selectedQuadrants?.length) return `Quad: ${item.selectedQuadrants.join(', ')}`;
@@ -158,9 +158,30 @@ const MobileItemCard: React.FC<{
     return 'Full Mouth';
   };
 
-  const handleSave = () => {
+  const handleSaveAndClose = () => {
     onUpdate(item.id, { baseFee: Number(baseFee) });
     setIsEditing(false);
+  };
+  
+  const handleCancel = () => {
+    setBaseFee(item.baseFee); // Reset fee on cancel
+    setIsEditing(false);
+  };
+
+  const toggleQuadrant = (q: 'UR'|'UL'|'LL'|'LR') => {
+    const current = item.selectedQuadrants || [];
+    const updated = current.includes(q) 
+      ? current.filter(x => x !== q)
+      : [...current, q];
+    onUpdate(item.id, { selectedQuadrants: updated });
+  };
+
+  const toggleArch = (a: 'UPPER'|'LOWER') => {
+    const current = item.selectedArches || [];
+    const updated = current.includes(a)
+      ? current.filter(x => x !== a)
+      : [...current, a];
+    onUpdate(item.id, { selectedArches: updated });
   };
 
   return (
@@ -179,42 +200,95 @@ const MobileItemCard: React.FC<{
              {item.units > 1 && <div className="text-xs text-gray-400">Qty: {item.units}</div>}
           </div>
         </div>
-
-        <div className="flex items-center justify-between text-sm text-gray-600 border-t border-gray-100 pt-3 mt-2">
-           <div className="font-medium">{getLocation()}</div>
-           <div className="flex gap-3">
-              {isEditing ? (
-                <div className="flex items-center gap-2">
-                   <input 
-                     type="number" 
-                     className="w-20 p-1 border rounded text-right text-sm text-gray-900 bg-white"
-                     placeholder="Cost"
-                     value={baseFee}
-                     onChange={e => setBaseFee(Number(e.target.value))}
-                   />
-                   <button onClick={handleSave} className="text-green-600 font-bold text-xs uppercase">Save</button>
-                </div>
-              ) : (
-                <button onClick={() => setIsEditing(true)} className="text-blue-600 text-xs font-bold uppercase flex items-center gap-1">
-                   <Edit2 size={12} /> Edit
-                </button>
-              )}
-              {!isEditing && (
-                <button onClick={() => onDelete(item.id)} className="text-red-500 text-xs font-bold uppercase flex items-center gap-1">
-                  <Trash2 size={12} />
-                </button>
-              )}
-           </div>
-        </div>
         
-        {isEditing && item.unitType === 'PER_TOOTH' && (
-          <div className="mt-3 pt-3 border-t border-gray-100">
-             <button
-                onClick={() => setIsToothSelectorOpen(true)}
-                className="w-full text-center py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg text-sm"
-             >
-                Change Selected Teeth
-             </button>
+        {isEditing ? (
+          <div className="space-y-4 pt-3 mt-3 border-t border-gray-100">
+            {/* Fee Editor */}
+            <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-700">Cost per unit</label>
+                <input 
+                    type="number" 
+                    className="w-24 p-1.5 border rounded text-right text-sm text-gray-900 bg-white"
+                    value={baseFee}
+                    onChange={e => setBaseFee(Number(e.target.value))}
+                />
+            </div>
+
+            {/* Area Editor */}
+            {(item.unitType === 'PER_TOOTH' || item.unitType === 'PER_QUADRANT' || item.unitType === 'PER_ARCH') && (
+              <div>
+                {item.unitType === 'PER_TOOTH' && (
+                  <button
+                    onClick={() => setIsToothSelectorOpen(true)}
+                    className="w-full text-center py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg text-sm border border-gray-200"
+                  >
+                    Change Selected Teeth
+                  </button>
+                )}
+                {item.unitType === 'PER_QUADRANT' && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Select Quadrants</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {(['UR', 'UL', 'LR', 'LL'] as const).map(q => (
+                        <button
+                          key={q}
+                          onClick={() => toggleQuadrant(q)}
+                          className={`py-2 text-xs rounded-lg border font-bold transition-colors ${
+                            item.selectedQuadrants?.includes(q) 
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
+                              : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'
+                          }`}
+                        >
+                          {q}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {item.unitType === 'PER_ARCH' && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Select Arch</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(['UPPER', 'LOWER'] as const).map(a => (
+                        <button
+                          key={a}
+                          onClick={() => toggleArch(a)}
+                          className={`py-2 text-sm rounded-lg border font-bold transition-colors ${
+                            item.selectedArches?.includes(a) 
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
+                              : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'
+                          }`}
+                        >
+                          {a}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex gap-2 pt-2">
+              <button onClick={handleCancel} className="flex-1 py-2 text-sm bg-gray-100 text-gray-700 font-bold rounded-lg hover:bg-gray-200">
+                Cancel
+              </button>
+              <button onClick={handleSaveAndClose} className="flex-1 py-2 text-sm bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700">
+                Done
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between text-sm text-gray-600 border-t border-gray-100 pt-3 mt-2">
+            <div className="font-medium">{getLocation()}</div>
+            <div className="flex gap-3">
+              <button onClick={() => { setIsEditing(true); setBaseFee(item.baseFee); }} className="text-blue-600 text-xs font-bold uppercase flex items-center gap-1">
+                <Edit2 size={12} /> Edit
+              </button>
+              <button onClick={() => onDelete(item.id)} className="text-red-500 text-xs font-bold uppercase flex items-center gap-1">
+                <Trash2 size={12} />
+              </button>
+            </div>
           </div>
         )}
       </div>

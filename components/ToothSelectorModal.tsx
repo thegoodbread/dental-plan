@@ -24,7 +24,7 @@ export const ToothSelectorModal: React.FC<ToothSelectorModalProps> = ({
       onClick={onClose}
     >
       <div 
-        className="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden"
+        className="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center p-4 border-b border-gray-200">
