@@ -173,24 +173,24 @@ export const FinancialsMobileCard: React.FC<FinancialsMobileCardProps> = ({ item
         </div>
 
         {isAdvancedMode && (
-          <div className="space-y-3 pt-3 mt-3 border-t border-gray-100">
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-xs font-medium text-gray-600">Coverage</label>
-              <div className="flex items-center gap-1.5 w-1/2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 mt-3 border-t border-gray-100">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Coverage</label>
+              <div className="flex items-center gap-1.5">
                 <InputControl value={coveragePercent} onChange={handlePercentChange} isPercentage />
                 <NumpadButton onClick={() => setModalConfig({isOpen: true, field: 'coveragePercent', title: 'Coverage %', isPercentage: true})} />
               </div>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-xs font-medium text-gray-600">Est. Insurance</label>
-              <div className="flex items-center gap-1.5 w-1/2">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Est. Insurance</label>
+              <div className="flex items-center gap-1.5">
                 <InputControl value={estInsurance} onChange={handleInsuranceChange} />
                 <NumpadButton onClick={() => setModalConfig({isOpen: true, field: 'estInsurance', title: 'Est. Insurance', isPercentage: false})} />
               </div>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-xs font-medium text-gray-600">Est. Pt Portion</label>
-              <div className="flex items-center gap-1.5 w-1/2">
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Est. Pt Portion</label>
+              <div className="flex items-center gap-1.5">
                 <InputControl value={estPatientPortion} onChange={handlePatientPortionChange} />
                 <NumpadButton onClick={() => setModalConfig({isOpen: true, field: 'estPatientPortion', title: 'Est. Patient Portion', isPercentage: false})} />
               </div>

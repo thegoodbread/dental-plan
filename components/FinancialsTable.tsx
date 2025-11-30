@@ -43,21 +43,21 @@ export const FinancialsTable: React.FC<FinancialsTableProps> = ({
       
       {items.length === 0 ? emptyState : (
         <>
-          {/* DESKTOP TABLE VIEW */}
-          <div className="hidden md:block overflow-x-auto flex-1 relative">
+          {/* DESKTOP TABLE VIEW (LG screens and up) */}
+          <div className="hidden lg:block overflow-x-auto flex-1 relative">
             <table className="w-full text-left border-collapse">
               <thead className="sticky top-0 z-10 shadow-sm">
                 <tr className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
                   <th className="px-4 py-3 w-1/3 bg-gray-50">Procedure</th>
-                  <th className="px-4 py-3 text-right w-24 bg-gray-50">Net Fee</th>
+                  <th className="px-4 py-3 text-right w-28 bg-gray-50">Net Fee</th>
                   {isAdvancedMode && (
                     <>
-                      <th className="px-4 py-3 text-right w-28 bg-gray-50">Coverage %</th>
-                      <th className="px-4 py-3 text-right w-32 bg-gray-50">Est. Insurance</th>
-                      <th className="px-4 py-3 text-right w-32 bg-gray-50">Est. Pt Portion</th>
+                      <th className="px-4 py-3 text-right w-32 bg-gray-50">Coverage %</th>
+                      <th className="px-4 py-3 text-right w-36 bg-gray-50">Est. Insurance</th>
+                      <th className="px-4 py-3 text-right w-36 bg-gray-50">Est. Pt Portion</th>
                     </>
                   )}
-                  <th className="px-4 py-3 w-20 bg-gray-50"></th>
+                  <th className="px-4 py-3 w-24 bg-gray-50"></th>
                 </tr>
               </thead>
               <tbody className="bg-white">
@@ -73,8 +73,8 @@ export const FinancialsTable: React.FC<FinancialsTableProps> = ({
             </table>
           </div>
 
-          {/* MOBILE CARD VIEW */}
-          <div className="md:hidden p-2 space-y-2 flex-1 overflow-y-auto bg-gray-50">
+          {/* MOBILE & TABLET CARD VIEW (Screens smaller than LG) */}
+          <div className="lg:hidden p-2 space-y-2 flex-1 overflow-y-auto bg-gray-50">
             {items.map(item => (
               <FinancialsMobileCard
                 key={item.id}
