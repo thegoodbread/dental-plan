@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -298,7 +299,7 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                           <StatusBadge status={plan.status} />
                         </div>
                         <div className="text-xs md:text-sm text-gray-500 truncate">
-                            {plan.planNumber} • {plan.patient?.firstName} {plan.patient?.lastName}
+                            {plan.planNumber} • {plan.caseAlias}
                         </div>
                     </div>
                 </div>
@@ -534,7 +535,7 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                    </div>
                    <div>
                       <h2 className="font-bold text-base md:text-lg leading-tight">Patient View</h2>
-                      <div className="text-xs text-gray-400 hidden md:block">Viewing as: {plan.patient?.firstName} {plan.patient?.lastName}</div>
+                      <div className="text-xs text-gray-400 hidden md:block">Viewing as: {plan.caseAlias}</div>
                    </div>
                  </div>
                  <button 

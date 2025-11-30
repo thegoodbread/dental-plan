@@ -1,10 +1,4 @@
 
-
-
-
-
-
-
 // Enums
 export type UserRole = 'DOCTOR' | 'TREATMENT_COORDINATOR' | 'ADMIN';
 
@@ -48,16 +42,6 @@ export interface User {
   role: UserRole;
   name: string;
   email: string;
-}
-
-export interface Patient {
-  id: string;
-  firstName: string;
-  lastName: string;
-  dateOfBirth?: string;
-  phone?: string;
-  email?: string;
-  notes?: string | null;
 }
 
 export interface FeeScheduleEntry {
@@ -109,8 +93,7 @@ export interface TreatmentPlanItem {
 
 export interface TreatmentPlan {
   id: string;
-  patientId: string;
-  patient?: Patient; // Hydrated
+  caseAlias?: string;
   planNumber: string;
   title: string;
   status: TreatmentPlanStatus;

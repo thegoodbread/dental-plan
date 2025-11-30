@@ -3,7 +3,6 @@ import {
   TreatmentPlan, 
   TreatmentPlanItem, 
   FeeScheduleEntry, 
-  Patient, 
   ActivityLog, 
   ShareLink,
   TreatmentPlanStatus,
@@ -11,12 +10,11 @@ import {
   InsuranceMode,
   FeeScheduleType
 } from '../types';
-import { DEMO_PLANS, DEMO_PATIENTS, DEMO_ITEMS, DEMO_SHARES } from '../mock/seedPlans';
+import { DEMO_PLANS, DEMO_ITEMS, DEMO_SHARES } from '../mock/seedPlans';
 
 // --- KEYS (Bumped to v7 to force re-seed with new Library) ---
 const KEY_PLANS = 'dental_plans_v7';
 const KEY_ITEMS = 'dental_plan_items_v7';
-const KEY_PATIENTS = 'dental_patients_v7';
 const KEY_FEE_SCHEDULE = 'dental_fee_schedule_v7';
 const KEY_SHARES = 'dental_shares_v7';
 const KEY_LOGS = 'dental_logs_v7';
@@ -168,7 +166,6 @@ export const initServices = () => {
   // FORCE SEED if no data or if we just bumped version
   if (!hasData) {
     console.log("Seeding Demo Data V7...");
-    localStorage.setItem(KEY_PATIENTS, JSON.stringify(DEMO_PATIENTS));
     localStorage.setItem(KEY_PLANS, JSON.stringify(DEMO_PLANS));
     localStorage.setItem(KEY_ITEMS, JSON.stringify(DEMO_ITEMS));
     localStorage.setItem(KEY_SHARES, JSON.stringify(DEMO_SHARES));
@@ -190,22 +187,12 @@ export const findFeeByCode = (code: string): FeeScheduleEntry | undefined => {
   return fees.find(f => f.procedureCode === code);
 };
 
-// --- PATIENTS ---
-export const getPatients = (): Patient[] => {
-  return JSON.parse(localStorage.getItem(KEY_PATIENTS) || '[]');
-};
-
 // --- PLAN CRUD ---
 
 export const getAllTreatmentPlans = (): TreatmentPlan[] => {
-  // Re-hydrate plans (strip items to keep list lightweight, hydrate patient)
   const plans: TreatmentPlan[] = JSON.parse(localStorage.getItem(KEY_PLANS) || '[]');
-  const patients = getPatients();
   
-  return plans.map(p => ({
-    ...p,
-    patient: patients.find(pat => pat.id === p.patientId)
-  })).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  return plans.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 };
 
 export const getTreatmentPlanById = (id: string): TreatmentPlan | undefined => {
@@ -213,7 +200,6 @@ export const getTreatmentPlanById = (id: string): TreatmentPlan | undefined => {
   const plan = plans.find(p => p.id === id);
   if (!plan) return undefined;
 
-  const patients = getPatients();
   const allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
   
   // Hydrate items
@@ -235,7 +221,6 @@ export const getTreatmentPlanById = (id: string): TreatmentPlan | undefined => {
 
   return {
     ...plan,
-    patient: patients.find(pat => pat.id === plan.patientId),
     items: planItems
   };
 };
@@ -249,7 +234,6 @@ export function loadTreatmentPlanWithItems(
 ): { plan: TreatmentPlan; items: TreatmentPlanItem[] } | null {
   const allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
   const allPlans: TreatmentPlan[]     = JSON.parse(localStorage.getItem(KEY_PLANS) || '[]');
-  const allPatients: Patient[]        = JSON.parse(localStorage.getItem(KEY_PATIENTS) || '[]');
 
   const planFromStorage = allPlans.find(p => p.id === planId);
   if (!planFromStorage) {
@@ -279,10 +263,8 @@ export function loadTreatmentPlanWithItems(
     planFromStorage.feeScheduleType = 'standard';
   }
 
-  // Hydrate patient into the final plan object
   const plan: TreatmentPlan = {
     ...planFromStorage,
-    patient: allPatients.find(p => p.id === planFromStorage.patientId)
   };
 
   return { plan, items: itemsForPlan };
@@ -292,7 +274,7 @@ const savePlan = (plan: TreatmentPlan) => {
   const plans: TreatmentPlan[] = JSON.parse(localStorage.getItem(KEY_PLANS) || '[]');
   const idx = plans.findIndex(p => p.id === plan.id);
   
-  const { patient, items, ...storagePlan } = plan;
+  const { items, ...storagePlan } = plan;
   
   if (idx >= 0) {
     plans[idx] = storagePlan as TreatmentPlan;
@@ -302,11 +284,11 @@ const savePlan = (plan: TreatmentPlan) => {
   localStorage.setItem(KEY_PLANS, JSON.stringify(plans));
 };
 
-export const createTreatmentPlan = (data: { patientId: string; title: string }): TreatmentPlan => {
+export const createTreatmentPlan = (data: { title?: string }): TreatmentPlan => {
   const newPlan: TreatmentPlan = {
     id: generateId(),
-    patientId: data.patientId,
-    title: data.title,
+    caseAlias: `Patient-${Math.floor(1000 + Math.random() * 9000)}`,
+    title: data.title || '',
     planNumber: `TP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
     status: 'DRAFT',
     insuranceMode: 'simple',
@@ -439,7 +421,7 @@ export const updateTreatmentPlan = (id: string, updates: Partial<TreatmentPlan>)
   const existingPlan = allPlans[planIndex];
   const feeScheduleTypeChanged = updates.feeScheduleType && updates.feeScheduleType !== existingPlan.feeScheduleType;
   
-  const { patient, items, ...storageUpdates } = updates;
+  const { items, ...storageUpdates } = updates;
 
   const mergedPlan = {
     ...existingPlan,

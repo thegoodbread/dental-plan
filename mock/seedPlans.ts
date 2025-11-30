@@ -1,14 +1,8 @@
-import { TreatmentPlan, TreatmentPlanItem, ShareLink, Patient, FeeUnitType, UrgencyLevel, FeeCategory, FeeScheduleType } from '../types';
+
+import { TreatmentPlan, TreatmentPlanItem, ShareLink, FeeUnitType, UrgencyLevel, FeeCategory, FeeScheduleType } from '../types';
 
 // Helper to create IDs
 const id = (prefix: string) => `${prefix}-${Math.random().toString(36).substr(2, 5)}`;
-
-export const DEMO_PATIENTS: Patient[] = [
-  { id: 'p_alex', firstName: 'Alex', lastName: 'Rivera', dateOfBirth: '1985-04-12', phone: '555-0101', email: 'alex@demo.com' },
-  { id: 'p_jordan', firstName: 'Jordan', lastName: 'Lee', dateOfBirth: '1990-09-21', phone: '555-0102', email: 'jordan@demo.com' },
-  { id: 'p_casey', firstName: 'Casey', lastName: 'Smith', dateOfBirth: '1978-11-05', phone: '555-0103', email: 'casey@demo.com' },
-  { id: 'p_taylor', firstName: 'Taylor', lastName: 'Doe', dateOfBirth: '1995-02-28', phone: '555-0104', email: 'taylor@demo.com' },
-];
 
 const ITEM_DEFAULTS = {
   discount: 0,
@@ -94,7 +88,7 @@ const itemsA: TreatmentPlanItem[] = [
 
 export const PLAN_A: TreatmentPlan = {
   id: planA_Id,
-  patientId: 'p_alex',
+  caseAlias: 'Patient-8432',
   planNumber: 'TP-DEMO-SINGLE',
   title: 'Restorative & Implant Plan',
   status: 'PRESENTED',
@@ -172,7 +166,7 @@ const itemsB: TreatmentPlanItem[] = [
 
 export const PLAN_B: TreatmentPlan = {
   id: planB_Id,
-  patientId: 'p_jordan',
+  caseAlias: 'Patient-5519',
   planNumber: 'TP-DEMO-QUAD',
   title: 'Periodontal Therapy',
   status: 'DRAFT',
@@ -234,7 +228,7 @@ const itemsC: TreatmentPlanItem[] = [
 
 export const PLAN_C: TreatmentPlan = {
   id: planC_Id,
-  patientId: 'p_casey',
+  caseAlias: 'Patient-2387',
   planNumber: 'TP-DEMO-ARCH',
   title: 'Upper Arch Restoration',
   status: 'PRESENTED',
@@ -352,7 +346,7 @@ const itemsD: TreatmentPlanItem[] = [
 
 export const PLAN_D: TreatmentPlan = {
   id: planD_Id,
-  patientId: 'p_taylor',
+  caseAlias: 'Patient-9102',
   planNumber: 'TP-DEMO-COMPLEX',
   title: 'Comprehensive Rehab',
   status: 'PRESENTED',

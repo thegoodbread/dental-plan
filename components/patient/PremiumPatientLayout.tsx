@@ -3,6 +3,7 @@
 
 
 
+
 import React, { useState } from 'react';
 import { TreatmentPlan, TreatmentPlanItem } from '../../types';
 import { DollarSign } from 'lucide-react';
@@ -102,7 +103,6 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
     <div className="min-h-screen bg-blue-50/30 text-gray-900 font-sans selection:bg-blue-100">
       
       <HeaderSection 
-        patientName={plan.patient?.firstName || 'Guest'}
         planNumber={plan.planNumber}
       />
 

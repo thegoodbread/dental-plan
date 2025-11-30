@@ -2,13 +2,11 @@ import React from 'react';
 import { ShieldCheck } from 'lucide-react';
 
 interface HeaderSectionProps {
-  patientName: string;
   planNumber: string;
   clinicName?: string;
 }
 
 export const HeaderSection: React.FC<HeaderSectionProps> = ({ 
-  patientName, 
   planNumber,
   clinicName = "DentalPlan Pro"
 }) => {
@@ -37,10 +35,10 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({
           </div>
           <div>
             <h1 className="text-3xl md:text-6xl font-extrabold text-gray-900 tracking-tight leading-tight mb-3 md:mb-4">
-              Hi {patientName},
+              Treatment Roadmap for Your Smile
             </h1>
             <p className="text-lg md:text-xl text-gray-500 max-w-2xl leading-relaxed font-light">
-              We’ve prepared a personalized treatment roadmap to restore your smile and health. Here is everything you need to know.
+              We’ve prepared a personalized roadmap to help you understand your care, costs, and next steps.
             </p>
           </div>
         </div>

@@ -19,7 +19,7 @@ export const explainPlanForPatient = async (plan: TreatmentPlan, items: Treatmen
       You are a helpful dental treatment coordinator.
       Explain the following dental treatment plan to the patient in simple, reassuring language.
       
-      Patient Name: ${plan.patient?.firstName || 'Patient'}
+      Case Alias: ${plan.caseAlias || 'Patient'}
       Plan Title: ${plan.title}
       Total Cost: $${plan.totalFee.toFixed(2)}
       Patient Portion: $${plan.patientPortion.toFixed(2)}

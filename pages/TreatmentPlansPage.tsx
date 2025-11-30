@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, MoreHorizontal, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { getAllTreatmentPlans, getPatients, createTreatmentPlan } from '../services/treatmentPlans';
-import { TreatmentPlan, Patient } from '../types';
+import { getAllTreatmentPlans, createTreatmentPlan } from '../services/treatmentPlans';
+import { TreatmentPlan } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
 
 export const TreatmentPlansPage: React.FC = () => {
@@ -15,8 +15,6 @@ export const TreatmentPlansPage: React.FC = () => {
   
   // Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [newPlanPatientId, setNewPlanPatientId] = useState('');
   const [newPlanTitle, setNewPlanTitle] = useState('');
 
   useEffect(() => {
@@ -25,7 +23,6 @@ export const TreatmentPlansPage: React.FC = () => {
 
   const loadData = () => {
     setPlans(getAllTreatmentPlans());
-    setPatients(getPatients());
   };
 
   const filteredPlans = plans.filter(p => {
@@ -34,17 +31,14 @@ export const TreatmentPlansPage: React.FC = () => {
     const matchesSearch = 
       p.title.toLowerCase().includes(term) || 
       p.planNumber.toLowerCase().includes(term) ||
-      p.patient?.firstName.toLowerCase().includes(term) ||
-      p.patient?.lastName.toLowerCase().includes(term);
+      (p.caseAlias && p.caseAlias.toLowerCase().includes(term));
     return matchesStatus && matchesSearch;
   });
 
   const handleCreatePlan = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPlanPatientId || !newPlanTitle) return;
     
     const newPlan = createTreatmentPlan({
-      patientId: newPlanPatientId,
       title: newPlanTitle
     });
     
@@ -62,8 +56,8 @@ export const TreatmentPlansPage: React.FC = () => {
         </div>
         <button 
           onClick={() => {
+            setNewPlanTitle('');
             setShowCreateModal(true);
-            if (patients.length > 0) setNewPlanPatientId(patients[0].id);
           }}
           className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors shadow-sm w-full md:w-auto"
         >
@@ -108,7 +102,7 @@ export const TreatmentPlansPage: React.FC = () => {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Plan info</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient</th>
+                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Case</th>
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Total Fee</th>
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Updated</th>
@@ -127,7 +121,7 @@ export const TreatmentPlansPage: React.FC = () => {
                     </td>
                     <td className="px-6 py-4">
                       <div className="font-medium text-gray-900">
-                        {plan.patient?.firstName} {plan.patient?.lastName}
+                        {plan.caseAlias}
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -156,8 +150,8 @@ export const TreatmentPlansPage: React.FC = () => {
                 >
                     <div className="flex justify-between items-start">
                         <div>
-                            <div className="font-bold text-gray-900 text-sm">{plan.title}</div>
-                            <div className="text-xs text-gray-600 mt-1">{plan.patient?.firstName} {plan.patient?.lastName}</div>
+                            <div className="font-bold text-gray-900 text-sm">{plan.title || plan.planNumber}</div>
+                            <div className="text-xs text-gray-600 mt-1">{plan.caseAlias}</div>
                         </div>
                         <StatusBadge status={plan.status} />
                     </div>
@@ -190,30 +184,29 @@ export const TreatmentPlansPage: React.FC = () => {
             </div>
             <form onSubmit={handleCreatePlan} className="p-6 space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Select Patient</label>
-                <select 
-                  className="w-full p-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors placeholder:text-gray-500"
-                  value={newPlanPatientId}
-                  onChange={(e) => setNewPlanPatientId(e.target.value)}
-                  required
-                >
-                  <option value="" disabled>-- Select Patient --</option>
-                  {patients.map(p => (
-                    <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Plan Title</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Case Label (optional)</label>
                 <input 
                   type="text" 
                   className="w-full p-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors placeholder:text-gray-500"
-                  placeholder="e.g. Upper Anterior Crowns"
+                  placeholder="e.g. Upper Anterior Crowns, Implant Case"
                   value={newPlanTitle}
                   onChange={(e) => setNewPlanTitle(e.target.value)}
-                  required
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Case ID</label>
+                <input 
+                  type="text"
+                  className="w-full p-2.5 bg-gray-100 border border-gray-300 text-gray-500 text-sm rounded-lg font-mono"
+                  value="Automatically generated"
+                  readOnly
+                  disabled
+                />
+                <p className="text-xs text-gray-500 mt-1.5">
+                  Automatically generated. No patient name is stored.
+                </p>
+              </div>
+
               <div className="flex gap-3 pt-4">
                 <button 
                   type="button"
