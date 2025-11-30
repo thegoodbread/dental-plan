@@ -1,15 +1,9 @@
 
-
-
-
-
-
-
-
 import React, { useState } from 'react';
 import { DollarSign, Star, Info } from 'lucide-react';
 import { TreatmentPlan, TreatmentPlanItem } from '../../types';
 import { getFeeSchedule } from '../../services/treatmentPlans';
+import { VisualCostBreakdownBar } from './VisualCostBreakdownBar';
 
 interface PaymentEstimatorSectionProps {
   plan: TreatmentPlan;
@@ -71,7 +65,13 @@ export const PaymentEstimatorSection: React.FC<PaymentEstimatorSectionProps> = (
               )}
            </div>
 
-           <hr className="border-gray-200 my-4" />
+           <VisualCostBreakdownBar
+                totalFee={standardFee}
+                membershipSavings={memberSave}
+                clinicSavings={discount}
+                insuranceCoverage={insuranceEstimate}
+                patientPortion={patientPortion}
+            />
 
            {/* EMPHASIZED YOUR PORTION */}
            <div className="bg-white border border-gray-200 rounded-2xl p-4 text-center shadow-sm">

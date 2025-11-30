@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -21,9 +15,23 @@ import { StatusBadge } from '../components/StatusBadge';
 import { TreatmentPlanItemsTable } from '../components/TreatmentPlanItemsTable';
 import { PremiumPatientLayout } from '../components/patient/PremiumPatientLayout';
 import { FinancialsTable } from '../components/FinancialsTable';
+import { NumberPadModal } from '../components/NumberPadModal';
 
 type ViewMode = 'CLINICAL' | 'FINANCIAL';
 type SaveStatus = 'IDLE' | 'SAVED';
+type ModalField = 'estBenefit' | 'clinicDiscount';
+
+const NumpadButton = ({ onClick, disabled = false }: { onClick: () => void, disabled?: boolean }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={disabled}
+    className="p-1.5 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-md border border-gray-200 disabled:cursor-not-allowed disabled:opacity-50 shrink-0"
+    aria-label="Open number pad"
+  >
+    <Calculator size={16} />
+  </button>
+);
 
 export const TreatmentPlanDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -35,10 +43,13 @@ export const TreatmentPlanDetailPage: React.FC = () => {
   
   const [loading, setLoading] = useState(true);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [generatingAi, setGeneratingAi] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('CLINICAL');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('IDLE');
+  const [modalConfig, setModalConfig] = useState<{ isOpen: boolean; field: ModalField | null; title: string; }>({ isOpen: false, field: null, title: '' });
+
 
   useEffect(() => {
     if (id) {
@@ -67,6 +78,62 @@ export const TreatmentPlanDetailPage: React.FC = () => {
         setPlan(updatedPlan);
         setItems(updatedPlan.items || []);
     }
+  };
+  
+  const handleSidebarInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!plan) return;
+      const { name, value } = e.target;
+      const numericValue = value === '' ? 0 : parseFloat(value);
+      if (isNaN(numericValue)) return;
+
+      setPlan(prevPlan => ({
+        ...prevPlan!,
+        [name]: numericValue,
+      }));
+    };
+
+    const handleSidebarInputBlur = () => {
+      if (!plan) return;
+      const updates = {
+        estimatedInsurance: plan.estimatedInsurance ?? 0,
+        clinicDiscount: plan.clinicDiscount ?? 0,
+      };
+      const updatedPlan = updateTreatmentPlan(plan.id, updates);
+      if (updatedPlan) {
+        setPlan(updatedPlan);
+        setItems(updatedPlan.items || []);
+      }
+    };
+
+  const handleModalDone = (newValue: string) => {
+    const field = modalConfig.field;
+    setModalConfig({ isOpen: false, field: null, title: '' });
+    if (!plan) return;
+
+    const numericValue = parseFloat(newValue) || 0;
+
+    let updates: Partial<TreatmentPlan> = {};
+    if (field === 'estBenefit') {
+      updates.estimatedInsurance = numericValue;
+    } else if (field === 'clinicDiscount') {
+      updates.clinicDiscount = numericValue;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      setPlan(prevPlan => ({ ...prevPlan!, ...updates }));
+      const updatedPlan = updateTreatmentPlan(plan.id, updates);
+      if (updatedPlan) {
+        setPlan(updatedPlan);
+        setItems(updatedPlan.items || []);
+      }
+    }
+  };
+  
+  const getModalInitialValue = () => {
+    if (!plan) return '';
+    if (modalConfig.field === 'estBenefit') return String(plan.estimatedInsurance || '');
+    if (modalConfig.field === 'clinicDiscount') return String(plan.clinicDiscount || '');
+    return '';
   };
 
   const handleModeChange = (newMode: InsuranceMode) => {
@@ -114,7 +181,9 @@ export const TreatmentPlanDetailPage: React.FC = () => {
 
   const handleStatusChange = (status: TreatmentPlanStatus) => {
     if (!plan) return;
-    const updatedPlan = updateTreatmentPlan(plan.id, { status });
+    // If clicking the currently active status, revert to DRAFT. Otherwise, set the new status.
+    const newStatus = plan.status === status ? 'DRAFT' : status;
+    const updatedPlan = updateTreatmentPlan(plan.id, { status: newStatus });
     if (updatedPlan) {
         setPlan(updatedPlan);
     }
@@ -145,11 +214,9 @@ export const TreatmentPlanDetailPage: React.FC = () => {
 
   const handleDeleteItem = (itemId: string) => {
     if (!plan) return;
-    if (confirm("Are you sure you want to remove this procedure?")) {
-      deleteTreatmentPlanItem(itemId);
-      // Reload from source of truth after deletion and recalculation.
-      loadData(plan.id);
-    }
+    deleteTreatmentPlanItem(itemId);
+    // Reload from source of truth after deletion and recalculation.
+    loadData(plan.id);
   };
 
   const handleShare = () => {
@@ -158,8 +225,16 @@ export const TreatmentPlanDetailPage: React.FC = () => {
     const baseUrl = window.location.href.split('#')[0]; 
     const url = `${baseUrl}#/p/${link.token}`;
     setShareUrl(url);
+    setCopied(false); // Reset copy status
     const updatedPlan = updateTreatmentPlan(plan.id, { status: 'PRESENTED', presentedAt: new Date().toISOString() });
     if (updatedPlan) setPlan(updatedPlan);
+  };
+
+  const handleCopy = () => {
+    if (!shareUrl) return;
+    navigator.clipboard.writeText(shareUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleAiExplanation = async () => {
@@ -173,6 +248,35 @@ export const TreatmentPlanDetailPage: React.FC = () => {
 
   if (loading) return <div className="p-8">Loading...</div>;
   if (!plan) return <div className="p-8 text-red-600">Plan not found</div>;
+
+  const getStatusButtonClass = (buttonStatus: TreatmentPlanStatus): string => {
+    const base = "flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium bg-white border rounded-lg shadow-sm transition-colors";
+    const isActive = plan.status === buttonStatus;
+    
+    const styles: Record<string, { base: string, active: string }> = {
+      PRESENTED: { 
+        base: 'text-gray-700 border-gray-300 hover:bg-blue-50 hover:text-blue-600', 
+        active: 'bg-blue-50 text-blue-700 border-blue-600 font-bold' 
+      },
+      ACCEPTED: { 
+        base: 'text-gray-700 border-gray-300 hover:bg-green-50 hover:text-green-600', 
+        active: 'bg-green-50 text-green-700 border-green-600 font-bold' 
+      },
+      DECLINED: { 
+        base: 'text-gray-700 border-gray-300 hover:bg-red-50 hover:text-red-600', 
+        active: 'bg-red-50 text-red-700 border-red-600 font-bold' 
+      },
+      ON_HOLD: { 
+        base: 'text-gray-700 border-gray-300 hover:bg-yellow-50 hover:text-yellow-600', 
+        active: 'bg-yellow-50 text-yellow-700 border-yellow-600 font-bold' 
+      },
+    };
+
+    const specificStyle = styles[buttonStatus];
+    if (!specificStyle) return `${base} text-gray-700 border-gray-300`;
+
+    return `${base} ${isActive ? specificStyle.active : specificStyle.base}`;
+  };
 
   return (
     <div className="flex flex-col flex-1 bg-gray-50 overflow-x-hidden">
@@ -218,11 +322,25 @@ export const TreatmentPlanDetailPage: React.FC = () => {
             <div className="flex-1 p-4 md:p-5 lg:p-6 lg:overflow-y-auto flex flex-col gap-4 md:gap-6 order-1">
                 {shareUrl && (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex flex-col relative animate-in slide-in-from-top-4">
-                        <button onClick={() => setShareUrl(null)} className="absolute top-2 right-2 text-blue-400 hover:text-blue-600"><XCircle size={18}/></button>
-                        <h4 className="font-bold text-blue-900 flex items-center gap-2"><CheckCircle size={18}/> Share Link Ready</h4>
-                        <div className="flex gap-2 mt-2">
-                            <input readOnly value={shareUrl} className="flex-1 text-sm p-2 rounded border border-blue-200" />
-                            <button onClick={() => navigator.clipboard.writeText(shareUrl)} className="px-4 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700">Copy</button>
+                        <button onClick={() => setShareUrl(null)} className="absolute top-2 right-2 p-1 text-blue-400 hover:text-blue-600 rounded-full hover:bg-blue-100">
+                            <X size={18}/>
+                        </button>
+                        <h4 className="font-bold text-blue-900 flex items-center gap-2 mb-2">
+                            <CheckCircle size={18}/> Share Link Ready
+                        </h4>
+                        <div className="flex gap-2">
+                            <input 
+                                readOnly 
+                                value={shareUrl} 
+                                className="flex-1 text-sm p-2 rounded-md border border-blue-200 bg-white text-blue-800 font-mono" 
+                                onClick={(e) => (e.target as HTMLInputElement).select()}
+                            />
+                            <button 
+                                onClick={handleCopy} 
+                                className={`px-4 w-24 shrink-0 text-center text-white rounded-md text-sm font-medium transition-all duration-200 ${copied ? 'bg-green-500 hover:bg-green-600' : 'bg-blue-600 hover:bg-blue-700'}`}
+                            >
+                                {copied ? 'Copied!' : 'Copy'}
+                            </button>
                         </div>
                     </div>
                 )}
@@ -321,21 +439,24 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                       <div className="space-y-4">
                           <div>
                               <label className="block text-sm text-gray-700 mb-1">Est. Benefit ($)</label>
-                              <input 
-                                  type="number" 
-                                  value={plan.estimatedInsurance || 0}
-                                  readOnly={plan.insuranceMode === 'advanced'}
-                                  onChange={e => {
-                                      if (plan.insuranceMode === 'advanced') return;
-                                      const newInsurance = parseFloat(e.target.value) || 0;
-                                      setPlan({
-                                        ...plan,
-                                        estimatedInsurance: newInsurance,
-                                      });
-                                  }}
-                                  onBlur={handleDetailsSave}
-                                  className={`w-full p-2 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-colors ${plan.insuranceMode === 'advanced' ? 'bg-gray-100 cursor-not-allowed focus:ring-0' : ''}`} 
-                              />
+                               <div className="flex items-center gap-1.5">
+                                <div className="relative grow">
+                                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">$</span>
+                                    <input 
+                                        type="number" 
+                                        name="estimatedInsurance"
+                                        onChange={handleSidebarInputChange}
+                                        onBlur={handleSidebarInputBlur}
+                                        value={plan.estimatedInsurance ?? ''}
+                                        disabled={plan.insuranceMode === 'advanced'}
+                                        className={`w-full p-2 pl-5 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-colors ${plan.insuranceMode === 'advanced' ? 'bg-gray-100 cursor-not-allowed focus:ring-0' : ''}`} 
+                                    />
+                                </div>
+                                <NumpadButton 
+                                    disabled={plan.insuranceMode === 'advanced'}
+                                    onClick={() => setModalConfig({ isOpen: true, field: 'estBenefit', title: 'Estimated Benefit ($)' })}
+                                />
+                               </div>
                               {plan.insuranceMode === 'advanced' && (
                                 <p className="text-xs text-gray-500 mt-1.5">
                                     Total is calculated from the itemized list in the Financials tab.
@@ -344,19 +465,23 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                           </div>
                           <div>
                               <label className="block text-sm text-gray-700 mb-1">Clinic Discount ($)</label>
-                              <input 
-                                  type="number" 
-                                  value={plan.clinicDiscount || 0}
-                                  onChange={e => {
-                                      const newDiscount = parseFloat(e.target.value) || 0;
-                                      setPlan({
-                                        ...plan,
-                                        clinicDiscount: newDiscount,
-                                      });
-                                  }}
-                                  onBlur={handleDetailsSave}
-                                  className="w-full p-2 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
-                              />
+                                <div className="flex items-center gap-1.5">
+                                    <div className="relative grow">
+                                       <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">$</span>
+                                        <input 
+                                            type="number" 
+                                            name="clinicDiscount"
+                                            onChange={handleSidebarInputChange}
+                                            onBlur={handleSidebarInputBlur}
+                                            value={plan.clinicDiscount ?? ''}
+                                            className="w-full p-2 pl-5 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                                        />
+                                    </div>
+                                    <NumpadButton 
+                                        onClick={() => setModalConfig({ isOpen: true, field: 'clinicDiscount', title: 'Clinic Discount ($)' })}
+                                    />
+                                </div>
+
                                <p className="text-xs text-gray-500 mt-1.5">
                                   Reduces patient’s portion only.
                                </p>
@@ -373,10 +498,10 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                 <div className="bg-white rounded-lg pt-2 md:pt-0">
                     <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">Change Status</h3>
                     <div className="grid grid-cols-2 gap-2">
-                         <button onClick={() => handleStatusChange('PRESENTED')} className="flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded shadow-sm hover:bg-blue-50 hover:text-blue-600 transition-colors"><Clock size={14}/> Presented</button>
-                         <button onClick={() => handleStatusChange('ACCEPTED')} className="flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded shadow-sm hover:bg-green-50 hover:text-green-600 transition-colors"><CheckCircle size={14}/> Accepted</button>
-                         <button onClick={() => handleStatusChange('DECLINED')} className="flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded shadow-sm hover:bg-red-50 hover:text-red-600 transition-colors"><XCircle size={14}/> Declined</button>
-                         <button onClick={() => handleStatusChange('ON_HOLD')} className="flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded shadow-sm hover:bg-yellow-50 hover:text-yellow-600 transition-colors"><AlertCircle size={14}/> On Hold</button>
+                         <button onClick={() => handleStatusChange('PRESENTED')} className={getStatusButtonClass('PRESENTED')}><Clock size={14}/> Presented</button>
+                         <button onClick={() => handleStatusChange('ACCEPTED')} className={getStatusButtonClass('ACCEPTED')}><CheckCircle size={14}/> Accepted</button>
+                         <button onClick={() => handleStatusChange('DECLINED')} className={getStatusButtonClass('DECLINED')}><XCircle size={14}/> Declined</button>
+                         <button onClick={() => handleStatusChange('ON_HOLD')} className={getStatusButtonClass('ON_HOLD')}><AlertCircle size={14}/> On Hold</button>
                     </div>
                 </div>
 
@@ -419,6 +544,15 @@ export const TreatmentPlanDetailPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        <NumberPadModal
+            isOpen={modalConfig.isOpen}
+            onClose={() => setModalConfig({ isOpen: false, field: null, title: '' })}
+            onDone={handleModalDone}
+            initialValue={getModalInitialValue()}
+            title={modalConfig.title || ''}
+            isPercentage={false}
+        />
     </div>
   );
 };

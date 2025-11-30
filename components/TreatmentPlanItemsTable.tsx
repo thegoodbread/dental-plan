@@ -1,13 +1,21 @@
-
-
-
-
 import React, { useState } from 'react';
 import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, UrgencyLevel } from '../types';
 import { TreatmentPlanItemRow } from './TreatmentPlanItemRow';
 import { ProcedurePickerModal } from './procedures/ProcedurePickerModal';
-import { Plus, Search, Edit2, Trash2, Smile, Clock, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Smile, Clock, AlertTriangle, Calculator, Check, X } from 'lucide-react';
 import { ToothSelectorModal } from './ToothSelectorModal';
+import { NumberPadModal } from './NumberPadModal';
+
+const NumpadButton = ({ onClick }: { onClick: () => void }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="p-2.5 text-gray-500 hover:text-blue-600 bg-gray-100 hover:bg-blue-50 rounded-lg border border-gray-300"
+    aria-label="Open number pad"
+  >
+    <Calculator size={18} />
+  </button>
+);
 
 interface TreatmentPlanItemsTableProps {
   plan: TreatmentPlan;
@@ -22,6 +30,9 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
 }) => {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const discount = plan.clinicDiscount || 0;
+  const insurance = plan.estimatedInsurance || 0;
+  const isMembership = plan.feeScheduleType === 'membership';
+  const standardTotal = plan.totalFee + (plan.membershipSavings || 0);
 
   return (
     <div className="bg-white md:rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full relative rounded-lg">
@@ -33,7 +44,7 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
             <tr className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
               <th className="px-4 py-3 w-64 bg-gray-50">Procedure</th>
               <th className="px-4 py-3 w-48 bg-gray-50">Tooth / Area</th>
-              <th className="px-4 py-3 text-right w-24 bg-gray-50">Cost</th>
+              <th className="px-4 py-3 text-right w-40 bg-gray-50">Cost</th>
               <th className="px-4 py-3 text-center w-16 bg-gray-50">Qty</th>
               <th className="px-4 py-3 text-right w-24 bg-gray-50">Net Fee</th>
               <th className="px-4 py-3 w-20 bg-gray-50"></th>
@@ -102,24 +113,46 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
       <div className="border-t border-gray-200 p-4 bg-gray-50 flex flex-col md:flex-row justify-between items-center gap-4 sticky bottom-0 z-20 md:relative">
         <button 
           onClick={() => setIsPickerOpen(true)}
-          className="w-full md:w-auto flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm px-4 py-2.5 rounded-lg shadow-sm shadow-blue-200 transition-all hover:scale-[1.02]"
+          className="w-full md:w-auto md:shrink-0 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm px-4 py-2.5 rounded-lg shadow-sm shadow-blue-200 transition-all hover:scale-[1.02]"
         >
           <Plus size={18} />
           Add Procedure
         </button>
 
-        <div className="flex justify-between md:justify-end w-full md:w-auto md:gap-4 items-center">
+        <div className="flex flex-1 flex-wrap justify-between md:justify-end w-full md:gap-3 lg:gap-4 items-center">
+          {isMembership && (
+            <>
+              <div className="flex flex-col items-start md:items-end">
+                <span className="text-xs text-gray-500 uppercase font-semibold">Standard</span>
+                <span className="text-base md:text-lg lg:text-xl font-bold text-gray-500 line-through">
+                  ${standardTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="h-8 w-px bg-gray-300 hidden md:block"></div>
+            </>
+          )}
+          
           <div className="flex flex-col items-start md:items-end">
-            <span className="text-xs text-gray-500 uppercase font-semibold">Total</span>
-            <span className="text-lg md:text-xl font-bold text-gray-900">${plan.totalFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+            <span className="text-xs text-gray-500 uppercase font-semibold">{isMembership ? 'Member Total' : 'Total'}</span>
+            <span className="text-base md:text-lg lg:text-xl font-bold text-gray-900">${plan.totalFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
           </div>
+
+          {insurance > 0.005 && (
+            <>
+              <div className="h-8 w-px bg-gray-300 hidden md:block"></div>
+              <div className="flex flex-col items-center md:items-end">
+                <span className="text-xs text-gray-500 uppercase font-semibold">Est. Insurance</span>
+                <span className="text-base md:text-lg lg:text-xl font-bold text-green-600">-${insurance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+              </div>
+            </>
+          )}
 
           {discount > 0.005 && (
             <>
               <div className="h-8 w-px bg-gray-300 hidden md:block"></div>
               <div className="flex flex-col items-center md:items-end">
                 <span className="text-xs text-gray-500 uppercase font-semibold">Discount</span>
-                <span className="text-lg md:text-xl font-bold text-green-600">-${discount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                <span className="text-base md:text-lg lg:text-xl font-bold text-green-600">-${discount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
               </div>
             </>
           )}
@@ -128,7 +161,7 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
           
           <div className="flex flex-col items-end">
              <span className="text-xs text-gray-500 uppercase font-semibold">Pt Portion</span>
-             <span className="text-lg md:text-xl font-bold text-blue-600">${plan.patientPortion.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+             <span className="text-base md:text-lg lg:text-xl font-bold text-blue-600">${plan.patientPortion.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
           </div>
         </div>
       </div>
@@ -150,9 +183,11 @@ const MobileItemCard: React.FC<{
   onDelete: (id: string) => void;
 }> = ({ item, onUpdate, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [baseFee, setBaseFee] = useState(item.baseFee);
   const [urgency, setUrgency] = useState<UrgencyLevel>(item.urgency || 'ELECTIVE');
   const [isToothSelectorOpen, setIsToothSelectorOpen] = useState(false);
+  const [isNumpadOpen, setIsNumpadOpen] = useState(false);
 
   const getLocation = () => {
     if (item.selectedTeeth?.length) return `Tooth: ${item.selectedTeeth.join(', ')}`;
@@ -170,6 +205,7 @@ const MobileItemCard: React.FC<{
     setBaseFee(item.baseFee);
     setUrgency(item.urgency || 'ELECTIVE');
     setIsEditing(false);
+    setIsConfirmingDelete(false);
   };
 
   const toggleQuadrant = (q: 'UR'|'UL'|'LL'|'LR') => {
@@ -242,12 +278,18 @@ const MobileItemCard: React.FC<{
             {/* Fee Editor */}
             <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-gray-700">Cost per unit</label>
-                <input 
-                    type="number" 
-                    className="w-24 p-1.5 border rounded text-right text-sm text-gray-900 bg-white"
-                    value={baseFee}
-                    onChange={e => setBaseFee(Number(e.target.value))}
-                />
+                <div className="flex items-center gap-1.5 w-48">
+                    <div className="relative grow">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">$</span>
+                        <input 
+                            type="number" 
+                            className="w-full p-1.5 border rounded text-right pl-5 text-sm text-gray-900 bg-white"
+                            value={baseFee}
+                            onChange={e => setBaseFee(parseFloat(e.target.value) || 0)}
+                        />
+                    </div>
+                    <NumpadButton onClick={() => setIsNumpadOpen(true)} />
+                </div>
             </div>
 
             {/* Area Editor */}
@@ -320,14 +362,22 @@ const MobileItemCard: React.FC<{
               <UrgencyBadge u={item.urgency || 'ELECTIVE'} />
               <div className="font-medium">{getLocation()}</div>
             </div>
-            <div className="flex gap-3">
-              <button onClick={() => { setIsEditing(true); setBaseFee(item.baseFee); setUrgency(item.urgency || 'ELECTIVE'); }} className="text-blue-600 text-xs font-bold uppercase flex items-center gap-1">
-                <Edit2 size={12} /> Edit
-              </button>
-              <button onClick={() => onDelete(item.id)} className="text-red-500 text-xs font-bold uppercase flex items-center gap-1">
-                <Trash2 size={12} />
-              </button>
-            </div>
+            {isConfirmingDelete ? (
+              <div className="flex items-center gap-2 animate-in fade-in">
+                <span className="text-xs text-red-700 font-medium">Sure?</span>
+                <button onClick={() => onDelete(item.id)} className="px-2 py-1 text-xs font-bold text-white bg-red-600 rounded-md">Confirm</button>
+                <button onClick={() => setIsConfirmingDelete(false)} className="p-1.5 text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-md"><X size={12}/></button>
+              </div>
+            ) : (
+              <div className="flex gap-3">
+                <button onClick={() => { setIsEditing(true); setBaseFee(item.baseFee); setUrgency(item.urgency || 'ELECTIVE'); }} className="text-blue-600 text-xs font-bold uppercase flex items-center gap-1">
+                  <Edit2 size={12} /> Edit
+                </button>
+                <button onClick={() => setIsConfirmingDelete(true)} className="text-red-500 text-xs font-bold uppercase flex items-center gap-1">
+                  <Trash2 size={12} /> Delete
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -340,6 +390,17 @@ const MobileItemCard: React.FC<{
             onChange={(teeth) => onUpdate(item.id, { selectedTeeth: teeth })}
         />
       )}
+      
+      <NumberPadModal
+        isOpen={isNumpadOpen}
+        onClose={() => setIsNumpadOpen(false)}
+        onDone={(newValue) => {
+            setBaseFee(parseFloat(newValue) || 0);
+            setIsNumpadOpen(false);
+        }}
+        initialValue={String(baseFee)}
+        title="Base Fee ($)"
+      />
     </>
   );
 };

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { TreatmentPlan, TreatmentPlanItem, InsuranceMode } from '../types';
 import { FinancialsItemRow } from './FinancialsItemRow';
@@ -17,6 +16,10 @@ export const FinancialsTable: React.FC<FinancialsTableProps> = ({
   plan, items, onUpdateItem, saveStatus, insuranceMode
 }) => {
   const isAdvancedMode = insuranceMode === 'advanced';
+  const isMembership = plan.feeScheduleType === 'membership';
+  const standardTotal = plan.totalFee + (plan.membershipSavings || 0);
+  const insurance = plan.estimatedInsurance || 0;
+  const discount = plan.clinicDiscount || 0;
   
   const emptyState = (
     <div className="flex-1 flex items-center justify-center h-full">
@@ -89,31 +92,56 @@ export const FinancialsTable: React.FC<FinancialsTableProps> = ({
 
       {/* Footer */}
       <div className="border-t border-gray-200 p-4 bg-gray-50 flex flex-col md:flex-row justify-between items-center gap-4 sticky bottom-0 z-20 md:relative">
-        <div className="h-6">
+        <div className="h-6 w-full md:w-auto md:shrink-0">
           {saveStatus === 'SAVED' && (
             <div className="text-green-600 text-xs font-medium flex items-center gap-1 animate-in fade-in duration-300">
               <CheckCircle size={14} /> All changes saved.
             </div>
           )}
         </div>
-        <div className="flex justify-between md:justify-end w-full md:w-auto md:gap-4 items-center">
+        <div className="flex flex-1 flex-wrap justify-between md:justify-end w-full md:gap-3 lg:gap-4 items-center">
+          {isMembership && (
+            <>
+              <div className="flex flex-col items-start md:items-end">
+                <span className="text-xs text-gray-500 uppercase font-semibold">Standard</span>
+                <span className="text-base md:text-lg lg:text-xl font-bold text-gray-500 line-through">
+                  ${standardTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="h-8 w-px bg-gray-300 hidden md:block"></div>
+            </>
+          )}
+
           <div className="flex flex-col items-start md:items-end">
-            <span className="text-xs text-gray-500 uppercase font-semibold">Total Fee</span>
-            <span className="text-lg md:text-xl font-bold text-gray-900">${plan.totalFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+            <span className="text-xs text-gray-500 uppercase font-semibold">{isMembership ? 'Member Fee' : 'Total Fee'}</span>
+            <span className="text-base md:text-lg lg:text-xl font-bold text-gray-900">${plan.totalFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
           </div>
 
-          <div className="h-8 w-px bg-gray-300 hidden md:block"></div>
+          {insurance > 0.005 && (
+            <>
+              <div className="h-8 w-px bg-gray-300 hidden md:block"></div>
+              <div className="flex flex-col items-center md:items-end">
+                <span className="text-xs text-gray-500 uppercase font-semibold">Est. Insurance</span>
+                <span className="text-base md:text-lg lg:text-xl font-bold text-green-600">-${insurance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+              </div>
+            </>
+          )}
+
+          {discount > 0.005 && (
+            <>
+              <div className="h-8 w-px bg-gray-300 hidden md:block"></div>
+              <div className="flex flex-col items-center md:items-end">
+                <span className="text-xs text-gray-500 uppercase font-semibold">Discount</span>
+                <span className="text-base md:text-lg lg:text-xl font-bold text-green-600">-${discount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+              </div>
+            </>
+          )}
           
-          <div className="flex flex-col items-center md:items-end">
-            <span className="text-xs text-gray-500 uppercase font-semibold">Est. Insurance</span>
-            <span className="text-lg md:text-xl font-bold text-green-600">${(plan.estimatedInsurance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-          </div>
-
           <div className="h-8 w-px bg-gray-300 hidden md:block"></div>
           
           <div className="flex flex-col items-end">
              <span className="text-xs text-gray-500 uppercase font-semibold">Pt Portion</span>
-             <span className="text-lg md:text-xl font-bold text-blue-600">${plan.patientPortion.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+             <span className="text-base md:text-lg lg:text-xl font-bold text-blue-600">${plan.patientPortion.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
           </div>
         </div>
       </div>

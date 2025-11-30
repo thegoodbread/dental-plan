@@ -1,7 +1,19 @@
 import React, { useState } from 'react';
 import { TreatmentPlanItem, UrgencyLevel } from '../types';
-import { Trash2, Edit2, Check, X, AlertTriangle, Clock, Smile } from 'lucide-react';
+import { Trash2, Edit2, Check, X, AlertTriangle, Clock, Smile, Calculator } from 'lucide-react';
 import { ToothSelectorModal } from './ToothSelectorModal';
+import { NumberPadModal } from './NumberPadModal';
+
+const NumpadButton = ({ onClick }: { onClick: () => void }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="p-1.5 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-md border border-gray-200 shrink-0"
+    aria-label="Open number pad"
+  >
+    <Calculator size={16} />
+  </button>
+);
 
 interface TreatmentPlanItemRowProps {
   item: TreatmentPlanItem;
@@ -11,7 +23,9 @@ interface TreatmentPlanItemRowProps {
 
 export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item, onUpdate, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isToothSelectorOpen, setIsToothSelectorOpen] = useState(false);
+  const [isNumpadOpen, setIsNumpadOpen] = useState(false);
   
   // Local state for edit mode
   const [baseFee, setBaseFee] = useState(item.baseFee);
@@ -28,6 +42,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
   const handleCancel = () => {
     // Simply exit edit mode. State will be implicitly synced from props on next render.
     setIsEditing(false);
+    setIsConfirmingDelete(false);
   };
 
   const handleStartEditing = () => {
@@ -161,12 +176,18 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
         {/* Cost (Base Fee) */}
         <td className="px-4 py-3 text-right text-sm align-top pt-3">
           {isEditing ? (
-            <input 
-              type="number" 
-              className="w-20 text-right border border-gray-300 rounded px-1 py-1 text-gray-900 bg-white shadow-sm outline-none focus:ring-1 focus:ring-blue-500"
-              value={baseFee}
-              onChange={e => setBaseFee(Number(e.target.value))}
-            />
+            <div className="flex items-center justify-end gap-1.5 w-full">
+                <div className="relative grow">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">$</span>
+                    <input 
+                        type="number" 
+                        className="w-full text-right border border-gray-300 rounded px-1 py-1 pl-5 text-gray-900 bg-white shadow-sm outline-none focus:ring-1 focus:ring-blue-500"
+                        value={baseFee}
+                        onChange={e => setBaseFee(parseFloat(e.target.value) || 0)}
+                    />
+                </div>
+                <NumpadButton onClick={() => setIsNumpadOpen(true)} />
+            </div>
           ) : (
             <span className="text-gray-900">${item.baseFee.toFixed(2)}</span>
           )}
@@ -189,10 +210,16 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
               <button onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Check size={16}/></button>
               <button onClick={handleCancel} className="p-1 text-gray-400 hover:bg-gray-100 rounded"><X size={16}/></button>
             </div>
+          ) : isConfirmingDelete ? (
+            <div className="flex justify-end items-center gap-2">
+                <span className="text-xs text-red-700 font-medium animate-in fade-in">Sure?</span>
+                <button onClick={() => onDelete(item.id)} className="p-1.5 text-white bg-red-600 hover:bg-red-700 rounded-md"><Check size={14}/></button>
+                <button onClick={() => setIsConfirmingDelete(false)} className="p-1.5 text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-md"><X size={14}/></button>
+            </div>
           ) : (
             <div className="flex justify-end gap-2">
               <button onClick={handleStartEditing} className="p-1 text-blue-600 hover:bg-blue-100 rounded"><Edit2 size={16}/></button>
-              <button onClick={() => onDelete(item.id)} className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16}/></button>
+              <button onClick={() => setIsConfirmingDelete(true)} className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16}/></button>
             </div>
           )}
         </td>
@@ -206,6 +233,17 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
             onChange={(teeth) => onUpdate(item.id, { selectedTeeth: teeth })}
         />
       )}
+      
+      <NumberPadModal
+        isOpen={isNumpadOpen}
+        onClose={() => setIsNumpadOpen(false)}
+        onDone={(newValue) => {
+            setBaseFee(parseFloat(newValue) || 0);
+            setIsNumpadOpen(false);
+        }}
+        initialValue={String(baseFee)}
+        title="Base Fee ($)"
+      />
     </>
   );
 };
