@@ -243,7 +243,7 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
   };
 
   return (
-    <section className="py-6 md:py-12 px-2 md:px-6 bg-white border-b border-gray-100">
+    <section className="py-6 md:py-12 px-2 md:px-6 bg-white border-b border-gray-100 relative z-10">
       <div className="max-w-5xl mx-auto">
         <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-2 sm:p-4 md:p-10">
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 md:mb-8 gap-4 md:gap-6">

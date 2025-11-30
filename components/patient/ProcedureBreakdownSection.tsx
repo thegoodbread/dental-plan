@@ -29,13 +29,9 @@ const PhaseGroup: React.FC<{
     const [isExpanded, setIsExpanded] = useState(false);
 
     // --- Financial & Clinical Calculations for the Phase ---
-    // This component calculates phase-specific financials by proportionally splitting the
-    // total plan's insurance based on this phase's contribution to the total fee.
+    // Per best practice, insurance is only shown at the PLAN level, not distributed per-phase.
+    // This component calculates the fee subtotal for this phase only.
     const phaseSubtotal = group.items.reduce((sum, item) => sum + item.netFee, 0);
-    const planTotalFee = plan.totalFee > 0 ? plan.totalFee : 1; // Avoid division by zero
-    const phaseRatio = phaseSubtotal / planTotalFee;
-    const phaseInsurance = (plan.estimatedInsurance || 0) * phaseRatio;
-    const phasePatientPortion = phaseSubtotal - phaseInsurance;
     const phaseVisits = group.items.reduce((sum, item) => sum + estimateVisits(item), 0);
 
     const isHighlighted = (item: TreatmentPlanItem) => {
@@ -147,19 +143,9 @@ const PhaseGroup: React.FC<{
             {/* Expanded Phase Summary */}
             <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-48' : 'max-h-0'}`}>
                 <div className="mt-4 bg-slate-50/80 border border-gray-200/80 rounded-lg p-4 text-sm space-y-2 shadow-sm">
-                    <div className="flex justify-between font-medium">
+                    <div className="flex justify-between font-bold">
                         <span className="text-gray-600">Phase Subtotal</span>
                         <span className="text-gray-900">${phaseSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    {phaseInsurance > 0 && (
-                        <div className="flex justify-between">
-                            <span className="text-gray-500">Est. Insurance for this phase</span>
-                            <span className="text-gray-700">-${Math.round(phaseInsurance).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
-                        </div>
-                    )}
-                    <div className="flex justify-between font-bold pt-2 border-t border-slate-200">
-                        <span className="text-blue-700">Est. Patient Portion for this phase</span>
-                        <span className="text-blue-600">${Math.round(phasePatientPortion).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
                     </div>
                 </div>
             </div>
