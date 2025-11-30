@@ -117,9 +117,9 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
 
   const renderUrgencyBadge = (u: UrgencyLevel) => {
     switch (u) {
-      case 'URGENT': return <span className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-100 uppercase"><AlertTriangle size={10} /> Urgent</span>;
-      case 'SOON': return <span className="flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-100 uppercase"><Clock size={10} /> Soon</span>;
-      case 'ELECTIVE': return <span className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 uppercase"><Smile size={10} /> Elective</span>;
+      case 'URGENT': return <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-100 uppercase"><AlertTriangle size={10} /> Urgent</span>;
+      case 'SOON': return <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-100 uppercase"><Clock size={10} /> Soon</span>;
+      case 'ELECTIVE': return <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 uppercase"><Smile size={10} /> Elective</span>;
     }
   };
 
