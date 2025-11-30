@@ -59,18 +59,27 @@ export const PaymentEstimatorSection: React.FC<PaymentEstimatorSectionProps> = (
               {/* The blue part is implicit */}
            </div>
            
-           <div className="flex flex-col sm:flex-row justify-between text-xs font-medium mb-8 gap-2">
+           <div className="flex flex-col sm:flex-row justify-between text-xs font-medium gap-2">
               <div className="flex items-center gap-2">
                  <span className="w-3 h-3 bg-green-500 rounded-full shrink-0"></span>
                  Insurance Estimate: ${insuranceEstimate.toFixed(2)}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 text-gray-500">
                  <span className="w-3 h-3 bg-blue-500 rounded-full shrink-0"></span>
-                 Your Portion: ${patientPortion.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                 Patient Portion
               </div>
            </div>
 
-           <hr className="border-gray-200 mb-8" />
+           {/* EMPHASIZED YOUR PORTION */}
+           <div className="mt-4 bg-white border border-gray-200 rounded-2xl p-4 text-center shadow-sm">
+               <div className="text-sm font-bold text-blue-800 uppercase tracking-wider">Your Estimated Portion</div>
+               <div className="text-4xl font-extrabold text-blue-600 mt-1">
+                   ${patientPortion.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+               </div>
+               <p className="text-xs text-gray-500 mt-1">This is the amount you'll be responsible for. Payment options are below.</p>
+           </div>
+
+           <hr className="border-gray-200 my-8" />
 
            <h3 className="font-bold text-gray-900 mb-4">Choose Your Payment Plan</h3>
            
