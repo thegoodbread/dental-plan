@@ -8,7 +8,8 @@ import {
   ActivityLog, 
   ShareLink,
   TreatmentPlanStatus,
-  FeeUnitType
+  FeeUnitType,
+  InsuranceMode
 } from '../types';
 import { DEMO_PLANS, DEMO_PATIENTS, DEMO_ITEMS, DEMO_SHARES } from '../mock/seedPlans';
 
@@ -22,6 +23,21 @@ const KEY_LOGS = 'dental_logs_v7';
 
 // --- UTILS ---
 const generateId = () => Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+
+/**
+ * Checks if any item in a list has detailed, non-null financial fields.
+ * This is used for backward compatibility to determine if an old plan
+ * should be migrated to "advanced" insurance mode.
+ */
+export const hasDetailedInsurance = (items: TreatmentPlanItem[]): boolean => {
+  if (!items) return false;
+  return items.some(
+    i =>
+      i.coveragePercent != null ||
+      i.estimatedInsurance != null ||
+      i.estimatedPatientPortion != null
+  );
+};
 
 // --- FEE SEED (Full Library) ---
 export const PROCEDURE_LIBRARY: FeeScheduleEntry[] = [
@@ -197,10 +213,14 @@ export const getTreatmentPlanById = (id: string): TreatmentPlan | undefined => {
   
   // Sort items by sortOrder
   planItems.sort((a, b) => a.sortOrder - b.sortOrder);
+  
+  // Backward compatibility for insurance mode
+  if (!plan.insuranceMode) {
+      plan.insuranceMode = hasDetailedInsurance(planItems) ? 'advanced' : 'simple';
+  }
 
   return {
     ...plan,
-    // FIX: Changed p.patientId to plan.patientId to fix reference error.
     patient: patients.find(pat => pat.id === plan.patientId),
     items: planItems
   };
@@ -223,28 +243,29 @@ export function loadTreatmentPlanWithItems(
     return null;
   }
 
-  // Hydrate patient into the plan object
+  // Filter items for the plan, preserving the order from plan.itemIds
+  let itemsForPlan: TreatmentPlanItem[];
+
+  if (Array.isArray(planFromStorage.itemIds) && planFromStorage.itemIds.length > 0) {
+    const itemMap = new Map(allItems.map(i => [i.id, i]));
+    itemsForPlan = planFromStorage.itemIds
+      .map(id => itemMap.get(id))
+      .filter((i): i is TreatmentPlanItem => !!i);
+  } else {
+    itemsForPlan = allItems.filter(i => i.treatmentPlanId === planId);
+    itemsForPlan.sort((a,b) => a.sortOrder - b.sortOrder);
+  }
+
+  // Backward compatibility: Set insurance mode if it's missing on a loaded plan
+  if (!planFromStorage.insuranceMode) {
+    planFromStorage.insuranceMode = hasDetailedInsurance(itemsForPlan) ? 'advanced' : 'simple';
+  }
+
+  // Hydrate patient into the final plan object
   const plan: TreatmentPlan = {
     ...planFromStorage,
     patient: allPatients.find(p => p.id === planFromStorage.patientId)
   };
-
-  // Filter items for the plan, preserving the order from plan.itemIds
-  let itemsForPlan: TreatmentPlanItem[];
-
-  if (Array.isArray(plan.itemIds) && plan.itemIds.length > 0) {
-    // Using a Map is an efficient way to look up items by ID while preserving the order
-    // specified in the plan's itemIds array.
-    const itemMap = new Map(allItems.map(i => [i.id, i]));
-    itemsForPlan = plan.itemIds
-      .map(id => itemMap.get(id))
-      .filter((i): i is TreatmentPlanItem => !!i); // Filter out any nulls if an item was deleted but its ID remained
-  } else {
-    // Fallback for older data or cases where itemIds might be missing.
-    itemsForPlan = allItems.filter(i => i.treatmentPlanId === planId);
-    // Sort by a default order if not specified by itemIds.
-    itemsForPlan.sort((a,b) => a.sortOrder - b.sortOrder);
-  }
 
   return { plan, items: itemsForPlan };
 }
@@ -253,7 +274,6 @@ const savePlan = (plan: TreatmentPlan) => {
   const plans: TreatmentPlan[] = JSON.parse(localStorage.getItem(KEY_PLANS) || '[]');
   const idx = plans.findIndex(p => p.id === plan.id);
   
-  // Dehydrate for storage (remove joined objects)
   const { patient, items, ...storagePlan } = plan;
   
   if (idx >= 0) {
@@ -271,6 +291,7 @@ export const createTreatmentPlan = (data: { patientId: string; title: string }):
     title: data.title,
     planNumber: `TP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
     status: 'DRAFT',
+    insuranceMode: 'simple',
     totalFee: 0,
     estimatedInsurance: 0,
     patientPortion: 0,
@@ -283,37 +304,121 @@ export const createTreatmentPlan = (data: { patientId: string; title: string }):
   return newPlan;
 };
 
-export const updateTreatmentPlan = (id: string, updates: Partial<TreatmentPlan>): TreatmentPlan | undefined => {
-  const plan = getTreatmentPlanById(id);
-  if (!plan) return undefined;
+/**
+ * [REWRITTEN] This is the single source of truth for updating plan-level financials based on its items.
+ * It is called after any item is created, updated, or deleted, OR after a plan-level update.
+ * It strictly follows the plan's `insuranceMode` and does not auto-detect.
+ */
+export const recalculatePlanTotalsAndSave = (planId: string): TreatmentPlan | undefined => {
+  const result = loadTreatmentPlanWithItems(planId);
+  if (!result) {
+    console.error(`recalculatePlanTotalsAndSave: Plan with ID ${planId} not found.`);
+    return undefined;
+  }
+  let { plan, items } = result;
 
-  const updatedPlan = { ...plan, ...updates, updatedAt: new Date().toISOString() };
-  
-  // Recalculate patient portion ONLY if financials changed AND patientPortion wasn't explicitly provided in updates
-  // This allows manual overrides (e.g. for global discount logic)
-  if ((updates.estimatedInsurance !== undefined || updates.totalFee !== undefined) && updates.patientPortion === undefined) {
-     const oldDiscount = Math.max(0, plan.totalFee - (plan.estimatedInsurance || 0) - plan.patientPortion);
-     updatedPlan.patientPortion = Math.max(0, updatedPlan.totalFee - (updatedPlan.estimatedInsurance || 0) - oldDiscount);
+  const totalFee = items.reduce((sum, item) => sum + item.netFee, 0);
+  let estimatedInsurance = 0;
+
+  if (plan.insuranceMode === 'advanced') {
+    estimatedInsurance = items.reduce(
+      (sum, i) => sum + (i.estimatedInsurance ?? 0),
+      0
+    );
+  } else { // 'simple' or undefined
+    estimatedInsurance = plan.estimatedInsurance ?? 0;
   }
 
-  savePlan(updatedPlan);
-  return updatedPlan;
+  const patientPortion = totalFee - estimatedInsurance;
+
+  const updatedPlanData: TreatmentPlan = {
+    ...plan,
+    totalFee,
+    estimatedInsurance,
+    patientPortion: Math.max(0, patientPortion),
+    updatedAt: new Date().toISOString(),
+  };
+
+  savePlan(updatedPlanData);
+  
+  return getTreatmentPlanById(planId);
+};
+
+
+/**
+ * [REWRITTEN] Updates a plan with a patch, saves it, and then ALWAYS runs the authoritative
+ * recalculation logic to ensure the entire plan state is consistent.
+ */
+export const updateTreatmentPlan = (id: string, updates: Partial<TreatmentPlan>): TreatmentPlan | undefined => {
+  const allPlans: TreatmentPlan[] = JSON.parse(localStorage.getItem(KEY_PLANS) || '[]');
+  const planIndex = allPlans.findIndex(p => p.id === id);
+  if (planIndex === -1) {
+    console.error(`updateTreatmentPlan: Plan with ID ${id} not found.`);
+    return undefined;
+  }
+
+  const existingPlan = allPlans[planIndex];
+  const { patient, items, ...storageUpdates } = updates;
+
+  const mergedPlan = {
+    ...existingPlan,
+    ...storageUpdates,
+    updatedAt: new Date().toISOString(),
+  };
+
+  allPlans[planIndex] = mergedPlan;
+  localStorage.setItem(KEY_PLANS, JSON.stringify(allPlans));
+
+  const recalcedPlan = recalculatePlanTotalsAndSave(id);
+
+  return recalcedPlan;
 };
 
 // --- ITEMS CRUD & CALCULATIONS ---
 
-const recalculatePlanTotals = (planId: string) => {
-  const plan = getTreatmentPlanById(planId);
-  if (!plan || !plan.items) return;
 
-  const totalFee = plan.items.reduce((sum, item) => sum + item.netFee, 0);
+/**
+ * [REWRITTEN] Clears all insurance-related fields from all items in a given plan,
+ * saves them, and returns the newly recalculated plan state. Used when switching
+ * from 'advanced' to 'simple' insurance mode.
+ */
+export const clearAllItemInsuranceForPlan = (planId: string): { plan: TreatmentPlan; items: TreatmentPlanItem[] } | null => {
+  const allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
+  let itemsWereUpdated = false;
+
+  const updatedItems = allItems.map(item => {
+    if (item.treatmentPlanId === planId) {
+      if (
+        item.coveragePercent != null ||
+        item.estimatedInsurance != null ||
+        item.estimatedPatientPortion != null
+      ) {
+        itemsWereUpdated = true;
+        return {
+          ...item,
+          coveragePercent: null,
+          estimatedInsurance: null,
+          estimatedPatientPortion: null,
+        };
+      }
+    }
+    return item;
+  });
+
+  if (itemsWereUpdated) {
+    localStorage.setItem(KEY_ITEMS, JSON.stringify(updatedItems));
+  }
+
+  const updatedPlan = recalculatePlanTotalsAndSave(planId);
+
+  if (updatedPlan) {
+    return { plan: updatedPlan, items: updatedPlan.items || [] };
+  }
   
-  // Preserve existing discount logic when totals change
-  const currentDiscount = Math.max(0, plan.totalFee - (plan.estimatedInsurance || 0) - plan.patientPortion);
-  const patientPortion = Math.max(0, totalFee - (plan.estimatedInsurance || 0) - currentDiscount);
-
-  updateTreatmentPlan(planId, { totalFee, patientPortion });
+  console.error(`clearAllItemInsuranceForPlan: Failed to recalculate plan for ID ${planId}`);
+  return null;
 };
+
 
 export const createTreatmentPlanItem = (
   planId: string, 
@@ -344,90 +449,72 @@ export const createTreatmentPlanItem = (
 
   const computedItem = computeItemPricing(rawItem, feeEntry) as TreatmentPlanItem;
   
-  // Save Item
   const allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
   allItems.push(computedItem);
   localStorage.setItem(KEY_ITEMS, JSON.stringify(allItems));
 
-  // Update Plan
   const plan = getTreatmentPlanById(planId);
   if (plan) {
     plan.itemIds.push(computedItem.id);
     savePlan(plan);
-    recalculatePlanTotals(planId);
+    recalculatePlanTotalsAndSave(planId);
   }
 
   return computedItem;
 };
 
-export const updateTreatmentPlanItem = (id: string, updates: Partial<TreatmentPlanItem>): TreatmentPlanItem | undefined => {
+export const updateTreatmentPlanItem = (id: string, updates: Partial<TreatmentPlanItem>): { plan: TreatmentPlan, items: TreatmentPlanItem[] } | undefined => {
   const allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
   const idx = allItems.findIndex(i => i.id === id);
   if (idx === -1) return undefined;
 
   const currentItem = allItems[idx];
-  
-  // Re-run pricing logic
-  const mergedForCalc = { ...currentItem, ...updates };
-  const computed = computeItemPricing(mergedForCalc); // No need for fee entry lookup if we trust stored data
+  const mergedForPricing = { ...currentItem, ...updates };
 
-  allItems[idx] = computed as TreatmentPlanItem;
+  allItems[idx] = {
+    ...currentItem,
+    ...computeItemPricing(mergedForPricing), // Recalculate netFee etc. if units/baseFee changed
+    ...updates, // Apply financial updates last to ensure they take precedence
+  };
+
   localStorage.setItem(KEY_ITEMS, JSON.stringify(allItems));
 
-  recalculatePlanTotals(currentItem.treatmentPlanId);
+  // Recalculate and retrieve the full, updated state to prevent UI race conditions.
+  const updatedPlanWithItems = recalculatePlanTotalsAndSave(currentItem.treatmentPlanId);
   
-  return allItems[idx];
+  if (updatedPlanWithItems) {
+    return { plan: updatedPlanWithItems, items: updatedPlanWithItems.items || [] };
+  }
+  
+  return undefined;
 };
 
 export const deleteTreatmentPlanItem = (itemIdToDelete: string) => {
-  // Step 1: Read all data from localStorage. This is an atomic operation.
   let allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
-  let allPlans: TreatmentPlan[] = JSON.parse(localStorage.getItem(KEY_PLANS) || '[]');
-
-  // Step 2: Find the item and its parent plan.
   const itemToDelete = allItems.find(i => i.id === itemIdToDelete);
   if (!itemToDelete) {
     console.error(`DELETE FAILED: Item with ID "${itemIdToDelete}" not found.`);
-    return; // Exit if the item doesn't exist.
+    return;
   }
-
-  const planIndex = allPlans.findIndex(p => p.id === itemToDelete.treatmentPlanId);
   
-  // Step 3: Create the new, filtered list of items. This is an immutable operation.
+  const planId = itemToDelete.treatmentPlanId;
   const updatedItems = allItems.filter(i => i.id !== itemIdToDelete);
+  localStorage.setItem(KEY_ITEMS, JSON.stringify(updatedItems));
 
-  // Step 4: If a parent plan exists, update it immutably.
+  let allPlans: TreatmentPlan[] = JSON.parse(localStorage.getItem(KEY_PLANS) || '[]');
+  const planIndex = allPlans.findIndex(p => p.id === planId);
+  
   if (planIndex !== -1) {
     const originalPlan = allPlans[planIndex];
-    
-    // Create a new plan object with the item removed from its ID list.
-    const updatedPlan = {
+    allPlans[planIndex] = {
       ...originalPlan,
       itemIds: originalPlan.itemIds.filter(id => id !== itemIdToDelete),
       updatedAt: new Date().toISOString(),
     };
-
-    // Recalculate totals using only the items that remain FOR THIS PLAN.
-    const remainingItemsForPlan = updatedItems.filter(i => updatedPlan.itemIds.includes(i.id));
-    const newTotalFee = remainingItemsForPlan.reduce((sum, item) => sum + item.netFee, 0);
-
-    // Preserve any manually set global discount.
-    const currentGlobalDiscount = Math.max(0, originalPlan.totalFee - (originalPlan.estimatedInsurance || 0) - originalPlan.patientPortion);
-    
-    // Apply new totals to the updated plan object.
-    updatedPlan.totalFee = newTotalFee;
-    updatedPlan.patientPortion = Math.max(0, newTotalFee - (updatedPlan.estimatedInsurance || 0) - currentGlobalDiscount);
-
-    // Replace the old plan object in the array with the new one.
-    allPlans[planIndex] = updatedPlan;
-  } else {
-    // If the plan is not found, the item was an orphan. We'll still remove it from the master list.
-    console.warn(`Orphaned item removed. ID: ${itemIdToDelete}`);
+    localStorage.setItem(KEY_PLANS, JSON.stringify(allPlans));
   }
-
-  // Step 5: Write both updated data structures back to localStorage.
-  localStorage.setItem(KEY_ITEMS, JSON.stringify(updatedItems));
-  localStorage.setItem(KEY_PLANS, JSON.stringify(allPlans));
+  
+  recalculatePlanTotalsAndSave(planId);
 };
 
 
@@ -462,7 +549,6 @@ export const createShareLink = (planId: string): ShareLink => {
     message: 'Share link generated' 
   });
   
-  // Auto-update status to PRESENTED if still DRAFT
   const plan = getTreatmentPlanById(planId);
   if (plan && plan.status === 'DRAFT') {
     updateTreatmentPlan(planId, { 
@@ -480,10 +566,7 @@ export const getPlanByShareToken = (token: string): { plan: TreatmentPlan, items
   
   if (!share) return null;
   
-  const plan = getTreatmentPlanById(share.treatmentPlanId);
-  if (!plan) return null;
-  
-  return { plan, items: plan.items || [] };
+  return loadTreatmentPlanWithItems(share.treatmentPlanId);
 };
 
 // --- LOGGING ---

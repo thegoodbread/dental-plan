@@ -1,4 +1,5 @@
 
+
 // Enums
 export type UserRole = 'DOCTOR' | 'TREATMENT_COORDINATOR' | 'ADMIN';
 
@@ -31,6 +32,7 @@ export type FeeCategory =
   | 'OTHER';
 
 export type UrgencyLevel = 'URGENT' | 'SOON' | 'ELECTIVE';
+export type InsuranceMode = 'simple' | 'advanced';
 
 // Entities
 
@@ -88,6 +90,11 @@ export interface TreatmentPlanItem {
   discount: number;
   netFee: number;
 
+  // Financial Coordinator Fields (Optional)
+  coveragePercent?: number | null;
+  estimatedInsurance?: number | null;
+  estimatedPatientPortion?: number | null;
+
   notes?: string | null;
   sortOrder: number;
 }
@@ -103,6 +110,7 @@ export interface TreatmentPlan {
   totalFee: number;
   estimatedInsurance?: number | null;
   patientPortion: number;
+  insuranceMode: InsuranceMode;
   
   createdAt: string;
   updatedAt: string;

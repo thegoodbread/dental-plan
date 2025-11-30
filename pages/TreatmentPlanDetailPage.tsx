@@ -1,21 +1,25 @@
 
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Share2, Sparkles, CheckCircle, XCircle, 
-  Clock, AlertCircle, Printer, Eye, X, Menu
+  Clock, AlertCircle, Printer, Eye, X, Menu, ClipboardList, Calculator
 } from 'lucide-react';
 import { 
   loadTreatmentPlanWithItems, updateTreatmentPlan, createShareLink,
   createTreatmentPlanItem, updateTreatmentPlanItem, deleteTreatmentPlanItem,
-  getActivityForPlan
+  getActivityForPlan, clearAllItemInsuranceForPlan
 } from '../services/treatmentPlans';
 import { explainPlanForPatient } from '../services/geminiExplainPlan';
-import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, TreatmentPlanStatus } from '../types';
+import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, TreatmentPlanStatus, InsuranceMode } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
 import { TreatmentPlanItemsTable } from '../components/TreatmentPlanItemsTable';
 import { PremiumPatientLayout } from '../components/patient/PremiumPatientLayout';
+import { FinancialsTable } from '../components/FinancialsTable';
+
+type ViewMode = 'CLINICAL' | 'FINANCIAL';
+type SaveStatus = 'IDLE' | 'SAVED';
 
 export const TreatmentPlanDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -29,6 +33,8 @@ export const TreatmentPlanDetailPage: React.FC = () => {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [generatingAi, setGeneratingAi] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('CLINICAL');
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('IDLE');
 
   useEffect(() => {
     if (id) {
@@ -49,18 +55,56 @@ export const TreatmentPlanDetailPage: React.FC = () => {
     setLoading(false);
   };
   
-  // Persists the in-memory plan details to localStorage.
+  // Persists the in-memory plan details (sidebar fields) to localStorage.
   const handleDetailsSave = () => {
     if (!plan) return;
-    // We can now save the entire plan object as its structure is simple
-    // The service will handle de-hydration
-    updateTreatmentPlan(plan.id, plan);
+    const updatedPlan = updateTreatmentPlan(plan.id, plan);
+    if (updatedPlan) {
+        setPlan(updatedPlan);
+        setItems(updatedPlan.items || []);
+    }
+  };
+
+  const handleModeChange = (newMode: InsuranceMode) => {
+    if (!plan || plan.insuranceMode === newMode) return;
+
+    if (newMode === 'simple') {
+      // SIMPLE MODE:
+      // - Do NOT clear item-level insurance.
+      // - Just tell the plan to use its plan-level estimate.
+      // - Keep whatever estimatedInsurance the plan currently has 
+      //   (the recalc service already set it to the advanced sum).
+      // This makes the toggle non-destructive.
+      const updatedPlan = updateTreatmentPlan(plan.id, { 
+        insuranceMode: 'simple',
+        estimatedInsurance: plan.estimatedInsurance ?? 0,
+      });
+
+      if (updatedPlan) {
+        setPlan(updatedPlan);
+        setItems(updatedPlan.items || []);
+      }
+
+    } else {
+      // ADVANCED MODE:
+      // - Do NOT clear anything.
+      // - The plan will now use the (preserved) line-item estimatedInsurance values
+      //   as the source of truth for its totals.
+      const updatedPlan = updateTreatmentPlan(plan.id, { insuranceMode: 'advanced' });
+
+      if (updatedPlan) {
+        setPlan(updatedPlan);
+        setItems(updatedPlan.items || []);
+      }
+    }
   };
   
   const handleStatusChange = (status: TreatmentPlanStatus) => {
     if (!plan) return;
-    updateTreatmentPlan(plan.id, { status });
-    loadData(plan.id);
+    const updatedPlan = updateTreatmentPlan(plan.id, { status });
+    if (updatedPlan) {
+        setPlan(updatedPlan);
+    }
   };
 
   const handleAddItem = (fee: FeeScheduleEntry) => {
@@ -71,28 +115,27 @@ export const TreatmentPlanDetailPage: React.FC = () => {
     loadData(plan.id);
   };
 
-  const handleUpdateItem = (itemId: string, updates: any) => {
-    updateTreatmentPlanItem(itemId, updates);
-    loadData(plan.id);
+  const handleUpdateItem = (itemId: string, updates: Partial<TreatmentPlanItem>) => {
+    if (!plan) return;
+    
+    // Use the updated service that returns the new state directly.
+    // This avoids a full `loadData()` call and preserves UI state like input focus.
+    const result = updateTreatmentPlanItem(itemId, updates);
+    if (result) {
+      setPlan(result.plan);
+      setItems(result.items);
+    }
+    
+    setSaveStatus('SAVED');
+    setTimeout(() => setSaveStatus('IDLE'), 2000);
   };
 
   const handleDeleteItem = (itemId: string) => {
     if (!plan) return;
     if (confirm("Are you sure you want to remove this procedure?")) {
-      // 1. Delete the item from storage. This also recalculates plan totals.
       deleteTreatmentPlanItem(itemId);
-
-      // 2. Directly reload state from the source of truth.
-      // This is more robust than calling the shared `loadData` function,
-      // as it avoids an unnecessary `setLoading` call that can cause race conditions.
-      const result = loadTreatmentPlanWithItems(plan.id);
-      if (result) {
-        setPlan(result.plan);
-        setItems(result.items);
-      } else {
-        // If the plan is somehow deleted, navigate away.
-        navigate('/');
-      }
+      // Reload from source of truth after deletion and recalculation.
+      loadData(plan.id);
     }
   };
 
@@ -102,25 +145,21 @@ export const TreatmentPlanDetailPage: React.FC = () => {
     const baseUrl = window.location.href.split('#')[0]; 
     const url = `${baseUrl}#/p/${link.token}`;
     setShareUrl(url);
-    loadData(plan.id);
+    const updatedPlan = updateTreatmentPlan(plan.id, { status: 'PRESENTED', presentedAt: new Date().toISOString() });
+    if (updatedPlan) setPlan(updatedPlan);
   };
 
   const handleAiExplanation = async () => {
     if (!plan || !items) return;
     setGeneratingAi(true);
     const explanation = await explainPlanForPatient(plan, items);
-    updateTreatmentPlan(plan.id, { explanationForPatient: explanation });
+    const updatedPlan = updateTreatmentPlan(plan.id, { explanationForPatient: explanation });
     setGeneratingAi(false);
-    loadData(plan.id);
+    if(updatedPlan) setPlan(updatedPlan);
   };
 
   if (loading) return <div className="p-8">Loading...</div>;
   if (!plan) return <div className="p-8 text-red-600">Plan not found</div>;
-
-  // The discount is now purely a derived value for display, not for state management.
-  const getImpliedDiscount = () => {
-      return Math.max(0, plan.totalFee - (plan.estimatedInsurance || 0) - plan.patientPortion);
-  };
 
   return (
     <div className="flex flex-col flex-1 bg-gray-50 overflow-x-hidden">
@@ -198,14 +237,38 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                     )}
                 </div>
 
+                {/* VIEW MODE TOGGLE */}
+                <div className="bg-gray-100 rounded-lg p-1 flex w-full md:w-auto self-start">
+                    <button 
+                        onClick={() => setViewMode('CLINICAL')}
+                        className={`flex-1 flex items-center justify-center gap-2 text-xs md:text-sm font-bold px-3 py-1.5 rounded-md transition-colors ${viewMode === 'CLINICAL' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>
+                        <ClipboardList size={14} /> Clinical
+                    </button>
+                     <button 
+                        onClick={() => setViewMode('FINANCIAL')}
+                        className={`flex-1 flex items-center justify-center gap-2 text-xs md:text-sm font-bold px-3 py-1.5 rounded-md transition-colors ${viewMode === 'FINANCIAL' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>
+                        <Calculator size={14} /> Financials
+                    </button>
+                </div>
+
                 <div className="flex-1 min-h-[300px] md:min-h-0">
-                    <TreatmentPlanItemsTable 
-                        plan={plan} 
-                        items={items} 
-                        onAddItem={handleAddItem}
-                        onUpdateItem={handleUpdateItem}
-                        onDeleteItem={handleDeleteItem}
-                    />
+                    {viewMode === 'CLINICAL' ? (
+                      <TreatmentPlanItemsTable 
+                          plan={plan} 
+                          items={items} 
+                          onAddItem={handleAddItem}
+                          onUpdateItem={handleUpdateItem}
+                          onDeleteItem={handleDeleteItem}
+                      />
+                    ) : (
+                      <FinancialsTable
+                          plan={plan}
+                          items={items}
+                          onUpdateItem={handleUpdateItem}
+                          saveStatus={saveStatus}
+                          insuranceMode={plan.insuranceMode}
+                      />
+                    )}
                 </div>
             </div>
 
@@ -213,44 +276,46 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                 <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-200">
                     <div className="grid grid-cols-2 md:grid-cols-1 gap-4">
                       <div>
-                          <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">Insurance</h3>
+                          <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">Insurance Mode</h3>
+                          <div className="flex bg-gray-200 rounded-lg p-1">
+                            <button 
+                                onClick={() => handleModeChange('simple')}
+                                className={`flex-1 text-center text-xs font-bold py-1.5 rounded-md transition-all ${plan.insuranceMode === 'simple' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
+                                Simple
+                            </button>
+                            <button 
+                                onClick={() => handleModeChange('advanced')}
+                                className={`flex-1 text-center text-xs font-bold py-1.5 rounded-md transition-all ${plan.insuranceMode === 'advanced' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
+                                Advanced
+                            </button>
+                          </div>
+                      </div>
+                      <div>
                           <label className="block text-sm text-gray-700 mb-1">Est. Benefit ($)</label>
                           <input 
                               type="number" 
                               value={plan.estimatedInsurance || 0}
+                              readOnly={plan.insuranceMode === 'advanced'}
                               onChange={e => {
+                                  if (plan.insuranceMode === 'advanced') return;
                                   const newInsurance = parseFloat(e.target.value) || 0;
-                                  const currentDiscount = getImpliedDiscount();
+                                  // ONLY update the insurance value. Let the service handle the rest on blur.
                                   setPlan({
                                     ...plan,
                                     estimatedInsurance: newInsurance,
-                                    patientPortion: Math.max(0, plan.totalFee - newInsurance - currentDiscount)
                                   });
                               }}
                               onBlur={handleDetailsSave}
-                              className="w-full p-2 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                              className={`w-full p-2 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-colors ${plan.insuranceMode === 'advanced' ? 'bg-gray-100 cursor-not-allowed focus:ring-0' : ''}`} 
                           />
+                          {plan.insuranceMode === 'advanced' && (
+                            <p className="text-xs text-gray-500 mt-1.5">
+                                Total is calculated from the itemized list in the Financials tab.
+                            </p>
+                          )}
                       </div>
                       
-                      <div>
-                          <h3 className="text-xs font-bold text-gray-500 uppercase mb-3 md:mt-2">Plan Discount</h3>
-                          <label className="block text-sm text-gray-700 mb-1">Adjustment ($)</label>
-                          <input 
-                              type="number" 
-                              value={getImpliedDiscount()}
-                              onChange={e => {
-                                const newDiscount = parseFloat(e.target.value) || 0;
-                                setPlan({
-                                    ...plan,
-                                    patientPortion: Math.max(0, plan.totalFee - (plan.estimatedInsurance || 0) - newDiscount)
-                                });
-                              }}
-                              onBlur={handleDetailsSave}
-                              className="w-full p-2 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
-                          />
-                      </div>
-
-                      <div className="md:pt-2">
+                      <div className="md:pt-2 col-span-2 md:col-span-1">
                         <h3 className="text-xs font-bold text-gray-500 uppercase mb-3 md:mt-2">Patient Portion</h3>
                         <div className="text-2xl font-bold text-blue-600 text-right">${plan.patientPortion.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
                       </div>

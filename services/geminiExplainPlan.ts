@@ -1,16 +1,12 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { TreatmentPlan, TreatmentPlanItem } from "../types";
 
-const apiKey = process.env.API_KEY || ''; 
-
 export const explainPlanForPatient = async (plan: TreatmentPlan, items: TreatmentPlanItem[]): Promise<string> => {
-  if (!apiKey) {
-    console.warn("No Gemini API Key found.");
-    return "AI Explanation unavailable: API Key missing.";
-  }
-
   try {
-    const ai = new GoogleGenAI({ apiKey });
+    // FIX: Aligned with Gemini API guidelines by removing the API key check
+    // and initializing the client directly with the environment variable.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     const proceduresText = items.map(i => {
        const area = i.selectedTeeth?.length ? `(Teeth: ${i.selectedTeeth.join(', ')})` :

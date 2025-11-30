@@ -15,6 +15,9 @@ const ITEM_DEFAULTS = {
   discount: 0,
   sortOrder: 0,
   units: 1,
+  coveragePercent: null,
+  estimatedInsurance: null,
+  estimatedPatientPortion: null,
 };
 
 // --- PLAN A: Single-Tooth (Alex) ---
@@ -96,6 +99,8 @@ export const PLAN_A: TreatmentPlan = {
   planNumber: 'TP-DEMO-SINGLE',
   title: 'Restorative & Implant Plan',
   status: 'PRESENTED',
+  // FIX: Added missing 'insuranceMode' property.
+  insuranceMode: 'simple',
   totalFee: 4620,
   estimatedInsurance: 1500,
   patientPortion: 3120,
@@ -170,6 +175,8 @@ export const PLAN_B: TreatmentPlan = {
   planNumber: 'TP-DEMO-QUAD',
   title: 'Periodontal Therapy',
   status: 'DRAFT',
+  // FIX: Added missing 'insuranceMode' property.
+  insuranceMode: 'simple',
   totalFee: 900,
   estimatedInsurance: 450,
   patientPortion: 450,
@@ -228,6 +235,8 @@ export const PLAN_C: TreatmentPlan = {
   planNumber: 'TP-DEMO-ARCH',
   title: 'Upper Arch Restoration',
   status: 'PRESENTED',
+  // FIX: Added missing 'insuranceMode' property.
+  insuranceMode: 'simple',
   totalFee: 2200,
   estimatedInsurance: 1000,
   patientPortion: 1200,
@@ -342,6 +351,8 @@ export const PLAN_D: TreatmentPlan = {
   planNumber: 'TP-DEMO-COMPLEX',
   title: 'Comprehensive Rehab',
   status: 'PRESENTED',
+  // FIX: Added missing 'insuranceMode' property.
+  insuranceMode: 'simple',
   totalFee: 5810,
   estimatedInsurance: 2000,
   patientPortion: 3810,
