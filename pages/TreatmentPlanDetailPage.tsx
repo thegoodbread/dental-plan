@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -404,118 +405,121 @@ export const TreatmentPlanDetailPage: React.FC = () => {
             </div>
 
             <div className="w-full lg:w-80 bg-white border-t lg:border-t-0 lg:border-l border-gray-200 lg:overflow-y-auto p-4 md:p-5 lg:p-6 flex flex-col gap-6 shadow-sm order-2 shrink-0">
-                <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-200">
-                    <div className="grid grid-cols-2 md:grid-cols-1 gap-4">
-                       <div>
-                          <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">Pricing Model</h3>
-                          <div className="flex bg-gray-200 rounded-lg p-1">
-                            <button 
-                                onClick={() => handlePricingModeChange('standard')}
-                                className={`flex-1 text-center text-xs font-bold py-1.5 rounded-md transition-all ${plan.feeScheduleType === 'standard' || !plan.feeScheduleType ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
-                                Standard
-                            </button>
-                            <button 
-                                onClick={() => handlePricingModeChange('membership')}
-                                className={`flex-1 text-center text-xs font-bold py-1.5 rounded-md transition-all ${plan.feeScheduleType === 'membership' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
-                                Membership
-                            </button>
-                          </div>
-                      </div>
-                      <div>
-                          <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">Insurance Mode</h3>
-                          <div className="flex bg-gray-200 rounded-lg p-1">
-                            <button 
-                                onClick={() => handleModeChange('simple')}
-                                className={`flex-1 text-center text-xs font-bold py-1.5 rounded-md transition-all ${plan.insuranceMode === 'simple' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
-                                Simple
-                            </button>
-                            <button 
-                                onClick={() => handleModeChange('advanced')}
-                                className={`flex-1 text-center text-xs font-bold py-1.5 rounded-md transition-all ${plan.insuranceMode === 'advanced' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
-                                Advanced
-                            </button>
-                          </div>
-                      </div>
-                      <div className="space-y-4">
-                          <div>
-                              <label className="block text-sm text-gray-700 mb-1">Est. Benefit ($)</label>
-                               <div className="flex items-center gap-1.5">
-                                <div className="relative grow">
-                                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">$</span>
-                                    <input 
-                                        type="number" 
-                                        name="estimatedInsurance"
-                                        onChange={handleSidebarInputChange}
-                                        onBlur={handleSidebarInputBlur}
-                                        onFocus={(e) => e.target.select()}
-                                        value={plan.estimatedInsurance ?? ''}
-                                        disabled={plan.insuranceMode === 'advanced'}
-                                        className={`w-full p-2 pl-5 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-colors ${plan.insuranceMode === 'advanced' ? 'bg-gray-100 cursor-not-allowed focus:ring-0' : ''}`} 
-                                    />
-                                </div>
-                                <NumpadButton 
-                                    disabled={plan.insuranceMode === 'advanced'}
-                                    onClick={() => setModalConfig({ isOpen: true, field: 'estBenefit', title: 'Estimated Benefit ($)' })}
-                                />
-                               </div>
-                              {plan.insuranceMode === 'advanced' && (
-                                <p className="text-xs text-gray-500 mt-1.5">
-                                    Total is calculated from the itemized list in the Financials tab.
-                                </p>
-                              )}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-6">
+                    <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-200">
+                        <div className="grid grid-cols-2 md:grid-cols-1 gap-4">
+                           <div>
+                              <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">Pricing Model</h3>
+                              <div className="flex bg-gray-200 rounded-lg p-1">
+                                <button 
+                                    onClick={() => handlePricingModeChange('standard')}
+                                    className={`flex-1 text-center text-xs font-bold py-1.5 rounded-md transition-all ${plan.feeScheduleType === 'standard' || !plan.feeScheduleType ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
+                                    Standard
+                                </button>
+                                <button 
+                                    onClick={() => handlePricingModeChange('membership')}
+                                    className={`flex-1 text-center text-xs font-bold py-1.5 rounded-md transition-all ${plan.feeScheduleType === 'membership' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
+                                    Membership
+                                </button>
+                              </div>
                           </div>
                           <div>
-                              <label className="block text-sm text-gray-700 mb-1">Clinic Discount ($)</label>
-                                <div className="flex items-center gap-1.5">
+                              <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">Insurance Mode</h3>
+                              <div className="flex bg-gray-200 rounded-lg p-1">
+                                <button 
+                                    onClick={() => handleModeChange('simple')}
+                                    className={`flex-1 text-center text-xs font-bold py-1.5 rounded-md transition-all ${plan.insuranceMode === 'simple' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
+                                    Simple
+                                </button>
+                                <button 
+                                    onClick={() => handleModeChange('advanced')}
+                                    className={`flex-1 text-center text-xs font-bold py-1.5 rounded-md transition-all ${plan.insuranceMode === 'advanced' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
+                                    Advanced
+                                </button>
+                              </div>
+                          </div>
+                          <div className="space-y-4">
+                              <div>
+                                  <label className="block text-sm text-gray-700 mb-1">Est. Benefit ($)</label>
+                                   <div className="flex items-center gap-1.5">
                                     <div className="relative grow">
                                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">$</span>
                                         <input 
                                             type="number" 
-                                            name="clinicDiscount"
+                                            name="estimatedInsurance"
                                             onChange={handleSidebarInputChange}
                                             onBlur={handleSidebarInputBlur}
                                             onFocus={(e) => e.target.select()}
-                                            value={plan.clinicDiscount ?? ''}
-                                            className="w-full p-2 pl-5 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                                            value={plan.estimatedInsurance ?? ''}
+                                            disabled={plan.insuranceMode === 'advanced'}
+                                            className={`w-full p-2 pl-5 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-colors ${plan.insuranceMode === 'advanced' ? 'bg-gray-100 cursor-not-allowed focus:ring-0' : ''}`} 
                                         />
                                     </div>
                                     <NumpadButton 
-                                        onClick={() => setModalConfig({ isOpen: true, field: 'clinicDiscount', title: 'Clinic Discount ($)' })}
+                                        disabled={plan.insuranceMode === 'advanced'}
+                                        onClick={() => setModalConfig({ isOpen: true, field: 'estBenefit', title: 'Estimated Benefit ($)' })}
                                     />
-                                </div>
-
-                               <p className="text-xs text-gray-500 mt-1.5">
-                                  Reduces patient’s portion only.
-                               </p>
+                                   </div>
+                                  {plan.insuranceMode === 'advanced' && (
+                                    <p className="text-xs text-gray-500 mt-1.5">
+                                        Total is calculated from the itemized list in the Financials tab.
+                                    </p>
+                                  )}
+                              </div>
+                              <div>
+                                  <label className="block text-sm text-gray-700 mb-1">Clinic Discount ($)</label>
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="relative grow">
+                                           <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">$</span>
+                                            <input 
+                                                type="number" 
+                                                name="clinicDiscount"
+                                                onChange={handleSidebarInputChange}
+                                                onBlur={handleSidebarInputBlur}
+                                                onFocus={(e) => e.target.select()}
+                                                value={plan.clinicDiscount ?? ''}
+                                                className="w-full p-2 pl-5 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                                            />
+                                        </div>
+                                        <NumpadButton 
+                                            onClick={() => setModalConfig({ isOpen: true, field: 'clinicDiscount', title: 'Clinic Discount ($)' })}
+                                        />
+                                    </div>
+    
+                                   <p className="text-xs text-gray-500 mt-1.5">
+                                      Reduces patient’s portion only.
+                                   </p>
+                              </div>
                           </div>
-                      </div>
-                      
-                      <div className="md:pt-2 col-span-2 md:col-span-1">
-                        <h3 className="text-xs font-bold text-gray-500 uppercase mb-3 md:mt-2">Patient Portion</h3>
-                        <div className="text-2xl font-bold text-blue-600 text-right">${plan.patientPortion.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-                      </div>
+                          
+                          <div className="md:pt-2 col-span-2 md:col-span-1">
+                            <h3 className="text-xs font-bold text-gray-500 uppercase mb-3 md:mt-2">Patient Portion</h3>
+                            <div className="text-2xl font-bold text-blue-600 text-right">${plan.patientPortion.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                          </div>
+                        </div>
                     </div>
-                </div>
-
-                <div className="bg-white rounded-lg pt-2 md:pt-0">
-                    <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">Change Status</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                         <button onClick={() => handleStatusChange('PRESENTED')} className={getStatusButtonClass('PRESENTED')}><Clock size={14}/> Presented</button>
-                         <button onClick={() => handleStatusChange('ACCEPTED')} className={getStatusButtonClass('ACCEPTED')}><CheckCircle size={14}/> Accepted</button>
-                         <button onClick={() => handleStatusChange('DECLINED')} className={getStatusButtonClass('DECLINED')}><XCircle size={14}/> Declined</button>
-                         <button onClick={() => handleStatusChange('ON_HOLD')} className={getStatusButtonClass('ON_HOLD')}><AlertCircle size={14}/> On Hold</button>
+    
+                    <div className="flex flex-col gap-6">
+                        <div className="bg-white rounded-lg pt-2 md:pt-0">
+                            <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">Change Status</h3>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button onClick={() => handleStatusChange('PRESENTED')} className={getStatusButtonClass('PRESENTED')}><Clock size={14}/> Presented</button>
+                                <button onClick={() => handleStatusChange('ACCEPTED')} className={getStatusButtonClass('ACCEPTED')}><CheckCircle size={14}/> Accepted</button>
+                                <button onClick={() => handleStatusChange('DECLINED')} className={getStatusButtonClass('DECLINED')}><XCircle size={14}/> Declined</button>
+                                <button onClick={() => handleStatusChange('ON_HOLD')} className={getStatusButtonClass('ON_HOLD')}><AlertCircle size={14}/> On Hold</button>
+                            </div>
+                        </div>
+                        <div className="pb-8 md:pb-0">
+                            <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">Internal Notes</h3>
+                            <textarea 
+                                className="w-full h-24 md:h-32 p-2 text-sm bg-white text-gray-900 border border-gray-300 rounded resize-none focus:ring-1 focus:ring-blue-500 outline-none placeholder-gray-400"
+                                value={plan.notesInternal || ''}
+                                onChange={e => setPlan({ ...plan, notesInternal: e.target.value })}
+                                onBlur={handleDetailsSave}
+                                placeholder="Private notes for staff..."
+                            />
+                        </div>
                     </div>
-                </div>
-
-                <div className="pb-8 md:pb-0">
-                    <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">Internal Notes</h3>
-                    <textarea 
-                        className="w-full h-24 md:h-32 p-2 text-sm bg-white text-gray-900 border border-gray-300 rounded resize-none focus:ring-1 focus:ring-blue-500 outline-none placeholder-gray-400"
-                        value={plan.notesInternal || ''}
-                        onChange={e => setPlan({ ...plan, notesInternal: e.target.value })}
-                        onBlur={handleDetailsSave}
-                        placeholder="Private notes for staff..."
-                    />
                 </div>
             </div>
         </div>

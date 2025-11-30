@@ -181,18 +181,18 @@ export const TreatmentPlansPage: React.FC = () => {
       {/* Create Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="flex justify-between items-center p-4 border-b border-gray-200">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center p-5 border-b border-gray-200">
               <h3 className="font-bold text-lg text-gray-900">New Treatment Plan</h3>
-              <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100">
                 <X size={20} />
               </button>
             </div>
-            <form onSubmit={handleCreatePlan} className="p-4 space-y-4">
+            <form onSubmit={handleCreatePlan} className="p-6 space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Select Patient</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Select Patient</label>
                 <select 
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full p-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors placeholder:text-gray-500"
                   value={newPlanPatientId}
                   onChange={(e) => setNewPlanPatientId(e.target.value)}
                   required
@@ -204,27 +204,27 @@ export const TreatmentPlansPage: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Plan Title</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Plan Title</label>
                 <input 
                   type="text" 
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full p-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors placeholder:text-gray-500"
                   placeholder="e.g. Upper Anterior Crowns"
                   value={newPlanTitle}
                   onChange={(e) => setNewPlanTitle(e.target.value)}
                   required
                 />
               </div>
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-3 pt-4">
                 <button 
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="flex-1 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200"
+                  className="flex-1 py-2.5 bg-white border border-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit"
-                  className="flex-1 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700"
+                  className="flex-1 py-2.5 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   Create Plan
                 </button>
