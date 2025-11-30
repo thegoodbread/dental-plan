@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, X, Clock, Command } from 'lucide-react';
 import { FeeScheduleEntry, FeeCategory } from '../../types';
@@ -149,7 +150,7 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
   return (
     <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-end md:items-start justify-center pt-0 md:pt-[10vh] px-0 md:px-4 pb-0 md:pb-4">
       <div 
-        className="bg-white w-full md:max-w-4xl h-[90vh] md:h-auto md:max-h-[80vh] rounded-t-2xl md:rounded-2xl shadow-2xl overflow-hidden border border-gray-200 flex flex-col animate-in slide-in-from-bottom-4 md:slide-in-from-bottom-0 md:fade-in md:zoom-in-95 duration-200"
+        className="bg-white w-full md:max-w-3xl h-[90vh] md:h-auto md:max-h-[80vh] rounded-t-2xl md:rounded-2xl shadow-2xl overflow-hidden border border-gray-200 flex flex-col animate-in slide-in-from-bottom-4 md:slide-in-from-bottom-0 md:fade-in md:zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search Header */}

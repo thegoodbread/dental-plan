@@ -1,3 +1,5 @@
+
+
 import React from 'react';
 import { Clock } from 'lucide-react';
 
@@ -25,7 +27,7 @@ export const TreatmentTimelineSection: React.FC<TreatmentTimelineSectionProps> =
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Treatment Timeline</h2>
         <p className="text-gray-500 mb-10 md:mb-12">How your treatment will progress over time</p>
         
-        {/* Desktop Container */}
+        {/* Desktop & Tablet Container */}
         <div 
             className="hidden md:block relative mx-auto"
             style={{ maxWidth: `${Math.min(100, count * 25)}rem` }}

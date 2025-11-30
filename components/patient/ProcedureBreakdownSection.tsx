@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { TreatmentPlanItem } from '../../types';
 import { Calendar, AlertTriangle, Shield, Smile, CheckCircle2 } from 'lucide-react';
@@ -104,7 +105,7 @@ export const ProcedureBreakdownSection: React.FC<ProcedureBreakdownSectionProps>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">What We'll Do</h2>
         <p className="text-gray-500 mb-8 md:mb-10">Your personalized treatment plan, organized by priority.</p>
         
-        <div className="space-y-8 md:space-y-12">
+        <div className="space-y-8 xl:space-y-12">
           {displayGroups.map((group, idx) => (
              group.items.length > 0 && (
               <div key={idx} className="relative">
@@ -117,7 +118,7 @@ export const ProcedureBreakdownSection: React.FC<ProcedureBreakdownSectionProps>
                 </div>
 
                 {/* Cards */}
-                <div className="grid gap-3 md:gap-4">
+                <div className="grid gap-3 xl:gap-4">
                   {group.items.map(item => {
                     const ProcedureIcon = getProcedureIcon(item);
                     const highlighted = isHighlighted(item);

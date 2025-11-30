@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo } from 'react';
 import { TEETH_UPPER, TEETH_LOWER, DiagramData, mapPlanToDiagram, getItemsOnTooth, getToothQuadrant, getItemsOnArch, getItemsOnQuadrant } from '../../services/clinicalLogic';
 import { TreatmentPlanItem } from '../../types';
@@ -139,7 +140,7 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
     const isUpper = arch === 'UPPER';
 
     return (
-      <div className={`relative w-full md:max-w-3xl md:mx-auto ${isUpper ? 'pt-12 pb-2' : 'pt-2 pb-12'}`}>
+      <div className={`relative w-full md:max-w-3xl md:mx-auto ${isUpper ? 'pt-8 pb-1 md:pt-12 md:pb-2' : 'pt-1 pb-8 md:pt-2 md:pb-12'}`}>
          
          {/* Arch Bar - Interactive */}
          {archUrgency && (
@@ -169,7 +170,7 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
          <div className="flex gap-2 md:gap-4 justify-center w-full">
             {/* Left Quadrant Container */}
             <div 
-                className={`relative flex-1 flex gap-px md:gap-1 p-1.5 md:p-2 rounded-xl border-2 transition-all duration-200 ${getQuadrantStyle(quadLeft)}`}
+                className={`relative flex-1 flex gap-px md:gap-1 p-1 sm:p-1.5 md:p-2 rounded-xl border-2 transition-all duration-200 ${getQuadrantStyle(quadLeft)}`}
                 onMouseEnter={() => {
                    if (data.quadrantUrgency[quadLeft]) {
                        onHoverQuadrant(quadLeft);
@@ -179,7 +180,7 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
             >
                {/* Quadrant Tooltip */}
                {hoveredQuadrant === quadLeft && !hoveredTooth && (
-                 <div className="absolute left-1/2 -translate-x-1/2 z-40 pointer-events-none animate-in zoom-in-95 duration-150 -top-12 md:-top-16">
+                 <div className="absolute left-1/2 -translate-x-1/2 z-40 pointer-events-none animate-in zoom-in-95 duration-150 -top-10 sm:-top-12 md:-top-16">
                    <TooltipContent items={getItemsOnQuadrant(quadLeft, items)} title={`${quadLeft} QUADRANT`} />
                  </div>
                )}
@@ -204,7 +205,7 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
 
             {/* Right Quadrant Container */}
              <div 
-                className={`relative flex-1 flex gap-px md:gap-1 p-1.5 md:p-2 rounded-xl border-2 transition-all duration-200 ${getQuadrantStyle(quadRight)}`}
+                className={`relative flex-1 flex gap-px md:gap-1 p-1 sm:p-1.5 md:p-2 rounded-xl border-2 transition-all duration-200 ${getQuadrantStyle(quadRight)}`}
                 onMouseEnter={() => {
                    if (data.quadrantUrgency[quadRight]) {
                        onHoverQuadrant(quadRight);
@@ -214,7 +215,7 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
              >
                {/* Quadrant Tooltip */}
                {hoveredQuadrant === quadRight && !hoveredTooth && (
-                 <div className="absolute left-1/2 -translate-x-1/2 z-40 pointer-events-none animate-in zoom-in-95 duration-150 -top-12 md:-top-16">
+                 <div className="absolute left-1/2 -translate-x-1/2 z-40 pointer-events-none animate-in zoom-in-95 duration-150 -top-10 sm:-top-12 md:-top-16">
                    <TooltipContent items={getItemsOnQuadrant(quadRight, items)} title={`${quadRight} QUADRANT`} />
                  </div>
                )}
@@ -244,7 +245,7 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
   return (
     <section className="py-6 md:py-12 px-2 md:px-6 bg-white border-b border-gray-100">
       <div className="max-w-5xl mx-auto">
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-4 md:p-10">
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-2 sm:p-4 md:p-10">
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 md:mb-8 gap-4 md:gap-6">
             <div>
               <h2 className="text-xl md:text-2xl font-bold text-gray-900">Your Teeth & Treatment Areas</h2>
@@ -271,7 +272,7 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
              <div className="text-center text-[10px] md:text-xs text-gray-400 uppercase tracking-widest font-semibold">Upper Teeth</div>
              {renderRow(TEETH_UPPER, 'UPPER')}
              
-             <div className="h-px bg-gray-100 w-full max-w-2xl my-2 md:my-4 relative"></div>
+             <div className="h-px bg-gray-100 w-full max-w-2xl my-1 sm:my-2 md:my-4 relative"></div>
              
              {renderRow(TEETH_LOWER, 'LOWER')}
              <div className="text-center text-[10px] md:text-xs text-gray-400 uppercase tracking-widest font-semibold">Lower Teeth</div>
@@ -324,7 +325,7 @@ const Tooth = ({
 );
 
 const TooltipContent = ({ items, title }: { items: TreatmentPlanItem[], title?: string }) => (
-     <div className="w-64">
+     <div className="w-48 sm:w-64">
          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl p-3 relative">
              {title && <div className="font-bold text-gray-300 border-b border-gray-700 pb-1 mb-2 uppercase tracking-wider">{title}</div>}
              {items.length === 0 ? (

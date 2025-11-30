@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, MoreHorizontal, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -52,10 +53,10 @@ export const TreatmentPlansPage: React.FC = () => {
   const tabs = ['ALL', 'DRAFT', 'PRESENTED', 'ACCEPTED', 'DECLINED', 'ON_HOLD'];
 
   return (
-    <div className="p-8 max-w-7xl mx-auto w-full relative">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full relative">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Treatment Plans</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">Treatment Plans</h1>
           <p className="text-gray-500 text-sm mt-1">Create and manage patient case proposals.</p>
         </div>
         <button 
@@ -63,7 +64,7 @@ export const TreatmentPlansPage: React.FC = () => {
             setShowCreateModal(true);
             if (patients.length > 0) setNewPlanPatientId(patients[0].id);
           }}
-          className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors shadow-sm"
+          className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors shadow-sm w-full md:w-auto"
         >
           <Plus size={18} />
           New Plan
@@ -73,7 +74,7 @@ export const TreatmentPlansPage: React.FC = () => {
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
         <div className="p-4 border-b border-gray-200 flex flex-col md:flex-row gap-4 justify-between items-center">
-          <div className="relative w-full md:w-96">
+          <div className="relative w-full md:max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input
               type="text"
@@ -83,7 +84,7 @@ export const TreatmentPlansPage: React.FC = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0">
+          <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 -mb-2 md:mb-0">
             {tabs.map((tab) => (
               <button
                 key={tab}
@@ -100,8 +101,8 @@ export const TreatmentPlansPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Desktop Table */}
+        <div className="overflow-x-auto hidden md:block">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -113,14 +114,7 @@ export const TreatmentPlansPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredPlans.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
-                    No plans found matching your criteria.
-                  </td>
-                </tr>
-              ) : (
-                filteredPlans.map((plan) => (
+              {filteredPlans.length > 0 && filteredPlans.map((plan) => (
                   <tr 
                     key={plan.id} 
                     className="hover:bg-gray-50 cursor-pointer transition-colors"
@@ -145,11 +139,42 @@ export const TreatmentPlansPage: React.FC = () => {
                       {new Date(plan.updatedAt).toLocaleDateString()}
                     </td>
                   </tr>
-                ))
-              )}
+                ))}
             </tbody>
           </table>
         </div>
+        
+        {/* Mobile Card List */}
+        <div className="md:hidden p-2">
+            <div className="space-y-2">
+              {filteredPlans.length > 0 && filteredPlans.map(plan => (
+                <div 
+                  key={plan.id} 
+                  className="p-3 rounded-lg border border-gray-200 bg-white active:bg-gray-50 cursor-pointer"
+                  onClick={() => navigate(`/plan/${plan.id}`)}
+                >
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <div className="font-bold text-gray-900 text-sm">{plan.title}</div>
+                            <div className="text-xs text-gray-600 mt-1">{plan.patient?.firstName} {plan.patient?.lastName}</div>
+                        </div>
+                        <StatusBadge status={plan.status} />
+                    </div>
+                    <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-100 text-xs">
+                        <span className="font-mono text-gray-400">{plan.planNumber}</span>
+                        <span className="font-bold text-gray-800">${plan.totalFee.toLocaleString()}</span>
+                    </div>
+                </div>
+              ))}
+            </div>
+        </div>
+
+        {filteredPlans.length === 0 && (
+          <div className="px-4 py-12 text-center text-gray-500">
+             No plans found matching your criteria.
+          </div>
+        )}
+
       </div>
 
       {/* Create Modal */}

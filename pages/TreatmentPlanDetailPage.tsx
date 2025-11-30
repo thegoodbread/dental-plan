@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -5,12 +7,12 @@ import {
   Clock, AlertCircle, Printer, Eye, X, Menu
 } from 'lucide-react';
 import { 
-  getTreatmentPlanById, updateTreatmentPlan, createShareLink,
+  loadTreatmentPlanWithItems, updateTreatmentPlan, createShareLink,
   createTreatmentPlanItem, updateTreatmentPlanItem, deleteTreatmentPlanItem,
   getActivityForPlan
 } from '../services/treatmentPlans';
 import { explainPlanForPatient } from '../services/geminiExplainPlan';
-import { TreatmentPlan, FeeScheduleEntry, TreatmentPlanStatus } from '../types';
+import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, TreatmentPlanStatus } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
 import { TreatmentPlanItemsTable } from '../components/TreatmentPlanItemsTable';
 import { PremiumPatientLayout } from '../components/patient/PremiumPatientLayout';
@@ -19,57 +21,46 @@ export const TreatmentPlanDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   
-  const [plan, setPlan] = useState<TreatmentPlan | undefined>(undefined);
+  // SINGLE SOURCE OF TRUTH for plan and item data.
+  const [plan, setPlan] = useState<TreatmentPlan | null>(null);
+  const [items, setItems] = useState<TreatmentPlanItem[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [generatingAi, setGeneratingAi] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  
-  // Local Edit State
-  const [title, setTitle] = useState('');
-  const [insurance, setInsurance] = useState(0);
-  const [discount, setDiscount] = useState(0);
-  const [notes, setNotes] = useState('');
 
   useEffect(() => {
-    refreshData();
+    if (id) {
+      loadData(id);
+    }
   }, [id]);
 
-  const refreshData = () => {
-    if (!id) return;
-    const p = getTreatmentPlanById(id);
-    setPlan(p);
-    if (p) {
-        setTitle(p.title);
-        setInsurance(p.estimatedInsurance || 0);
-        // Infer discount from the stored patient portion
-        const impliedDiscount = Math.max(0, p.totalFee - (p.estimatedInsurance || 0) - p.patientPortion);
-        setDiscount(impliedDiscount);
-        setNotes(p.notesInternal || '');
+  const loadData = (planId: string) => {
+    setLoading(true);
+    const result = loadTreatmentPlanWithItems(planId);
+    if (result) {
+        setPlan(result.plan);
+        setItems(result.items);
+    } else {
+        setPlan(null);
+        setItems([]);
     }
     setLoading(false);
   };
-
-  const handleFinancialUpdate = () => {
+  
+  // Persists the in-memory plan details to localStorage.
+  const handleDetailsSave = () => {
     if (!plan) return;
-    const insuranceVal = Number(insurance) || 0;
-    const discountVal = Number(discount) || 0;
-    // Calculate new portion based on discount
-    const newPatientPortion = Math.max(0, plan.totalFee - insuranceVal - discountVal);
-    
-    updateTreatmentPlan(plan.id, { 
-        title, 
-        estimatedInsurance: insuranceVal,
-        patientPortion: newPatientPortion,
-        notesInternal: notes 
-    });
-    refreshData();
+    // We can now save the entire plan object as its structure is simple
+    // The service will handle de-hydration
+    updateTreatmentPlan(plan.id, plan);
   };
-
+  
   const handleStatusChange = (status: TreatmentPlanStatus) => {
     if (!plan) return;
     updateTreatmentPlan(plan.id, { status });
-    refreshData();
+    loadData(plan.id);
   };
 
   const handleAddItem = (fee: FeeScheduleEntry) => {
@@ -77,93 +68,102 @@ export const TreatmentPlanDetailPage: React.FC = () => {
     createTreatmentPlanItem(plan.id, { 
       feeScheduleEntryId: fee.id 
     });
-    refreshData();
+    loadData(plan.id);
   };
 
   const handleUpdateItem = (itemId: string, updates: any) => {
     updateTreatmentPlanItem(itemId, updates);
-    refreshData();
+    loadData(plan.id);
   };
 
   const handleDeleteItem = (itemId: string) => {
+    if (!plan) return;
     if (confirm("Are you sure you want to remove this procedure?")) {
-       deleteTreatmentPlanItem(itemId);
-       refreshData();
+      // 1. Delete the item from storage. This also recalculates plan totals.
+      deleteTreatmentPlanItem(itemId);
+
+      // 2. Directly reload state from the source of truth.
+      // This is more robust than calling the shared `loadData` function,
+      // as it avoids an unnecessary `setLoading` call that can cause race conditions.
+      const result = loadTreatmentPlanWithItems(plan.id);
+      if (result) {
+        setPlan(result.plan);
+        setItems(result.items);
+      } else {
+        // If the plan is somehow deleted, navigate away.
+        navigate('/');
+      }
     }
   };
 
   const handleShare = () => {
     if (!plan) return;
     const link = createShareLink(plan.id);
-    
-    // Robust URL construction for HashRouter
     const baseUrl = window.location.href.split('#')[0]; 
     const url = `${baseUrl}#/p/${link.token}`;
-    
     setShareUrl(url);
-    refreshData();
+    loadData(plan.id);
   };
 
   const handleAiExplanation = async () => {
-    if (!plan || !plan.items) return;
+    if (!plan || !items) return;
     setGeneratingAi(true);
-    const explanation = await explainPlanForPatient(plan, plan.items);
+    const explanation = await explainPlanForPatient(plan, items);
     updateTreatmentPlan(plan.id, { explanationForPatient: explanation });
     setGeneratingAi(false);
-    refreshData();
+    loadData(plan.id);
   };
 
   if (loading) return <div className="p-8">Loading...</div>;
   if (!plan) return <div className="p-8 text-red-600">Plan not found</div>;
 
+  // The discount is now purely a derived value for display, not for state management.
+  const getImpliedDiscount = () => {
+      return Math.max(0, plan.totalFee - (plan.estimatedInsurance || 0) - plan.patientPortion);
+  };
+
   return (
-    <div className="flex flex-col min-h-screen md:h-screen bg-gray-50 overflow-x-hidden relative">
-        {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-4 md:px-6 py-3 md:py-4 flex flex-col md:flex-row md:justify-between md:items-center shadow-sm z-10 gap-3 md:gap-0 shrink-0 sticky top-0 md:relative">
-            <div className="flex items-center gap-3">
-                <button onClick={() => navigate('/')} className="text-gray-500 hover:text-gray-700">
+    <div className="flex flex-col flex-1 bg-gray-50 overflow-x-hidden">
+        <div className="sticky top-0 lg:static z-30 bg-white border-b border-gray-200 px-4 lg:px-6 py-3 flex items-center justify-between shadow-sm shrink-0 gap-4">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+                <button onClick={() => navigate('/')} className="text-gray-500 hover:text-gray-700 shrink-0">
                     <ArrowLeft size={20} />
                 </button>
-                <div className="flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <input 
-                            value={title} 
-                            onChange={(e) => setTitle(e.target.value)}
-                            onBlur={handleFinancialUpdate}
-                            className="font-bold text-lg md:text-xl text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none bg-transparent max-w-[200px] md:max-w-md"
-                        />
-                        <StatusBadge status={plan.status} />
-                    </div>
-                    <div className="text-xs md:text-sm text-gray-500 mt-1">
-                        {plan.planNumber} • {plan.patient?.firstName} {plan.patient?.lastName}
+                <div className="flex-1 min-w-0">
+                    <input 
+                        value={plan.title} 
+                        onChange={(e) => setPlan({ ...plan, title: e.target.value })}
+                        onBlur={handleDetailsSave}
+                        className="font-bold text-lg md:text-xl text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none bg-transparent w-full truncate"
+                    />
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <div className="hidden md:block">
+                          <StatusBadge status={plan.status} />
+                        </div>
+                        <div className="text-xs md:text-sm text-gray-500 truncate">
+                            {plan.planNumber} • {plan.patient?.firstName} {plan.patient?.lastName}
+                        </div>
                     </div>
                 </div>
             </div>
-            <div className="flex gap-2 self-end md:self-auto">
+            <div className="flex gap-2 items-center">
+                 <div className="md:hidden">
+                    <StatusBadge status={plan.status} />
+                 </div>
                 <button 
                   onClick={() => setShowPreview(true)}
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 border border-blue-600 rounded-lg hover:bg-blue-700 shadow-sm"
+                  className="flex items-center justify-center w-10 h-10 md:w-auto md:h-auto md:gap-2 md:px-3 md:py-2 text-sm font-medium text-white bg-blue-600 border border-blue-600 rounded-lg hover:bg-blue-700 shadow-sm"
                 >
                     <Eye size={16} /> <span className="hidden md:inline">Preview</span>
                 </button>
-                <button onClick={handleShare} className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                <button onClick={handleShare} className="flex items-center justify-center w-10 h-10 md:w-auto md:h-auto md:gap-2 md:px-3 md:py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
                     <Share2 size={16} /> <span className="hidden md:inline">Share</span>
                 </button>
             </div>
         </div>
-
-        {/* 
-            Mobile Layout Strategy:
-            - flex-col (Mobile): Natural stacking. Main (table) first, Sidebar (finance) second.
-            - min-h-screen (Mobile): Allows page to grow if table is long.
-            - overflow-hidden (Desktop): Uses the app-like split pane.
-        */}
-        <div className="flex-1 flex flex-col md:flex-row md:overflow-hidden">
-            
-            {/* Main Content (Table) - Order 1 on Mobile (Top) */}
-            <div className="flex-1 p-4 md:p-6 md:overflow-y-auto flex flex-col gap-4 md:gap-6 order-1">
-                
-                {/* Share Alert */}
+        
+        <div className="flex-1 flex flex-col lg:flex-row lg:overflow-hidden">
+            <div className="flex-1 p-4 md:p-5 lg:p-6 lg:overflow-y-auto flex flex-col gap-4 md:gap-6 order-1">
                 {shareUrl && (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex flex-col relative animate-in slide-in-from-top-4">
                         <button onClick={() => setShareUrl(null)} className="absolute top-2 right-2 text-blue-400 hover:text-blue-600"><XCircle size={18}/></button>
@@ -175,7 +175,6 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                     </div>
                 )}
 
-                {/* AI Explanation Section */}
                 <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
                     <div className="flex justify-between items-center mb-3">
                         <h3 className="font-semibold text-gray-900 flex items-center gap-2">
@@ -199,11 +198,10 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                     )}
                 </div>
 
-                {/* Items Table Container */}
                 <div className="flex-1 min-h-[300px] md:min-h-0">
                     <TreatmentPlanItemsTable 
                         plan={plan} 
-                        items={plan.items || []} 
+                        items={items} 
                         onAddItem={handleAddItem}
                         onUpdateItem={handleUpdateItem}
                         onDeleteItem={handleDeleteItem}
@@ -211,10 +209,7 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Sidebar (Right) - Order 2 on Mobile (Bottom) */}
-            <div className="w-full md:w-80 bg-white border-t md:border-t-0 md:border-l border-gray-200 md:overflow-y-auto p-4 md:p-6 flex flex-col gap-6 shadow-sm order-2 shrink-0">
-                
-                {/* Financials Input */}
+            <div className="w-full lg:w-80 bg-white border-t lg:border-t-0 lg:border-l border-gray-200 lg:overflow-y-auto p-4 md:p-5 lg:p-6 flex flex-col gap-6 shadow-sm order-2 shrink-0">
                 <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-200">
                     <div className="grid grid-cols-2 md:grid-cols-1 gap-4">
                       <div>
@@ -222,22 +217,35 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                           <label className="block text-sm text-gray-700 mb-1">Est. Benefit ($)</label>
                           <input 
                               type="number" 
-                              value={insurance}
-                              onChange={e => setInsurance(parseFloat(e.target.value))}
-                              onBlur={handleFinancialUpdate}
+                              value={plan.estimatedInsurance || 0}
+                              onChange={e => {
+                                  const newInsurance = parseFloat(e.target.value) || 0;
+                                  const currentDiscount = getImpliedDiscount();
+                                  setPlan({
+                                    ...plan,
+                                    estimatedInsurance: newInsurance,
+                                    patientPortion: Math.max(0, plan.totalFee - newInsurance - currentDiscount)
+                                  });
+                              }}
+                              onBlur={handleDetailsSave}
                               className="w-full p-2 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
                           />
                       </div>
                       
-                      {/* Plan Discount Input */}
                       <div>
                           <h3 className="text-xs font-bold text-gray-500 uppercase mb-3 md:mt-2">Plan Discount</h3>
                           <label className="block text-sm text-gray-700 mb-1">Adjustment ($)</label>
                           <input 
                               type="number" 
-                              value={discount}
-                              onChange={e => setDiscount(parseFloat(e.target.value))}
-                              onBlur={handleFinancialUpdate}
+                              value={getImpliedDiscount()}
+                              onChange={e => {
+                                const newDiscount = parseFloat(e.target.value) || 0;
+                                setPlan({
+                                    ...plan,
+                                    patientPortion: Math.max(0, plan.totalFee - (plan.estimatedInsurance || 0) - newDiscount)
+                                });
+                              }}
+                              onBlur={handleDetailsSave}
                               className="w-full p-2 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
                           />
                       </div>
@@ -249,7 +257,6 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Status Actions */}
                 <div className="bg-white rounded-lg pt-2 md:pt-0">
                     <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">Change Status</h3>
                     <div className="grid grid-cols-2 gap-2">
@@ -260,21 +267,19 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Internal Notes */}
                 <div className="pb-8 md:pb-0">
                     <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">Internal Notes</h3>
                     <textarea 
                         className="w-full h-24 md:h-32 p-2 text-sm bg-white text-gray-900 border border-gray-300 rounded resize-none focus:ring-1 focus:ring-blue-500 outline-none placeholder-gray-400"
-                        value={notes}
-                        onChange={e => setNotes(e.target.value)}
-                        onBlur={handleFinancialUpdate}
+                        value={plan.notesInternal || ''}
+                        onChange={e => setPlan({ ...plan, notesInternal: e.target.value })}
+                        onBlur={handleDetailsSave}
                         placeholder="Private notes for staff..."
                     />
                 </div>
             </div>
         </div>
 
-        {/* PREVIEW MODAL */}
         {showPreview && (
           <div className="fixed inset-0 z-50 bg-gray-900 bg-opacity-75 flex items-center justify-center p-0 md:p-4 backdrop-blur-sm">
             <div className="bg-white w-full h-full md:max-w-6xl md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
@@ -296,7 +301,7 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                  </button>
               </div>
               <div className="flex-1 overflow-auto bg-gray-50">
-                 <PremiumPatientLayout plan={plan} items={plan.items || []} />
+                 <PremiumPatientLayout plan={plan} items={items} />
               </div>
             </div>
           </div>
