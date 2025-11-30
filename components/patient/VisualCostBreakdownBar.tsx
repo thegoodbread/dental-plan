@@ -24,6 +24,8 @@ export const VisualCostBreakdownBar: React.FC<VisualCostBreakdownBarProps> = ({
     return null;
   }
 
+  const isEmphasized = totalFee > 0 && (patientPortion / totalFee) < 0.75;
+
   const segments = [
     { key: 'membership', value: membershipSavings, color: 'bg-green-400', label: 'Membership Savings' },
     { key: 'clinic', value: clinicSavings, color: 'bg-emerald-500', label: 'Clinic Savings' },
@@ -36,14 +38,19 @@ export const VisualCostBreakdownBar: React.FC<VisualCostBreakdownBarProps> = ({
   return (
     <div className="my-6">
       <div className="flex w-full h-4 rounded-full bg-slate-200 overflow-hidden shadow-inner" role="progressbar" aria-label="Cost breakdown">
-        {segments.map(({ key, value, color, label }) => (
-          <div
-            key={key}
-            className={`${color} h-full transition-all duration-300 ease-in-out`}
-            style={{ flexGrow: value, flexBasis: 0 }}
-            title={`${label}: $${formatValue(value)}`}
-          />
-        ))}
+        {segments.map(({ key, value, color, label }) => {
+          const isPatientSegment = key === 'patient';
+          const animationClass = isPatientSegment && isEmphasized ? 'animated-emphasis' : '';
+          
+          return (
+            <div
+              key={key}
+              className={`${color} h-full transition-all duration-300 ease-in-out ${animationClass}`}
+              style={{ flexGrow: value, flexBasis: 0 }}
+              title={`${label}: $${formatValue(value)}`}
+            />
+          );
+        })}
       </div>
 
       <div className="mt-4 flex flex-wrap justify-center gap-x-6 gap-y-3">
