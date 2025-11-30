@@ -26,9 +26,16 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
   };
 
   const handleCancel = () => {
+    // Simply exit edit mode. State will be implicitly synced from props on next render.
+    setIsEditing(false);
+  };
+
+  const handleStartEditing = () => {
+    // When editing starts, sync the local state with the current item props.
+    // This fixes the bug where the input would show a stale fee after changing pricing models.
     setBaseFee(item.baseFee);
     setUrgency(item.urgency || 'ELECTIVE');
-    setIsEditing(false);
+    setIsEditing(true);
   };
 
   const toggleQuadrant = (q: 'UR'|'UL'|'LL'|'LR') => {
@@ -184,7 +191,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
             </div>
           ) : (
             <div className="flex justify-end gap-2">
-              <button onClick={() => setIsEditing(true)} className="p-1 text-blue-600 hover:bg-blue-100 rounded"><Edit2 size={16}/></button>
+              <button onClick={handleStartEditing} className="p-1 text-blue-600 hover:bg-blue-100 rounded"><Edit2 size={16}/></button>
               <button onClick={() => onDelete(item.id)} className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16}/></button>
             </div>
           )}

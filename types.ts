@@ -1,5 +1,10 @@
 
 
+
+
+
+
+
 // Enums
 export type UserRole = 'DOCTOR' | 'TREATMENT_COORDINATOR' | 'ADMIN';
 
@@ -33,6 +38,8 @@ export type FeeCategory =
 
 export type UrgencyLevel = 'URGENT' | 'SOON' | 'ELECTIVE';
 export type InsuranceMode = 'simple' | 'advanced';
+export type FeeScheduleType = 'standard' | 'membership';
+
 
 // Entities
 
@@ -60,6 +67,7 @@ export interface FeeScheduleEntry {
   category: FeeCategory;
   unitType: FeeUnitType;
   baseFee: number;
+  membershipFee?: number | null;
   defaultNotes?: string | null;
   isActive: boolean;
 }
@@ -109,9 +117,11 @@ export interface TreatmentPlan {
   
   totalFee: number;
   estimatedInsurance?: number | null;
-  planDiscount: number;
+  clinicDiscount: number;
+  membershipSavings?: number | null;
   patientPortion: number;
   insuranceMode: InsuranceMode;
+  feeScheduleType: FeeScheduleType;
   
   createdAt: string;
   updatedAt: string;

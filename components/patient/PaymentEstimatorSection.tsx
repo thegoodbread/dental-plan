@@ -1,21 +1,31 @@
 
+
+
+
+
+
+
+
 import React, { useState } from 'react';
-import { DollarSign } from 'lucide-react';
-import { TreatmentPlan } from '../../types';
+import { DollarSign, Star, Info } from 'lucide-react';
+import { TreatmentPlan, TreatmentPlanItem } from '../../types';
+import { getFeeSchedule } from '../../services/treatmentPlans';
 
 interface PaymentEstimatorSectionProps {
   plan: TreatmentPlan;
+  items: TreatmentPlanItem[];
 }
 
-export const PaymentEstimatorSection: React.FC<PaymentEstimatorSectionProps> = ({ plan }) => {
-  const { totalFee, estimatedInsurance, patientPortion, planDiscount } = plan;
+export const PaymentEstimatorSection: React.FC<PaymentEstimatorSectionProps> = ({ plan, items }) => {
+  const { totalFee, estimatedInsurance, patientPortion, clinicDiscount, membershipSavings } = plan;
   const insuranceEstimate = estimatedInsurance || 0;
-  const discount = planDiscount || 0;
+  const discount = clinicDiscount || 0;
+  const memberSave = membershipSavings || 0;
   
   const [term, setTerm] = useState(6); // Default 6 months
 
-  const insurancePercentage = totalFee > 0 ? (insuranceEstimate / totalFee) * 100 : 0;
-  const discountPercentage = totalFee > 0 ? (discount / totalFee) * 100 : 0;
+  const isMemberPricing = plan.feeScheduleType === 'membership';
+  const standardFee = totalFee + memberSave;
 
   return (
     <section className="py-12 md:py-16 px-4 md:px-6 bg-white border-t border-gray-100">
@@ -25,21 +35,38 @@ export const PaymentEstimatorSection: React.FC<PaymentEstimatorSectionProps> = (
             <h2 className="font-bold text-xl text-gray-900">How Much It Costs</h2>
         </div>
         <p className="text-gray-500 mb-8 md:mb-10">Transparent pricing with flexible payment options</p>
+        
+        {isMemberPricing && (
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-teal-50 text-teal-700 text-xs font-semibold border border-teal-200 mb-8">
+              <Star size={14} /> Member Pricing Applied
+          </div>
+        )}
 
         <div className="bg-gray-50 rounded-3xl border border-gray-200 p-6 md:p-8 mb-8">
            <div className="space-y-2">
               <div className="flex justify-between items-center font-medium text-gray-600">
-                <span>Total Treatment Fee</span>
-                <span className="font-bold text-gray-900">${totalFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                <span>Standard Treatment Fee</span>
+                <span className="font-bold text-gray-900">${standardFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
               </div>
-              <div className="flex justify-between items-center font-medium text-gray-600">
-                <span>Est. Insurance Coverage</span>
-                <span className="font-bold text-gray-900">-${insuranceEstimate.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-              </div>
+              
+              {memberSave > 0.005 && (
+                <div className="flex justify-between items-center font-medium text-green-600">
+                  <span>Membership Savings</span>
+                  <span className="font-bold">-${memberSave.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                </div>
+              )}
+
               {discount > 0.005 && (
                 <div className="flex justify-between items-center font-medium text-green-600">
                   <span>Clinic Savings</span>
                   <span className="font-bold">-${discount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              
+              {insuranceEstimate > 0.005 && (
+                <div className="flex justify-between items-center font-medium text-gray-600">
+                  <span>Est. Insurance Coverage</span>
+                  <span className="font-bold text-gray-900">-${insuranceEstimate.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                 </div>
               )}
            </div>

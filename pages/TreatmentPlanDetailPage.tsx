@@ -1,5 +1,9 @@
 
 
+
+
+
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -12,7 +16,7 @@ import {
   getActivityForPlan, clearAllItemInsuranceForPlan
 } from '../services/treatmentPlans';
 import { explainPlanForPatient } from '../services/geminiExplainPlan';
-import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, TreatmentPlanStatus, InsuranceMode } from '../types';
+import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, TreatmentPlanStatus, InsuranceMode, FeeScheduleType } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
 import { TreatmentPlanItemsTable } from '../components/TreatmentPlanItemsTable';
 import { PremiumPatientLayout } from '../components/patient/PremiumPatientLayout';
@@ -99,6 +103,15 @@ export const TreatmentPlanDetailPage: React.FC = () => {
     }
   };
   
+  const handlePricingModeChange = (newType: FeeScheduleType) => {
+    if (!plan || plan.feeScheduleType === newType) return;
+    const updatedPlan = updateTreatmentPlan(plan.id, { feeScheduleType: newType });
+    if (updatedPlan) {
+      setPlan(updatedPlan);
+      setItems(updatedPlan.items || []);
+    }
+  };
+
   const handleStatusChange = (status: TreatmentPlanStatus) => {
     if (!plan) return;
     const updatedPlan = updateTreatmentPlan(plan.id, { status });
@@ -275,6 +288,21 @@ export const TreatmentPlanDetailPage: React.FC = () => {
             <div className="w-full lg:w-80 bg-white border-t lg:border-t-0 lg:border-l border-gray-200 lg:overflow-y-auto p-4 md:p-5 lg:p-6 flex flex-col gap-6 shadow-sm order-2 shrink-0">
                 <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-200">
                     <div className="grid grid-cols-2 md:grid-cols-1 gap-4">
+                       <div>
+                          <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">Pricing Model</h3>
+                          <div className="flex bg-gray-200 rounded-lg p-1">
+                            <button 
+                                onClick={() => handlePricingModeChange('standard')}
+                                className={`flex-1 text-center text-xs font-bold py-1.5 rounded-md transition-all ${plan.feeScheduleType === 'standard' || !plan.feeScheduleType ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
+                                Standard
+                            </button>
+                            <button 
+                                onClick={() => handlePricingModeChange('membership')}
+                                className={`flex-1 text-center text-xs font-bold py-1.5 rounded-md transition-all ${plan.feeScheduleType === 'membership' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
+                                Membership
+                            </button>
+                          </div>
+                      </div>
                       <div>
                           <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">Insurance Mode</h3>
                           <div className="flex bg-gray-200 rounded-lg p-1">
@@ -318,12 +346,12 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                               <label className="block text-sm text-gray-700 mb-1">Clinic Discount ($)</label>
                               <input 
                                   type="number" 
-                                  value={plan.planDiscount || 0}
+                                  value={plan.clinicDiscount || 0}
                                   onChange={e => {
                                       const newDiscount = parseFloat(e.target.value) || 0;
                                       setPlan({
                                         ...plan,
-                                        planDiscount: newDiscount,
+                                        clinicDiscount: newDiscount,
                                       });
                                   }}
                                   onBlur={handleDetailsSave}

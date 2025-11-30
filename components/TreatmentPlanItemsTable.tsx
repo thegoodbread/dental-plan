@@ -1,5 +1,7 @@
 
 
+
+
 import React, { useState } from 'react';
 import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, UrgencyLevel } from '../types';
 import { TreatmentPlanItemRow } from './TreatmentPlanItemRow';
@@ -19,7 +21,7 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
   plan, items, onAddItem, onUpdateItem, onDeleteItem
 }) => {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
-  const discount = Math.max(0, plan.totalFee - (plan.estimatedInsurance || 0) - plan.patientPortion);
+  const discount = plan.clinicDiscount || 0;
 
   return (
     <div className="bg-white md:rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full relative rounded-lg">

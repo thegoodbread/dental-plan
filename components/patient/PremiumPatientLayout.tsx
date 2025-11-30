@@ -1,6 +1,8 @@
 
 
 
+
+
 import React, { useState } from 'react';
 import { TreatmentPlan, TreatmentPlanItem } from '../../types';
 import { DollarSign } from 'lucide-react';
@@ -137,6 +139,7 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
 
       <PaymentEstimatorSection 
         plan={plan}
+        items={items}
       />
 
       {/* Summary Footer */}
