@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 interface ToothSelectorProps {
@@ -26,7 +27,7 @@ export const ToothSelector: React.FC<ToothSelectorProps> = ({
   };
 
   const renderRow = (teeth: number[]) => (
-    <div className="flex flex-nowrap gap-1 justify-center">
+    <div className="flex flex-nowrap gap-px md:gap-1 justify-center">
       {teeth.map((tooth) => {
         const active = selectedTeeth.includes(tooth);
         return (
@@ -35,9 +36,9 @@ export const ToothSelector: React.FC<ToothSelectorProps> = ({
             type="button"
             disabled={disabled}
             className={`
-              w-7 h-7 rounded-full border text-xs flex items-center justify-center transition-all
+              w-6 h-6 md:w-7 md:h-7 rounded-full border text-[10px] md:text-xs flex items-center justify-center transition-all
               ${active 
-                ? 'bg-blue-600 border-blue-600 text-white font-bold shadow-sm scale-105' 
+                ? 'bg-blue-600 border-blue-600 text-white font-bold shadow-sm scale-105 md:scale-110' 
                 : 'bg-white border-gray-300 text-gray-700 hover:border-blue-400 hover:text-blue-600'
               }
               ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
@@ -55,10 +56,10 @@ export const ToothSelector: React.FC<ToothSelectorProps> = ({
   );
 
   return (
-    <div className="inline-flex flex-col gap-1.5 p-2 rounded-xl bg-gray-50 border border-gray-200 shadow-inner select-none">
-      <div className="text-[10px] uppercase text-gray-400 font-bold text-center tracking-wider">Upper</div>
+    <div className="inline-flex flex-col gap-2 md:gap-3 p-2 md:p-4 rounded-xl bg-gray-50 border border-gray-200 shadow-inner select-none">
+      <div className="text-[10px] md:text-xs uppercase text-gray-400 font-bold text-center tracking-wider">Upper</div>
       {renderRow(ALL_UPPER)}
-      <div className="text-[10px] uppercase text-gray-400 font-bold text-center tracking-wider mt-1">Lower</div>
+      <div className="text-[10px] md:text-xs uppercase text-gray-400 font-bold text-center tracking-wider mt-1">Lower</div>
       {renderRow(ALL_LOWER)}
     </div>
   );

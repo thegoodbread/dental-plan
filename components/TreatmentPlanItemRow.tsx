@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { TreatmentPlanItem, UrgencyLevel } from '../types';
 import { Trash2, Edit2, Check, X, AlertTriangle, Clock, Smile } from 'lucide-react';
-import { ToothSelector } from './ToothSelector';
+import { ToothSelectorModal } from './ToothSelectorModal';
 
 interface TreatmentPlanItemRowProps {
   item: TreatmentPlanItem;
@@ -11,16 +11,14 @@ interface TreatmentPlanItemRowProps {
 
 export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item, onUpdate, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [isToothSelectorOpen, setIsToothSelectorOpen] = useState(false);
   
   // Local state for edit mode
-  const [selectedTeeth, setSelectedTeeth] = useState<number[]>(item.selectedTeeth || []);
   const [baseFee, setBaseFee] = useState(item.baseFee);
-  // discount no longer edited per row in this view
   const [urgency, setUrgency] = useState<UrgencyLevel>(item.urgency || 'ELECTIVE');
 
   const handleSave = () => {
     onUpdate(item.id, {
-      selectedTeeth,
       baseFee: Number(baseFee),
       urgency
     });
@@ -28,7 +26,6 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
   };
 
   const handleCancel = () => {
-    setSelectedTeeth(item.selectedTeeth || []);
     setBaseFee(item.baseFee);
     setUrgency(item.urgency || 'ELECTIVE');
     setIsEditing(false);
@@ -54,12 +51,18 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
 
   const renderSelectionInput = () => {
     if (item.unitType === 'PER_TOOTH') {
+      const teethText = item.selectedTeeth?.length ? `Teeth: #${item.selectedTeeth.join(', #')}` : 'No teeth selected';
       if (isEditing) {
         return (
-          <ToothSelector 
-            selectedTeeth={selectedTeeth} 
-            onChange={setSelectedTeeth} 
-          />
+          <div className="flex flex-col items-start gap-2">
+            <span className="text-gray-600 text-sm">{teethText}</span>
+            <button
+              onClick={() => setIsToothSelectorOpen(true)}
+              className="w-full text-center py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg text-sm border border-gray-200"
+            >
+              Change Selected Teeth
+            </button>
+          </div>
         );
       }
       return (
@@ -121,70 +124,81 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
   };
 
   return (
-    <tr className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 group transition-colors ${isEditing ? 'bg-blue-50/30' : ''}`}>
-      {/* Procedure */}
-      <td className="px-4 py-3 align-top">
-        <div className="font-medium text-gray-900 text-sm">{item.procedureName}</div>
-        <div className="text-xs text-gray-500 font-mono mb-1">{item.procedureCode}</div>
-        
-        {isEditing ? (
-           <select 
-             value={urgency} 
-             onChange={e => setUrgency(e.target.value as UrgencyLevel)}
-             className="text-xs border border-gray-300 rounded p-1 mt-1 bg-white text-gray-900 shadow-sm outline-none focus:ring-1 focus:ring-blue-500 block w-full"
-           >
-             <option value="ELECTIVE">Elective</option>
-             <option value="SOON">Soon</option>
-             <option value="URGENT">Urgent</option>
-           </select>
-        ) : (
-           <div className="mt-1">{renderUrgencyBadge(item.urgency || 'ELECTIVE')}</div>
-        )}
-      </td>
+    <>
+      <tr className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 group transition-colors ${isEditing ? 'bg-blue-50/30' : ''}`}>
+        {/* Procedure */}
+        <td className="px-4 py-3 align-top">
+          <div className="font-medium text-gray-900 text-sm">{item.procedureName}</div>
+          <div className="text-xs text-gray-500 font-mono mb-1">{item.procedureCode}</div>
+          
+          {isEditing ? (
+            <select 
+              value={urgency} 
+              onChange={e => setUrgency(e.target.value as UrgencyLevel)}
+              className="text-xs border border-gray-300 rounded p-1 mt-1 bg-white text-gray-900 shadow-sm outline-none focus:ring-1 focus:ring-blue-500 block w-full"
+            >
+              <option value="ELECTIVE">Elective</option>
+              <option value="SOON">Soon</option>
+              <option value="URGENT">Urgent</option>
+            </select>
+          ) : (
+            <div className="mt-1">{renderUrgencyBadge(item.urgency || 'ELECTIVE')}</div>
+          )}
+        </td>
 
-      {/* Selection Area */}
-      <td className="px-4 py-3 text-sm align-top">
-        {renderSelectionInput()}
-      </td>
+        {/* Selection Area */}
+        <td className="px-4 py-3 text-sm align-top">
+          {renderSelectionInput()}
+        </td>
 
-      {/* Cost (Base Fee) */}
-      <td className="px-4 py-3 text-right text-sm align-top pt-3">
-        {isEditing ? (
-          <input 
-            type="number" 
-            className="w-20 text-right border border-gray-300 rounded px-1 py-1 text-gray-900 bg-white shadow-sm outline-none focus:ring-1 focus:ring-blue-500"
-            value={baseFee}
-            onChange={e => setBaseFee(Number(e.target.value))}
-          />
-        ) : (
-          <span className="text-gray-900">${item.baseFee.toFixed(2)}</span>
-        )}
-      </td>
+        {/* Cost (Base Fee) */}
+        <td className="px-4 py-3 text-right text-sm align-top pt-3">
+          {isEditing ? (
+            <input 
+              type="number" 
+              className="w-20 text-right border border-gray-300 rounded px-1 py-1 text-gray-900 bg-white shadow-sm outline-none focus:ring-1 focus:ring-blue-500"
+              value={baseFee}
+              onChange={e => setBaseFee(Number(e.target.value))}
+            />
+          ) : (
+            <span className="text-gray-900">${item.baseFee.toFixed(2)}</span>
+          )}
+        </td>
 
-      {/* Units */}
-      <td className="px-4 py-3 text-center text-sm font-medium text-gray-700 align-top pt-3">
-        {item.units}
-      </td>
+        {/* Units */}
+        <td className="px-4 py-3 text-center text-sm font-medium text-gray-700 align-top pt-3">
+          {item.units}
+        </td>
 
-      {/* Net Fee */}
-      <td className="px-4 py-3 text-right text-sm font-bold text-gray-900 bg-gray-50/50 align-top pt-3">
-        ${item.netFee.toFixed(2)}
-      </td>
+        {/* Net Fee */}
+        <td className="px-4 py-3 text-right text-sm font-bold text-gray-900 bg-gray-50/50 align-top pt-3">
+          ${item.netFee.toFixed(2)}
+        </td>
 
-      {/* Actions */}
-      <td className="px-4 py-3 text-right align-top pt-3">
-        {isEditing ? (
-          <div className="flex justify-end gap-2">
-            <button onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Check size={16}/></button>
-            <button onClick={handleCancel} className="p-1 text-gray-400 hover:bg-gray-100 rounded"><X size={16}/></button>
-          </div>
-        ) : (
-          <div className="flex justify-end gap-2">
-            <button onClick={() => setIsEditing(true)} className="p-1 text-blue-600 hover:bg-blue-100 rounded"><Edit2 size={16}/></button>
-            <button onClick={() => onDelete(item.id)} className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16}/></button>
-          </div>
-        )}
-      </td>
-    </tr>
+        {/* Actions */}
+        <td className="px-4 py-3 text-right align-top pt-3">
+          {isEditing ? (
+            <div className="flex justify-end gap-2">
+              <button onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Check size={16}/></button>
+              <button onClick={handleCancel} className="p-1 text-gray-400 hover:bg-gray-100 rounded"><X size={16}/></button>
+            </div>
+          ) : (
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setIsEditing(true)} className="p-1 text-blue-600 hover:bg-blue-100 rounded"><Edit2 size={16}/></button>
+              <button onClick={() => onDelete(item.id)} className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16}/></button>
+            </div>
+          )}
+        </td>
+      </tr>
+
+      {item.unitType === 'PER_TOOTH' && (
+        <ToothSelectorModal
+            isOpen={isToothSelectorOpen}
+            onClose={() => setIsToothSelectorOpen(false)}
+            selectedTeeth={item.selectedTeeth || []}
+            onChange={(teeth) => onUpdate(item.id, { selectedTeeth: teeth })}
+        />
+      )}
+    </>
   );
 };
