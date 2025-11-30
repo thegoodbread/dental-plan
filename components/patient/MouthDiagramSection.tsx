@@ -154,7 +154,7 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
               
               <div className={`
                  w-full rounded-full transition-all duration-200 relative
-                 ${localHoveredArch === arch ? 'h-2.5 md:h-3 opacity-100 shadow-md' : 'h-1.5 md:h-2 opacity-60'}
+                 ${localHoveredArch === arch ? 'h-2.5 md:h-3 opacity-100 shadow-md' : 'h-1.5 md:h-2 opacity-80'}
                  ${archUrgency === 'URGENT' ? 'bg-red-500' : archUrgency === 'SOON' ? 'bg-orange-400' : 'bg-blue-500'}
               `}>
                   {/* Tooltip for Arch */}
@@ -269,13 +269,13 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
           </div>
 
           <div className="flex flex-col gap-1 items-center overflow-visible">
-             <div className="text-center text-[10px] md:text-xs text-gray-400 uppercase tracking-widest font-semibold">Upper Teeth</div>
+             <div className="text-center text-[10px] md:text-xs text-gray-500 uppercase tracking-widest font-semibold">Upper Teeth</div>
              {renderRow(TEETH_UPPER, 'UPPER')}
              
              <div className="h-px bg-gray-100 w-full max-w-2xl my-1 sm:my-2 md:my-4 relative"></div>
              
              {renderRow(TEETH_LOWER, 'LOWER')}
-             <div className="text-center text-[10px] md:text-xs text-gray-400 uppercase tracking-widest font-semibold">Lower Teeth</div>
+             <div className="text-center text-[10px] md:text-xs text-gray-500 uppercase tracking-widest font-semibold">Lower Teeth</div>
           </div>
           
         </div>

@@ -120,7 +120,7 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
   }
 
   return (
-    <div className="min-h-screen bg-blue-50/30 text-gray-900 font-sans selection:bg-blue-100">
+    <div className="min-h-screen bg-blue-50/30 text-gray-900 font-sans selection:bg-blue-100 select-none">
       
       <HeaderSection 
         planNumber={plan.planNumber}
