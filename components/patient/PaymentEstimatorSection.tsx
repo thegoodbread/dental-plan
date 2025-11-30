@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { DollarSign, Star, Info } from 'lucide-react';
 import { TreatmentPlan, TreatmentPlanItem } from '../../types';
@@ -36,7 +37,7 @@ export const PaymentEstimatorSection: React.FC<PaymentEstimatorSectionProps> = (
           </div>
         )}
 
-        <div className="bg-gray-50 rounded-3xl border border-gray-200 p-6 md:p-8 mb-8">
+        <div className="bg-gray-50 rounded-2xl md:rounded-3xl border border-gray-200 p-6 md:p-8 mb-8">
            <div className="space-y-2">
               <div className="flex justify-between items-center font-medium text-gray-600">
                 <span>Standard Treatment Fee</span>

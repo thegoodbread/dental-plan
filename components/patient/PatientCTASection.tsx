@@ -3,7 +3,7 @@ import { Phone, Calendar } from 'lucide-react';
 
 export const PatientCTASection: React.FC = () => {
   return (
-    <div className="sticky bottom-0 z-50 bg-white border-t border-gray-200 px-4 py-4 md:p-4 pb-6 md:pb-6 shadow-[0_-4px_30px_rgba(0,0,0,0.08)]">
+    <div className="bg-white border-t border-gray-200 px-4 py-4 md:p-4 pb-6 md:pb-6">
       <div className="max-w-4xl mx-auto flex flex-col md:flex-row gap-4 items-center justify-between">
         <div className="hidden md:block">
            <div className="text-sm font-bold text-gray-900">Questions about your treatment plan?</div>

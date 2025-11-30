@@ -4,7 +4,8 @@
 
 
 
-import React, { useState } from 'react';
+
+import React, { useState, useRef, useEffect } from 'react';
 import { TreatmentPlan, TreatmentPlanItem } from '../../types';
 import { DollarSign } from 'lucide-react';
 import { calculateClinicalMetrics } from '../../services/clinicalLogic';
@@ -30,6 +31,31 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
   const [hoveredTooth, setHoveredTooth] = useState<number | null>(null);
   const [hoveredQuadrant, setHoveredQuadrant] = useState<string | null>(null);
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
+
+  // --- STICKY CTA LOGIC ---
+  const teethSectionRef = useRef<HTMLDivElement>(null);
+  const [isCtaSticky, setIsCtaSticky] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        // Set sticky when the bottom of the teeth section is above the top of the viewport
+        setIsCtaSticky(!entry.isIntersecting && entry.boundingClientRect.bottom < 0);
+      },
+      { threshold: 0 }
+    );
+
+    const currentRef = teethSectionRef.current;
+    if (currentRef) {
+      observer.observe(currentRef);
+    }
+
+    return () => {
+      if (currentRef) {
+        observer.unobserve(currentRef);
+      }
+    };
+  }, []);
 
   // --- HANDLERS ---
   
@@ -107,14 +133,16 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
       />
 
       {/* Diagram with Hover State */}
-      <MouthDiagramSection 
-        items={items}
-        hoveredTooth={hoveredTooth}
-        hoveredQuadrant={hoveredQuadrant}
-        hoveredItemId={hoveredItemId}
-        onHoverTooth={handleToothHover}
-        onHoverQuadrant={handleQuadrantHover}
-      />
+      <div ref={teethSectionRef}>
+        <MouthDiagramSection 
+          items={items}
+          hoveredTooth={hoveredTooth}
+          hoveredQuadrant={hoveredQuadrant}
+          hoveredItemId={hoveredItemId}
+          onHoverTooth={handleToothHover}
+          onHoverQuadrant={handleQuadrantHover}
+        />
+      </div>
 
       <TreatmentTimelineSection phases={phases} />
 
@@ -168,7 +196,9 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
          </div>
       </section>
 
-      <PatientCTASection />
+      <div className={isCtaSticky ? 'sticky bottom-0 z-50 shadow-[0_-4px_30px_rgba(0,0,0,0.08)]' : 'relative'}>
+        <PatientCTASection />
+      </div>
 
     </div>
   );
