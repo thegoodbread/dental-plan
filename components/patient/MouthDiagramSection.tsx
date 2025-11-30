@@ -74,7 +74,7 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
     const isInHoveredQuad = hoveredQuadrant === toothQuad;
     
     // 1. Determine Base Color (Urgency)
-    let baseClass = "bg-white border-gray-200 text-gray-300"; // Default / Empty
+    let baseClass = "bg-white border-gray-300 text-gray-500"; // Default / Empty - ENHANCED CONTRAST
     if (urgency === 'URGENT') baseClass = "bg-red-500 border-red-600 text-white font-bold";
     else if (urgency === 'SOON') baseClass = "bg-orange-400 border-orange-500 text-white font-bold";
     else if (urgency === 'ELECTIVE') baseClass = "bg-blue-500 border-blue-600 text-white font-bold";
