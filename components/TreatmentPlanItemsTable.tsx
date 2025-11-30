@@ -1,10 +1,10 @@
 
 
 import React, { useState } from 'react';
-import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry } from '../types';
+import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, UrgencyLevel } from '../types';
 import { TreatmentPlanItemRow } from './TreatmentPlanItemRow';
 import { ProcedurePickerModal } from './procedures/ProcedurePickerModal';
-import { Plus, Search, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Smile, Clock, AlertTriangle } from 'lucide-react';
 import { ToothSelectorModal } from './ToothSelectorModal';
 
 interface TreatmentPlanItemsTableProps {
@@ -149,6 +149,7 @@ const MobileItemCard: React.FC<{
 }> = ({ item, onUpdate, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [baseFee, setBaseFee] = useState(item.baseFee);
+  const [urgency, setUrgency] = useState<UrgencyLevel>(item.urgency || 'ELECTIVE');
   const [isToothSelectorOpen, setIsToothSelectorOpen] = useState(false);
 
   const getLocation = () => {
@@ -159,12 +160,13 @@ const MobileItemCard: React.FC<{
   };
 
   const handleSaveAndClose = () => {
-    onUpdate(item.id, { baseFee: Number(baseFee) });
+    onUpdate(item.id, { baseFee: Number(baseFee), urgency });
     setIsEditing(false);
   };
   
   const handleCancel = () => {
-    setBaseFee(item.baseFee); // Reset fee on cancel
+    setBaseFee(item.baseFee);
+    setUrgency(item.urgency || 'ELECTIVE');
     setIsEditing(false);
   };
 
@@ -182,6 +184,24 @@ const MobileItemCard: React.FC<{
       ? current.filter(x => x !== a)
       : [...current, a];
     onUpdate(item.id, { selectedArches: updated });
+  };
+
+  const UrgencyBadge = ({ u }: { u: UrgencyLevel }) => {
+    const styles: Record<UrgencyLevel, string> = {
+      URGENT: "bg-red-50 text-red-600 border-red-100",
+      SOON: "bg-orange-50 text-orange-600 border-orange-100",
+      ELECTIVE: "bg-blue-50 text-blue-600 border-blue-100"
+    };
+    const icons: Record<UrgencyLevel, React.ReactNode> = {
+      URGENT: <AlertTriangle size={10} />,
+      SOON: <Clock size={10} />,
+      ELECTIVE: <Smile size={10} />
+    };
+    return (
+      <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full border uppercase ${styles[u]}`}>
+        {icons[u]} {u}
+      </span>
+    );
   };
 
   return (
@@ -203,6 +223,20 @@ const MobileItemCard: React.FC<{
         
         {isEditing ? (
           <div className="space-y-4 pt-3 mt-3 border-t border-gray-100">
+            {/* Urgency Editor */}
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-gray-700">Urgency</label>
+              <select
+                value={urgency}
+                onChange={e => setUrgency(e.target.value as UrgencyLevel)}
+                className="w-auto p-1.5 border border-gray-300 rounded text-sm text-gray-900 bg-white shadow-sm outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="ELECTIVE">Elective</option>
+                <option value="SOON">Soon</option>
+                <option value="URGENT">Urgent</option>
+              </select>
+            </div>
+            
             {/* Fee Editor */}
             <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-gray-700">Cost per unit</label>
@@ -280,9 +314,12 @@ const MobileItemCard: React.FC<{
           </div>
         ) : (
           <div className="flex items-center justify-between text-sm text-gray-600 border-t border-gray-100 pt-3 mt-2">
-            <div className="font-medium">{getLocation()}</div>
+            <div className="flex items-center gap-2">
+              <UrgencyBadge u={item.urgency || 'ELECTIVE'} />
+              <div className="font-medium">{getLocation()}</div>
+            </div>
             <div className="flex gap-3">
-              <button onClick={() => { setIsEditing(true); setBaseFee(item.baseFee); }} className="text-blue-600 text-xs font-bold uppercase flex items-center gap-1">
+              <button onClick={() => { setIsEditing(true); setBaseFee(item.baseFee); setUrgency(item.urgency || 'ELECTIVE'); }} className="text-blue-600 text-xs font-bold uppercase flex items-center gap-1">
                 <Edit2 size={12} /> Edit
               </button>
               <button onClick={() => onDelete(item.id)} className="text-red-500 text-xs font-bold uppercase flex items-center gap-1">
