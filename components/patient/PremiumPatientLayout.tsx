@@ -1,10 +1,4 @@
 
-
-
-
-
-
-
 import React, { useState, useRef, useEffect } from 'react';
 import { TreatmentPlan, TreatmentPlanItem } from '../../types';
 import { DollarSign } from 'lucide-react';
@@ -133,7 +127,7 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
       />
 
       {/* Diagram with Hover State */}
-      <div ref={teethSectionRef}>
+      <div ref={teethSectionRef} className="mt-4 md:mt-6">
         <MouthDiagramSection 
           items={items}
           hoveredTooth={hoveredTooth}
