@@ -17,6 +17,7 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
   plan, items, onAddItem, onUpdateItem, onDeleteItem
 }) => {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const discount = Math.max(0, plan.totalFee - (plan.estimatedInsurance || 0) - plan.patientPortion);
 
   return (
     <div className="bg-white md:rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full relative rounded-lg">
@@ -103,12 +104,24 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
           Add Procedure
         </button>
 
-        <div className="flex justify-between w-full md:w-auto md:gap-8 items-center">
+        <div className="flex justify-between md:justify-end w-full md:w-auto md:gap-4 items-center">
           <div className="flex flex-col items-start md:items-end">
             <span className="text-xs text-gray-500 uppercase font-semibold">Total</span>
             <span className="text-lg md:text-xl font-bold text-gray-900">${plan.totalFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
           </div>
-          <div className="h-8 w-px bg-gray-300 mx-4 hidden md:block"></div>
+
+          {discount > 0.005 && (
+            <>
+              <div className="h-8 w-px bg-gray-300 hidden md:block"></div>
+              <div className="flex flex-col items-center md:items-end">
+                <span className="text-xs text-gray-500 uppercase font-semibold">Discount</span>
+                <span className="text-lg md:text-xl font-bold text-green-600">-${discount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+              </div>
+            </>
+          )}
+
+          <div className="h-8 w-px bg-gray-300 hidden md:block"></div>
+          
           <div className="flex flex-col items-end">
              <span className="text-xs text-gray-500 uppercase font-semibold">Pt Portion</span>
              <span className="text-lg md:text-xl font-bold text-blue-600">${plan.patientPortion.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
