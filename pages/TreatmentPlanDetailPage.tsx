@@ -290,29 +290,49 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                             </button>
                           </div>
                       </div>
-                      <div>
-                          <label className="block text-sm text-gray-700 mb-1">Est. Benefit ($)</label>
-                          <input 
-                              type="number" 
-                              value={plan.estimatedInsurance || 0}
-                              readOnly={plan.insuranceMode === 'advanced'}
-                              onChange={e => {
-                                  if (plan.insuranceMode === 'advanced') return;
-                                  const newInsurance = parseFloat(e.target.value) || 0;
-                                  // ONLY update the insurance value. Let the service handle the rest on blur.
-                                  setPlan({
-                                    ...plan,
-                                    estimatedInsurance: newInsurance,
-                                  });
-                              }}
-                              onBlur={handleDetailsSave}
-                              className={`w-full p-2 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-colors ${plan.insuranceMode === 'advanced' ? 'bg-gray-100 cursor-not-allowed focus:ring-0' : ''}`} 
-                          />
-                          {plan.insuranceMode === 'advanced' && (
-                            <p className="text-xs text-gray-500 mt-1.5">
-                                Total is calculated from the itemized list in the Financials tab.
-                            </p>
-                          )}
+                      <div className="space-y-4">
+                          <div>
+                              <label className="block text-sm text-gray-700 mb-1">Est. Benefit ($)</label>
+                              <input 
+                                  type="number" 
+                                  value={plan.estimatedInsurance || 0}
+                                  readOnly={plan.insuranceMode === 'advanced'}
+                                  onChange={e => {
+                                      if (plan.insuranceMode === 'advanced') return;
+                                      const newInsurance = parseFloat(e.target.value) || 0;
+                                      setPlan({
+                                        ...plan,
+                                        estimatedInsurance: newInsurance,
+                                      });
+                                  }}
+                                  onBlur={handleDetailsSave}
+                                  className={`w-full p-2 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-colors ${plan.insuranceMode === 'advanced' ? 'bg-gray-100 cursor-not-allowed focus:ring-0' : ''}`} 
+                              />
+                              {plan.insuranceMode === 'advanced' && (
+                                <p className="text-xs text-gray-500 mt-1.5">
+                                    Total is calculated from the itemized list in the Financials tab.
+                                </p>
+                              )}
+                          </div>
+                          <div>
+                              <label className="block text-sm text-gray-700 mb-1">Clinic Discount ($)</label>
+                              <input 
+                                  type="number" 
+                                  value={plan.planDiscount || 0}
+                                  onChange={e => {
+                                      const newDiscount = parseFloat(e.target.value) || 0;
+                                      setPlan({
+                                        ...plan,
+                                        planDiscount: newDiscount,
+                                      });
+                                  }}
+                                  onBlur={handleDetailsSave}
+                                  className="w-full p-2 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                              />
+                               <p className="text-xs text-gray-500 mt-1.5">
+                                  Reduces patient’s portion only.
+                               </p>
+                          </div>
                       </div>
                       
                       <div className="md:pt-2 col-span-2 md:col-span-1">

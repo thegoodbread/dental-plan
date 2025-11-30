@@ -109,6 +109,7 @@ export interface TreatmentPlan {
   
   totalFee: number;
   estimatedInsurance?: number | null;
+  planDiscount: number;
   patientPortion: number;
   insuranceMode: InsuranceMode;
   

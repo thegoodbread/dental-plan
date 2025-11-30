@@ -294,6 +294,7 @@ export const createTreatmentPlan = (data: { patientId: string; title: string }):
     insuranceMode: 'simple',
     totalFee: 0,
     estimatedInsurance: 0,
+    planDiscount: 0,
     patientPortion: 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -329,12 +330,14 @@ export const recalculatePlanTotalsAndSave = (planId: string): TreatmentPlan | un
     estimatedInsurance = plan.estimatedInsurance ?? 0;
   }
 
-  const patientPortion = totalFee - estimatedInsurance;
+  const planDiscount = plan.planDiscount || 0;
+  const patientPortion = totalFee - estimatedInsurance - planDiscount;
 
   const updatedPlanData: TreatmentPlan = {
     ...plan,
     totalFee,
     estimatedInsurance,
+    planDiscount,
     patientPortion: Math.max(0, patientPortion),
     updatedAt: new Date().toISOString(),
   };

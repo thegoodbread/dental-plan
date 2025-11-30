@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { DollarSign } from 'lucide-react';
 import { TreatmentPlan } from '../../types';
@@ -7,15 +8,14 @@ interface PaymentEstimatorSectionProps {
 }
 
 export const PaymentEstimatorSection: React.FC<PaymentEstimatorSectionProps> = ({ plan }) => {
-  const { totalFee: subtotal, estimatedInsurance, patientPortion } = plan;
+  const { totalFee, estimatedInsurance, patientPortion, planDiscount } = plan;
   const insuranceEstimate = estimatedInsurance || 0;
-
-  const discount = Math.max(0, subtotal - insuranceEstimate - patientPortion);
-  const totalAfterDiscount = subtotal - discount;
+  const discount = planDiscount || 0;
   
   const [term, setTerm] = useState(6); // Default 6 months
 
-  const insurancePercentage = totalAfterDiscount > 0 ? (insuranceEstimate / totalAfterDiscount) * 100 : 0;
+  const insurancePercentage = totalFee > 0 ? (insuranceEstimate / totalFee) * 100 : 0;
+  const discountPercentage = totalFee > 0 ? (discount / totalFee) * 100 : 0;
 
   return (
     <section className="py-12 md:py-16 px-4 md:px-6 bg-white border-t border-gray-100">
@@ -27,58 +27,34 @@ export const PaymentEstimatorSection: React.FC<PaymentEstimatorSectionProps> = (
         <p className="text-gray-500 mb-8 md:mb-10">Transparent pricing with flexible payment options</p>
 
         <div className="bg-gray-50 rounded-3xl border border-gray-200 p-6 md:p-8 mb-8">
-           
-           {discount > 0.005 ? (
-             <>
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between items-center font-medium text-gray-600">
-                  <span>Subtotal</span>
-                  <span className="font-bold text-gray-900">${subtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                </div>
+           <div className="space-y-2">
+              <div className="flex justify-between items-center font-medium text-gray-600">
+                <span>Total Treatment Fee</span>
+                <span className="font-bold text-gray-900">${totalFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex justify-between items-center font-medium text-gray-600">
+                <span>Est. Insurance Coverage</span>
+                <span className="font-bold text-gray-900">-${insuranceEstimate.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+              </div>
+              {discount > 0.005 && (
                 <div className="flex justify-between items-center font-medium text-green-600">
-                  <span>Discount</span>
+                  <span>Clinic Savings</span>
                   <span className="font-bold">-${discount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                 </div>
-              </div>
-              <hr className="border-gray-200 mb-4" />
-              <div className="flex justify-between items-center mb-2 font-medium text-gray-600">
-                <span>Total Treatment Cost</span>
-                <span className="font-bold text-gray-900 text-lg">${totalAfterDiscount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-              </div>
-             </>
-           ) : (
-            <div className="flex justify-between items-center mb-2 font-medium text-gray-600">
-             <span>Total Treatment Cost</span>
-             <span className="font-bold text-gray-900 text-lg">${totalAfterDiscount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-           </div>
-           )}
-           
-           {/* Visual Bar */}
-           <div className="h-4 w-full bg-blue-200 rounded-full overflow-hidden flex mb-3">
-              <div className="h-full bg-green-500 transition-all duration-500" style={{ width: `${insurancePercentage}%` }} title="Insurance"></div>
-              {/* The blue part is implicit */}
-           </div>
-           
-           <div className="flex flex-col sm:flex-row justify-between text-xs font-medium gap-2">
-              <div className="flex items-center gap-2">
-                 <span className="w-3 h-3 bg-green-500 rounded-full shrink-0"></span>
-                 Insurance Estimate: ${insuranceEstimate.toFixed(2)}
-              </div>
-              <div className="flex items-center gap-2 text-gray-500">
-                 <span className="w-3 h-3 bg-blue-500 rounded-full shrink-0"></span>
-                 Patient Portion
-              </div>
+              )}
            </div>
 
+           <hr className="border-gray-200 my-4" />
+
            {/* EMPHASIZED YOUR PORTION */}
-           <div className="mt-4 bg-white border border-gray-200 rounded-2xl p-4 text-center shadow-sm">
+           <div className="bg-white border border-gray-200 rounded-2xl p-4 text-center shadow-sm">
                <div className="text-sm font-bold text-blue-800 uppercase tracking-wider">Your Estimated Portion</div>
                <div className="text-4xl font-extrabold text-blue-600 mt-1">
                    ${patientPortion.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                </div>
                <p className="text-xs text-gray-500 mt-1">This is the amount you'll be responsible for. Payment options are below.</p>
            </div>
-
+           
            <hr className="border-gray-200 my-8" />
 
            <h3 className="font-bold text-gray-900 mb-4">Choose Your Payment Plan</h3>
