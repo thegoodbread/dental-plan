@@ -447,6 +447,7 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                                         name="estimatedInsurance"
                                         onChange={handleSidebarInputChange}
                                         onBlur={handleSidebarInputBlur}
+                                        onFocus={(e) => e.target.select()}
                                         value={plan.estimatedInsurance ?? ''}
                                         disabled={plan.insuranceMode === 'advanced'}
                                         className={`w-full p-2 pl-5 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-colors ${plan.insuranceMode === 'advanced' ? 'bg-gray-100 cursor-not-allowed focus:ring-0' : ''}`} 
@@ -473,6 +474,7 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                                             name="clinicDiscount"
                                             onChange={handleSidebarInputChange}
                                             onBlur={handleSidebarInputBlur}
+                                            onFocus={(e) => e.target.select()}
                                             value={plan.clinicDiscount ?? ''}
                                             className="w-full p-2 pl-5 bg-white text-gray-900 border border-gray-300 rounded text-right font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
                                         />

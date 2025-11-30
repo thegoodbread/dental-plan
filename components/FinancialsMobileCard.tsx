@@ -26,6 +26,7 @@ const InputControl = ({ value, onChange, placeholder = "0", isPercentage = false
       step="any"
       className={`w-full text-right bg-white border border-gray-300 rounded-lg px-2 py-2 text-gray-900 shadow-sm outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-400 ${isPercentage ? 'pr-5' : 'pl-5'}`}
       value={value}
+      onFocus={(e) => e.target.select()}
       onChange={onChange}
       placeholder={placeholder}
     />

@@ -63,7 +63,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
 
   const toggleArch = (a: 'UPPER'|'LOWER') => {
     const current = item.selectedArches || [];
-    const updated = current.includes(a)
+    const updated = current.includes(a) 
       ? current.filter(x => x !== a)
       : [...current, a];
     onUpdate(item.id, { selectedArches: updated });
@@ -183,6 +183,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
                         type="number" 
                         className="w-full text-right border border-gray-300 rounded px-1 py-1 pl-5 text-gray-900 bg-white shadow-sm outline-none focus:ring-1 focus:ring-blue-500"
                         value={baseFee}
+                        onFocus={(e) => e.target.select()}
                         onChange={e => setBaseFee(parseFloat(e.target.value) || 0)}
                     />
                 </div>

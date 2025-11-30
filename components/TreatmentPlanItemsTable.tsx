@@ -218,7 +218,7 @@ const MobileItemCard: React.FC<{
 
   const toggleArch = (a: 'UPPER'|'LOWER') => {
     const current = item.selectedArches || [];
-    const updated = current.includes(a)
+    const updated = current.includes(a) 
       ? current.filter(x => x !== a)
       : [...current, a];
     onUpdate(item.id, { selectedArches: updated });
@@ -285,6 +285,7 @@ const MobileItemCard: React.FC<{
                             type="number" 
                             className="w-full p-1.5 border rounded text-right pl-5 text-sm text-gray-900 bg-white"
                             value={baseFee}
+                            onFocus={(e) => e.target.select()}
                             onChange={e => setBaseFee(parseFloat(e.target.value) || 0)}
                         />
                     </div>

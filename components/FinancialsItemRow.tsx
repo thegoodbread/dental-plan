@@ -26,6 +26,7 @@ const InputControl = ({ value, onChange, placeholder = "0.00", disabled = false,
       disabled={disabled}
       className={`w-full text-right bg-white border border-gray-200 rounded-md px-2 py-1.5 text-gray-900 shadow-sm outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-300 disabled:bg-gray-100 disabled:cursor-not-allowed ${isPercentage ? 'pr-5' : 'pl-5'}`}
       value={disabled ? '' : value}
+      onFocus={(e) => e.target.select()}
       onChange={onChange}
       placeholder={disabled ? '-' : placeholder}
     />
