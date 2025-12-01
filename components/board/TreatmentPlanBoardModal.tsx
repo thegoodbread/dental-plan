@@ -1,177 +1,140 @@
-import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
-import { TreatmentPlan, TreatmentPlanItem, TreatmentPhase, UrgencyLevel, PhaseBucketKey } from '../../types';
-import { ArrowRight, GripVertical, Plus, Trash2, Calculator } from 'lucide-react';
-import { NumberPadModal } from '../NumberPadModal';
+import React, { useMemo, useState, useCallback } from 'react';
+import { TreatmentPlan, TreatmentPlanItem, TreatmentPhase, UrgencyLevel, FeeCategory } from '../../types';
+import { Plus, X, MoreHorizontal, Clock, DollarSign, GripVertical, Edit, Trash2 } from 'lucide-react';
 import { getProcedureIcon } from '../../utils/getProcedureIcon';
 
-const PHASE_PRESETS = ["Foundation & Diagnostics", "Restorative", "Implant & Surgical", "Elective / Cosmetic", "Prosthetics", "Orthodontics", "Monitoring", "Follow-up"];
+const generateId = () => `id-${Math.random().toString(36).substring(2, 10)}`;
+const PRESET_PHASE_TITLES = ["Monitor Phase", "Foundation & Diagnostics", "Restorative", "Implant & Surgical", "Elective / Cosmetic", "Additional Treatment"];
 
-const NumpadButton = ({ onClick, disabled = false }: { onClick: () => void, disabled?: boolean }) => (
+
+// --- Helper Functions ---
+const getCategoryClass = (category: FeeCategory) => {
+    switch (category) {
+        case 'DIAGNOSTIC': return 'border-l-sky-500';
+        case 'PREVENTIVE': return 'border-l-cyan-500';
+        case 'RESTORATIVE': return 'border-l-blue-600';
+        case 'ENDODONTIC': return 'border-l-purple-500';
+        case 'PERIO': return 'border-l-teal-500';
+        case 'IMPLANT': return 'border-l-indigo-500';
+        case 'PROSTHETIC': return 'border-l-rose-500';
+        case 'ORTHO': return 'border-l-pink-500';
+        case 'COSMETIC': return 'border-l-fuchsia-500';
+        case 'OTHER': return 'border-l-slate-500';
+        default: return 'border-l-gray-400';
+    }
+};
+
+const estimateChairTime = (item: TreatmentPlanItem): number => {
+    if (item.procedureName.toLowerCase().includes('crown') || item.procedureName.toLowerCase().includes('bridge')) return 90;
+    if (item.category === 'IMPLANT') return 120;
+    if (item.category === 'ENDODONTIC') return 90;
+    if (item.category === 'RESTORATIVE') return 60;
+    if (item.category === 'PERIO') return 50;
+    if (item.category === 'PROSTHETIC') return 60;
+    return 30;
+};
+
+const formatMinutes = (totalMinutes: number): string => {
+    if (totalMinutes < 60) return `${totalMinutes}m`;
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+};
+
+const renderLocation = (item: TreatmentPlanItem): string | null => {
+    if (item.selectedTeeth && item.selectedTeeth.length > 0) return `#${item.selectedTeeth.join(', #')}`;
+    if (item.selectedQuadrants && item.selectedQuadrants.length > 0) return `${item.selectedQuadrants.join(', ')}`;
+    if (item.selectedArches && item.selectedArches.length > 0) return `${item.selectedArches.join(', ')}`;
+    return null;
+};
+
+const formatPhaseDuration = (phase: TreatmentPhase): string | null => {
+    const { estimatedDurationValue, estimatedDurationUnit } = phase;
+    if (estimatedDurationValue && estimatedDurationUnit) {
+        let unitAbbr = '';
+        switch(estimatedDurationUnit) {
+            case 'days': unitAbbr = estimatedDurationValue === 1 ? 'day' : 'days'; break;
+            case 'weeks': unitAbbr = estimatedDurationValue === 1 ? 'wk' : 'wks'; break;
+            case 'months': unitAbbr = estimatedDurationValue === 1 ? 'mo' : 'mos'; break;
+            default: return null;
+        }
+        return `Est. ${estimatedDurationValue} ${unitAbbr}`;
+    }
+    return null;
+};
+
+// --- Sub-components for SaaS UI ---
+
+const IosSwitch = ({ checked, onChange, id }: { checked: boolean, onChange: () => void, id: string }) => (
   <button
     type="button"
-    onClick={onClick}
-    disabled={disabled}
-    className="p-1.5 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-md border border-gray-200 disabled:cursor-not-allowed disabled:opacity-50 shrink-0"
-    aria-label="Open number pad"
+    role="switch"
+    id={id}
+    aria-checked={checked}
+    onClick={onChange}
+    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+      checked ? 'bg-blue-600' : 'bg-gray-200'
+    }`}
   >
-    <Calculator size={16} />
+    <span
+      aria-hidden="true"
+      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+        checked ? 'translate-x-5' : 'translate-x-0'
+      }`}
+    />
   </button>
 );
 
-// --- Floating Inspector Component ---
-interface FloatingInspectorProps {
-  item: TreatmentPlanItem;
-  phase: TreatmentPhase | null;
-  position: { top: number; left: number };
-  onSave: (updatedItem: TreatmentPlanItem) => void;
-  onClose: () => void;
-  onDeleteItem: (itemId: string) => void;
-}
 
-const FloatingInspector = React.forwardRef<HTMLDivElement, FloatingInspectorProps>(({
-  item, phase, position, onSave, onClose, onDeleteItem
-}, ref) => {
+const ProcedureEditorModal: React.FC<{
+  item: TreatmentPlanItem,
+  onSave: (updatedItem: TreatmentPlanItem) => void,
+  onClose: () => void,
+  onDeleteItem: (itemId: string) => void
+}> = ({ item, onSave, onClose, onDeleteItem }) => {
   const [editedItem, setEditedItem] = useState(item);
-  const [isNumpadOpen, setIsNumpadOpen] = useState(false);
-
-  useEffect(() => {
-    setEditedItem(item);
-  }, [item]);
 
   const handleChange = (field: keyof TreatmentPlanItem, value: any) => {
     setEditedItem(prev => ({ ...prev, [field]: value }));
   };
-  
-  const handleNumericChange = (field: keyof TreatmentPlanItem, value: string, isInteger = true, min = 0) => {
-    if (value === '') {
-      handleChange(field, null);
-      return;
-    }
-    const numericValue = isInteger ? parseInt(value, 10) : parseFloat(value);
-    handleChange(field, isNaN(numericValue) ? min : Math.max(min, numericValue));
-  };
-  
-  const handleSave = () => {
-    onSave(editedItem);
-  };
 
   return (
-    <>
-      <div
-        ref={ref}
-        className="absolute z-50 w-[300px] rounded-xl border border-white/40 bg-white/80 p-4 shadow-[0_8px_32px_rgba(0,0,0,0.12)] backdrop-blur-md animate-in fade-in-20 zoom-in-90"
-        style={{ top: position.top, left: position.left }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="pb-3 border-b border-gray-200/60">
-          <input
-            value={editedItem.procedureName}
-            onChange={e => handleChange('procedureName', e.target.value)}
-            className="w-full bg-transparent font-semibold text-gray-900 outline-none text-base"
-          />
-          <p className="text-xs text-gray-500 font-mono mt-1">{editedItem.procedureCode}</p>
-        </div>
-        <div className="py-3 text-xs text-gray-600 space-y-1.5">
-          <div className="flex justify-between"><span>Phase:</span><span className="font-semibold text-gray-800">{phase?.title || 'Unassigned'}</span></div>
-          <div className="flex justify-between"><span>Total Fee:</span><span className="font-semibold text-gray-800">${editedItem.netFee.toLocaleString('en-US')}</span></div>
-        </div>
-        <div className="py-3 border-t border-gray-200/60 space-y-3">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white w-full max-w-md rounded-xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+        <header className="flex justify-between items-center p-4 border-b">
+          <h3 className="font-semibold text-lg text-gray-900">Edit Procedure</h3>
+          <button onClick={onClose} className="p-1 rounded-full text-gray-400 hover:bg-gray-100"><X size={20}/></button>
+        </header>
+        <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
           <div>
-            <label className="text-xs font-medium text-gray-600 mb-1 block">Urgency</label>
-            <select value={editedItem.urgency ?? 'ELECTIVE'} onChange={e => handleChange('urgency', e.target.value as UrgencyLevel)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 rounded-lg px-2 py-1.5 text-sm">
+            <label className="text-xs font-semibold text-gray-500">Procedure Name</label>
+            <input value={editedItem.procedureName} onChange={e => handleChange('procedureName', e.target.value)} className="w-full mt-1 p-2 border border-gray-300 rounded-lg text-sm" />
+          </div>
+           <div>
+            <label className="text-xs font-semibold text-gray-500">Urgency</label>
+            <select value={editedItem.urgency ?? 'ELECTIVE'} onChange={e => handleChange('urgency', e.target.value as UrgencyLevel)} className="w-full mt-1 p-2 border border-gray-300 rounded-lg text-sm bg-white">
                 <option value="ELECTIVE">Elective</option>
                 <option value="SOON">Soon</option>
                 <option value="URGENT">Urgent</option>
             </select>
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-600 mb-1 block">Est. Duration</label>
-            <div className="flex gap-1.5">
-              <div className="flex items-center gap-1.5 flex-grow">
-                <input type="number" value={editedItem.estimatedDurationValue ?? ''} onChange={e => handleNumericChange('estimatedDurationValue', e.target.value, true, 0)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 rounded-lg px-2 py-1.5 text-sm" />
-                <NumpadButton onClick={() => setIsNumpadOpen(true)} />
-              </div>
-              <select value={editedItem.estimatedDurationUnit ?? 'weeks'} onChange={e => handleChange('estimatedDurationUnit', e.target.value as any)} className="bg-gray-50 border border-gray-200 text-gray-900 rounded-lg px-2 py-1.5 text-sm">
-                <option value="days">Days</option><option value="weeks">Weeks</option><option value="months">Months</option>
-              </select>
+            <label className="text-xs font-semibold text-gray-500">Clinical Notes</label>
+            <textarea className="w-full mt-1 p-2 border border-gray-300 rounded-lg text-sm min-h-[80px]" value={editedItem.notes ?? ''} onChange={e => handleChange('notes', e.target.value)} />
+          </div>
+        </div>
+        <footer className="p-4 bg-gray-50 border-t flex justify-between items-center">
+            <button onClick={() => onDeleteItem(item.id)} className="text-xs text-red-600 hover:text-red-800 font-semibold px-3 py-2 rounded-lg hover:bg-red-50">Delete Procedure</button>
+            <div className="flex gap-2">
+                <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                <button onClick={() => onSave(editedItem)} className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">Save Changes</button>
             </div>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-600 mb-1 block">Notes</label>
-            <textarea className="w-full bg-gray-50 border border-gray-200 text-gray-900 rounded-lg px-2 py-1.5 text-sm" rows={2} placeholder="Add clinical notes..." value={editedItem.notes ?? ''} onChange={e => handleChange('notes', e.target.value)} />
-          </div>
-        </div>
-        <div className="pt-3 mt-1 border-t border-gray-200/60 flex justify-between items-center">
-          <button onClick={() => onDeleteItem(item.id)} className="text-xs text-red-500 hover:text-red-700 font-semibold">Delete</button>
-          <div className="flex gap-2">
-              <button onClick={onClose} className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
-              <button onClick={handleSave} className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">Save Changes</button>
-          </div>
-        </div>
+        </footer>
       </div>
-      <NumberPadModal
-        isOpen={isNumpadOpen}
-        onClose={() => setIsNumpadOpen(false)}
-        onDone={(newValue) => {
-            handleNumericChange('estimatedDurationValue', newValue, true, 0);
-            setIsNumpadOpen(false);
-        }}
-        initialValue={String(editedItem.estimatedDurationValue ?? '')}
-        title="Est. Duration"
-        isPercentage={false}
-      />
-    </>
+    </div>
   );
-});
-
-
-// --- Helper Functions ---
-const getAggregatedPhaseDuration = (phaseItems: TreatmentPlanItem[]): string | null => {
-    if (phaseItems.length === 0) return null;
-    const convertToDays = (value: number, unit: 'days' | 'weeks' | 'months'): number => {
-        switch(unit) {
-            case 'days': return value; case 'weeks': return value * 7; case 'months': return value * 30.44;
-        }
-    }
-    let totalDays = 0, hasMonths = false, hasWeeks = false, hasItemsWithDuration = false;
-    for (const item of phaseItems) {
-        if (item.estimatedDurationValue && item.estimatedDurationUnit) {
-            hasItemsWithDuration = true;
-            totalDays += convertToDays(item.estimatedDurationValue, item.estimatedDurationUnit);
-            if (item.estimatedDurationUnit === 'months') hasMonths = true;
-            if (item.estimatedDurationUnit === 'weeks') hasWeeks = true;
-        }
-    }
-    if (!hasItemsWithDuration || totalDays <= 0) return null;
-    let finalValue: number, finalUnit: string;
-    if (hasMonths || totalDays >= 30) {
-        finalValue = Math.round(totalDays / 30.44); finalUnit = `mo${finalValue !== 1 ? 's' : ''}`;
-    } else if (hasWeeks || totalDays >= 7) {
-        finalValue = Math.round(totalDays / 7); finalUnit = `wk${finalValue !== 1 ? 's' : ''}`;
-    } else {
-        finalValue = Math.round(totalDays); finalUnit = `day${finalValue !== 1 ? 's' : ''}`;
-    }
-    if (finalValue < 1) finalValue = 1;
-    return `Est. ${finalValue} ${finalUnit}`;
-}
-
-const getUrgencyColor = (urgency?: UrgencyLevel) => {
-    switch (urgency) {
-        case 'URGENT': return 'bg-red-400';
-        case 'SOON': return 'bg-orange-400';
-        case 'ELECTIVE': return 'bg-blue-500';
-        default: return 'bg-gray-400';
-    }
 };
 
-const generateId = () => `id-${Math.random().toString(36).substring(2, 10)}`;
-
-const renderLocation = (item: TreatmentPlanItem): string | null => {
-    if (item.selectedTeeth && item.selectedTeeth.length > 0) return `Teeth: #${item.selectedTeeth.join(', #')}`;
-    if (item.selectedQuadrants && item.selectedQuadrants.length > 0) return `Quads: ${item.selectedQuadrants.join(', ')}`;
-    if (item.selectedArches && item.selectedArches.length > 0) return `Arch: ${item.selectedArches.join(', ')}`;
-    return null;
-};
 
 // --- Main Board Component ---
 interface TreatmentPlanBoardModalProps {
@@ -186,56 +149,41 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
   const [localItems, setLocalItems] = useState<TreatmentPlanItem[]>(items);
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
   const [dragOverPhaseId, setDragOverPhaseId] = useState<string | null>(null);
-  const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  const [inspectorPosition, setInspectorPosition] = useState<{ top: number; left: number } | null>(null);
-  const [deletingPhaseId, setDeletingPhaseId] = useState<string | null>(null);
+  
+  // Phase menu state
+  const [openMenuPhaseId, setOpenMenuPhaseId] = useState<string | null>(null);
+  const [renamingPhaseId, setRenamingPhaseId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
-  const boardRef = useRef<HTMLDivElement>(null);
-  const inspectorRef = useRef<HTMLDivElement>(null);
-  const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
+  
+  const selectedItem = useMemo(() => localItems.find(i => i.id === selectedItemId) || null, [localItems, selectedItemId]);
+  const closeEditor = useCallback(() => setSelectedItemId(null), []);
 
-  const { phases, itemsByPhase, itemPhaseMap } = useMemo(() => {
+  const { phases, itemsByPhase } = useMemo(() => {
     const sortedPhases = (localPlan.phases || []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
     const itemMapById = new Map(localItems.map(i => [i.id, i]));
     const itemsByPhaseMap: Record<string, TreatmentPlanItem[]> = {};
-    const itemPhaseMap = new Map<string, TreatmentPhase>();
     for (const phase of sortedPhases) {
         itemsByPhaseMap[phase.id] = phase.itemIds
-            .map(id => { const item = itemMapById.get(id); if(item) itemPhaseMap.set(id, phase); return item; })
+            .map(id => itemMapById.get(id))
             .filter((item): item is TreatmentPlanItem => !!item);
     }
-    const allAssignedItemIds = new Set(sortedPhases.flatMap(p => p.itemIds));
-    const unassignedItems = localItems.filter(i => !allAssignedItemIds.has(i.id) && i.phaseId);
-    unassignedItems.forEach(item => {
-        const phase = sortedPhases.find(p => p.id === item.phaseId);
-        if (phase && itemsByPhaseMap[phase.id] && !itemsByPhaseMap[phase.id].find(i => i.id === item.id)) {
-            itemsByPhaseMap[phase.id].push(item);
-            itemPhaseMap.set(item.id, phase);
-        }
-    });
-    return { phases: sortedPhases, itemsByPhase: itemsByPhaseMap, itemPhaseMap };
+    return { phases: sortedPhases, itemsByPhase: itemsByPhaseMap };
   }, [localPlan.phases, localItems]);
+
+  const handleDragStart = (e: React.DragEvent, itemId: string) => { 
+    e.dataTransfer.effectAllowed = 'move'; 
+    e.dataTransfer.setData('text/plain', itemId); 
+    setDraggingItemId(itemId); 
+  };
+  const handleDragEnd = () => { setDraggingItemId(null); setDragOverPhaseId(null); };
+  const handlePhaseDragOver = (e: React.DragEvent, phaseId: string) => { e.preventDefault(); setDragOverPhaseId(phaseId); };
   
-  const selectedItem = useMemo(() => localItems.find(i => i.id === selectedItemId) || null, [localItems, selectedItemId]);
-
-  const closeInspector = useCallback(() => setSelectedItemId(null), []);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => (e.key === 'Escape') && closeInspector();
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [closeInspector]);
-
-  const handleDragStart = (e: React.DragEvent, itemId: string) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', itemId); setDraggingItemId(itemId); };
-  const handleDragEnd = () => { setDraggingItemId(null); setDragOverPhaseId(null); setDragOverItemId(null); };
-  const handlePhaseDragOver = (e: React.DragEvent, phaseId: string) => { e.preventDefault(); setDragOverPhaseId(phaseId); setDragOverItemId(null); };
-  const handleItemDragOver = (e: React.DragEvent, phaseId: string, targetItemId: string) => { e.preventDefault(); e.stopPropagation(); if (draggingItemId !== targetItemId) { setDragOverPhaseId(phaseId); setDragOverItemId(targetItemId); } };
-  
-  const handleDrop = (e: React.DragEvent, phaseId: string, targetItemId?: string) => {
+  const handleDrop = (e: React.DragEvent, phaseId: string) => {
     e.preventDefault(); e.stopPropagation();
     const draggedId = e.dataTransfer.getData('text/plain');
-    if (!draggedId || draggedId === targetItemId) { handleDragEnd(); return; }
+    if (!draggedId) { handleDragEnd(); return; }
 
     setLocalPlan(prevPlan => {
         const newPhases = [...(prevPlan.phases || [])];
@@ -243,12 +191,7 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
         const targetPhase = newPhases.find(p => p.id === phaseId)!;
         
         if (sourcePhase) sourcePhase.itemIds = sourcePhase.itemIds.filter(id => id !== draggedId);
-        
-        const targetItems = [...targetPhase.itemIds];
-        const toIndex = targetItemId ? targetItems.indexOf(targetItemId) : targetItems.length;
-        targetItems.splice(toIndex, 0, draggedId);
-        targetPhase.itemIds = targetItems;
-
+        targetPhase.itemIds.push(draggedId);
         return { ...prevPlan, phases: newPhases };
     });
     setLocalItems(prevItems => prevItems.map(item => item.id === draggedId ? { ...item, phaseId } : item));
@@ -257,92 +200,26 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
 
   const handleUpdateItem = (updatedItem: TreatmentPlanItem) => {
     setLocalItems(prev => prev.map(item => item.id === updatedItem.id ? updatedItem : item));
-    closeInspector();
+    closeEditor();
   };
 
   const handleDeleteItem = (itemId: string) => {
-    const itemToDelete = localItems.find(i => i.id === itemId);
-    if (!itemToDelete) return;
     setLocalItems(prev => prev.filter(i => i.id !== itemId));
     setLocalPlan(prev => ({
         ...prev,
         itemIds: prev.itemIds.filter(id => id !== itemId),
         phases: prev.phases?.map(p => ({ ...p, itemIds: p.itemIds.filter(id => id !== itemId) }))
     }));
-    closeInspector();
+    closeEditor();
   };
 
   const handleAddPhase = () => {
     if ((localPlan.phases?.length ?? 0) >= 8) return;
     const newPhase: TreatmentPhase = {
-        id: generateId(),
-        planId: localPlan.id,
-        bucketKey: 'OTHER',
-        title: 'New Phase',
-        sortOrder: localPlan.phases?.length ?? 0,
-        itemIds: [],
-        isMonitorPhase: false,
+        id: generateId(), planId: localPlan.id, bucketKey: 'OTHER', title: 'New Phase',
+        sortOrder: localPlan.phases?.length ?? 0, itemIds: [], isMonitorPhase: false,
     };
     setLocalPlan(prev => ({ ...prev, phases: [...(prev.phases || []), newPhase] }));
-  };
-
-  const handleUpdatePhase = (phaseId: string, updates: Partial<TreatmentPhase>) => {
-    const currentPhase = localPlan.phases?.find(p => p.id === phaseId);
-    if (!currentPhase) return;
-
-    // If monitor phase is being turned off, clear its duration.
-    if (updates.isMonitorPhase === false) {
-        updates.estimatedDurationValue = null;
-        updates.estimatedDurationUnit = null;
-    }
-    // If it's being turned on, and there's no duration, set a default.
-    else if (updates.isMonitorPhase === true && !currentPhase.estimatedDurationValue) {
-        updates.estimatedDurationValue = 2; // Default to 2
-        updates.estimatedDurationUnit = 'months'; // Default to months
-    }
-    
-    setLocalPlan(prev => ({ ...prev, phases: prev.phases?.map(p => p.id === phaseId ? { ...p, ...updates } : p) }));
-  };
-
-  const handleDeletePhase = (phaseIdToDelete: string) => {
-    const phaseToDelete = localPlan.phases?.find(p => p.id === phaseIdToDelete);
-    if (!phaseToDelete) return;
-    
-    if (localPlan.phases && localPlan.phases.length === 1 && phaseToDelete.itemIds.length > 0) {
-        alert("Cannot delete the last phase if it contains procedures.");
-        setDeletingPhaseId(null);
-        return;
-    }
-
-    setLocalPlan(prevPlan => {
-        if (!prevPlan.phases) return prevPlan;
-        const itemsToMove = phaseToDelete.itemIds;
-        const newPhases = prevPlan.phases.filter(p => p.id !== phaseIdToDelete);
-        
-        if (itemsToMove.length > 0) {
-            let fallbackPhase = newPhases.find(p => p.bucketKey === 'OTHER') || newPhases[0];
-            if (fallbackPhase) {
-                fallbackPhase.itemIds = [...fallbackPhase.itemIds, ...itemsToMove];
-                setLocalItems(prevItems => 
-                    prevItems.map(item => 
-                        itemsToMove.includes(item.id) 
-                            ? { ...item, phaseId: fallbackPhase!.id } 
-                            : item
-                    )
-                );
-            } else {
-                setLocalItems(prevItems => 
-                    prevItems.map(item => 
-                        itemsToMove.includes(item.id) 
-                            ? { ...item, phaseId: null } 
-                            : item
-                    )
-                );
-            }
-        }
-        return { ...prevPlan, phases: newPhases };
-    });
-    setDeletingPhaseId(null);
   };
 
   const handleSaveAndClose = () => {
@@ -350,170 +227,264 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
     onClose();
   };
   
+  const handleRenameStart = (phaseId: string, currentTitle: string) => {
+    setRenamingPhaseId(phaseId);
+    setRenameValue(currentTitle);
+    setOpenMenuPhaseId(null);
+  };
+
+  const handleRenameSave = () => {
+    if (!renamingPhaseId) return;
+    setLocalPlan(prev => ({
+        ...prev,
+        phases: prev.phases?.map(p => p.id === renamingPhaseId ? { ...p, title: renameValue } : p)
+    }));
+    setRenamingPhaseId(null);
+    setRenameValue('');
+  };
+
+  const handleRenameCancel = () => {
+    setRenamingPhaseId(null);
+    setRenameValue('');
+  };
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleRenameSave();
+    if (e.key === 'Escape') handleRenameCancel();
+  };
+
+  const handleDeletePhase = (phaseId: string) => {
+    const phaseToDelete = localPlan.phases?.find(p => p.id === phaseId);
+    if (!phaseToDelete) return;
+
+    const itemsInPhase = phaseToDelete.itemIds;
+    if (itemsInPhase.length > 0) {
+        if (!window.confirm(`Are you sure you want to delete this phase and its ${itemsInPhase.length} procedure(s)? This cannot be undone.`)) {
+            setOpenMenuPhaseId(null);
+            return;
+        }
+    }
+
+    setLocalItems(prev => prev.filter(item => !itemsInPhase.includes(item.id)));
+    
+    setLocalPlan(prev => {
+        const updatedPhases = prev.phases?.filter(p => p.id !== phaseId) ?? [];
+        updatedPhases.forEach((p, index) => { p.sortOrder = index; });
+        
+        return {
+            ...prev,
+            phases: updatedPhases,
+            itemIds: prev.itemIds.filter(id => !itemsInPhase.includes(id)),
+        };
+    });
+
+    setOpenMenuPhaseId(null);
+  };
+  
+  const handleToggleMonitorPhase = (phaseId: string) => {
+    setLocalPlan(prev => ({
+        ...prev,
+        phases: prev.phases?.map(p => {
+            if (p.id === phaseId) {
+                const isNowMonitor = !p.isMonitorPhase;
+                return {
+                    ...p,
+                    isMonitorPhase: isNowMonitor,
+                    estimatedDurationValue: isNowMonitor ? 2 : null,
+                    estimatedDurationUnit: isNowMonitor ? 'months' : null,
+                };
+            }
+            return p;
+        })
+    }));
+  };
+
+  const handleSetPhaseTitle = (phaseId: string, newTitle: string) => {
+      setLocalPlan(prev => ({
+          ...prev,
+          phases: prev.phases?.map(p => p.id === phaseId ? { ...p, title: newTitle } : p)
+      }));
+      setOpenMenuPhaseId(null);
+  };
+
+  const handleUpdatePhaseDuration = (phaseId: string, field: 'value' | 'unit', value: string) => {
+      setLocalPlan(prev => ({
+          ...prev,
+          phases: prev.phases?.map(p => {
+              if (p.id === phaseId) {
+                  if (field === 'value') {
+                      return { ...p, estimatedDurationValue: parseInt(value, 10) || null };
+                  }
+                  if (field === 'unit') {
+                      return { ...p, estimatedDurationUnit: value as 'days' | 'weeks' | 'months' };
+                  }
+              }
+              return p;
+          })
+      }));
+  };
+
+  const totalChairTime = useMemo(() => localItems.reduce((sum, item) => sum + estimateChairTime(item), 0), [localItems]);
   const maxPhases = 8;
-  const numActivePhases = phases.length;
+
+  const TimelineIndicator = () => (
+    <div className="absolute top-0 left-0 right-0 h-8 flex items-center justify-around px-4">
+      {Array.from({ length: 7 }).map((_, i) => (
+        <React.Fragment key={i}>
+          <div className={`w-1.5 h-1.5 rounded-full ${i < phases.length - 1 ? 'bg-slate-400' : 'bg-slate-300'}`} />
+          {i < 6 && <div className="flex-1 h-px bg-slate-300" />}
+        </React.Fragment>
+      ))}
+    </div>
+  );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" aria-modal="true" role="dialog">
-      <div className="bg-white w-[95vw] h-[95vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
-        <main ref={boardRef} className="flex-1 overflow-auto p-5 flex flex-col bg-gradient-to-r from-slate-100/50 via-white to-white relative">
-          <div className="grid grid-cols-4 grid-rows-2 gap-x-4 gap-y-6 flex-1 min-h-0">
-              {phases.map((phase, index) => {
-                const isLastInRow = (index + 1) % 4 === 0;
-                const isLastPhase = index === phases.length - 1;
-                const showArrow = !isLastInRow && !isLastPhase;
-                const phaseItems = itemsByPhase[phase.id] || [];
-                const phaseDuration = getAggregatedPhaseDuration(phaseItems);
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setOpenMenuPhaseId(null)} aria-modal="true" role="dialog">
+        <div className="bg-slate-50 w-[95vw] h-[95vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-300" onClick={e => e.stopPropagation()}>
+          <header className="shrink-0 px-5 py-3 border-b bg-white/80 backdrop-blur-sm flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Treatment Plan Board</h2>
+              <p className="text-xs text-gray-500">{localPlan.caseAlias} - {localPlan.planNumber}</p>
+            </div>
+            <div className="flex items-center gap-4 text-xs">
+                <div className="text-right"><div className="text-gray-500 uppercase font-semibold">Production</div><div className="font-bold text-gray-900 text-sm">${localPlan.totalFee.toLocaleString()}</div></div>
+                <div className="w-px h-6 bg-gray-200" />
+                <div className="text-right"><div className="text-gray-500 uppercase font-semibold">Pt. Portion</div><div className="font-bold text-blue-600 text-sm">${localPlan.patientPortion.toLocaleString()}</div></div>
+                <div className="w-px h-6 bg-gray-200" />
+                <div className="text-right"><div className="text-gray-500 uppercase font-semibold">Chair Time</div><div className="font-bold text-gray-900 text-sm">{formatMinutes(totalChairTime)}</div></div>
+            </div>
+          </header>
 
-                return (
-                  <div key={phase.id} className="flex flex-col min-h-0 group relative">
-                    {/* Compact Phase Header */}
-                    <div className="px-1 pb-1 text-center">
-                      <div className="relative h-8 flex justify-center items-center">
-                        <div className="absolute left-0 right-0 h-px bg-gray-300" />
-                        <div className="relative w-5 h-5 rounded-full flex items-center justify-center bg-slate-50 border-2 border-gray-200">
-                          {index === 0 ? <div className="w-3 h-3 rounded-full bg-blue-600 border-2 border-white" /> : <div className="w-2 h-2 rounded-full bg-gray-300" />}
+          <main className="flex-1 overflow-hidden relative pt-8">
+            <TimelineIndicator />
+            <div className="h-full grid grid-cols-4 grid-rows-2">
+              {Array.from({ length: maxPhases }).map((_, index) => {
+                const phase = phases[index];
+                const isTopRow = index < 4;
+
+                if (phase) {
+                  const phaseItems = itemsByPhase[phase.id] || [];
+                  const durationText = formatPhaseDuration(phase);
+                  return (
+                    <div key={phase.id} className={`flex flex-col min-h-0 border-r border-slate-200 ${isTopRow ? 'border-b' : ''} ${isTopRow ? 'bg-slate-100/30' : 'bg-white'}`} onDragOver={e => handlePhaseDragOver(e, phase.id)} onDrop={e => handleDrop(e, phase.id)}>
+                      <div className="p-3 border-b border-slate-200 shrink-0 relative">
+                        <div className="flex justify-between items-center">
+                            {renamingPhaseId === phase.id ? (
+                                <input
+                                    autoFocus
+                                    value={renameValue}
+                                    onChange={e => setRenameValue(e.target.value)}
+                                    onBlur={handleRenameSave}
+                                    onKeyDown={handleRenameKeyDown}
+                                    className="font-semibold text-gray-800 truncate text-sm bg-white border border-blue-400 rounded-md px-2 py-0.5 w-full mr-2"
+                                    onClick={e => e.stopPropagation()}
+                                />
+                            ) : (
+                                <h3 className="font-semibold text-gray-800 truncate text-sm">{`Phase ${index + 1} — ${phase.title}`}</h3>
+                            )}
+                            <button onClick={(e) => { e.stopPropagation(); setOpenMenuPhaseId(phase.id === openMenuPhaseId ? null : phase.id); }} className={`p-1 rounded transition-colors ${openMenuPhaseId === phase.id ? 'bg-slate-200 ring-2 ring-blue-400' : 'text-gray-400 hover:text-gray-600 hover:bg-slate-100'}`}><MoreHorizontal size={16}/></button>
                         </div>
-                      </div>
-
-                      <div className="text-sm font-bold text-gray-900 truncate flex items-center justify-center gap-1">
-                          <select value={phase.title} onChange={e => handleUpdatePhase(phase.id, { title: e.target.value })} className="w-full text-center font-bold text-gray-900 bg-transparent border-none outline-none focus:ring-0 appearance-none p-0 cursor-pointer">
-                              <option value={phase.title}>{`Phase ${index + 1} — ${phase.title}`}</option>
-                              {PHASE_PRESETS.map(p => <option key={p} value={p}>{`Phase ${index + 1} — ${p}`}</option>)}
-                          </select>
-                          {deletingPhaseId === phase.id ? (
-                            <div className="flex items-center gap-1.5 ml-1 animate-in fade-in">
-                              <span className="text-xs font-bold text-red-600">Delete?</span>
-                              <button onClick={() => handleDeletePhase(phase.id)} className="px-2 py-0.5 text-xs text-white bg-red-600 rounded-md hover:bg-red-700">Yes</button>
-                              <button onClick={() => setDeletingPhaseId(null)} className="px-2 py-0.5 text-xs text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">No</button>
-                            </div>
-                          ) : (
-                            <button onClick={() => setDeletingPhaseId(phase.id)} className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Trash2 size={13} />
-                            </button>
-                          )}
-                      </div>
-
-                      <div className="text-xs text-gray-500 mt-1 h-4">
-                        <span>{phaseItems.length} procedure{phaseItems.length !== 1 ? 's' : ''}</span>
-                        {phaseDuration && (
-                          <>
-                            <span className="mx-1.5">•</span>
-                            <span>{phaseDuration}</span>
-                          </>
-                        )}
-                      </div>
-                      
-                      <div className="mt-2">
-                          <label className="inline-flex items-center justify-center gap-2 cursor-pointer text-sm font-medium text-gray-700 group/monitor">
-                              <input
-                                  type="checkbox"
-                                  checked={!!phase.isMonitorPhase}
-                                  onChange={e => handleUpdatePhase(phase.id, { isMonitorPhase: e.target.checked })}
-                                  className="hidden peer"
-                              />
-                              <div className="w-4 h-4 rounded border-2 p-0.5 transition-all duration-200 border-gray-400 bg-white group-hover/monitor:border-blue-500 peer-checked:border-gray-800 peer-checked:bg-gray-800">
-                                  <div className="w-full h-full rounded-sm bg-gray-200 peer-checked:bg-gray-500 transition-colors"></div>
-                              </div>
-                              <span className="font-semibold text-blue-600">Monitor Phase</span>
-                          </label>
-                          {phase.isMonitorPhase && (
-                              <div className="mt-2 pt-2 border-t border-slate-200 w-4/5 mx-auto">
-                                  <div className="flex gap-1.5">
-                                      <input 
-                                          type="number" 
-                                          value={phase.estimatedDurationValue ?? ''} 
-                                          onChange={e => handleUpdatePhase(phase.id, { estimatedDurationValue: e.target.value ? parseInt(e.target.value, 10) : null })}
-                                          className="w-full bg-gray-100 border border-gray-200 text-gray-900 rounded-lg px-2 py-1 text-sm text-center" 
-                                          placeholder="Time"
-                                      />
-                                      <select 
-                                          value={phase.estimatedDurationUnit ?? 'months'} 
-                                          onChange={e => handleUpdatePhase(phase.id, { estimatedDurationUnit: e.target.value as any })} 
-                                          className="bg-gray-100 border border-gray-200 text-gray-900 rounded-lg px-1 py-1 text-sm"
-                                      >
-                                          <option value="days">Days</option>
-                                          <option value="weeks">Weeks</option>
-                                          <option value="months">Months</option>
-                                      </select>
-                                  </div>
-                              </div>
-                          )}
-                      </div>
-                      {showArrow && <div className="absolute -right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"><ArrowRight size={16} /></div>}
-                    </div>
-
-                    {/* Phase Lane */}
-                    <div className={`mt-2 flex-1 min-h-0 rounded-2xl border p-3 flex flex-col transition-colors bg-slate-50 shadow-sm ${dragOverPhaseId === phase.id && !dragOverItemId ? 'border-blue-300 bg-blue-50/50' : 'border-slate-200'}`} onDragOver={e => handlePhaseDragOver(e, phase.id)} onDrop={e => handleDrop(e, phase.id)}>
-                      <div className="flex flex-col gap-2 overflow-y-auto pr-1 -mr-2 flex-1 relative">
-                        {phaseItems.map(item => {
-                          const ProcedureIcon = getProcedureIcon(item);
-                          const locationText = renderLocation(item);
-                          return (
-                            <div key={item.id} className="relative z-10" onDragOver={e => handleItemDragOver(e, phase.id, item.id)} onDrop={e => handleDrop(e, phase.id, item.id)}>
-                              <div ref={el => { if (el) cardRefs.current.set(item.id, el); else cardRefs.current.delete(item.id); }} draggable onClick={() => setSelectedItemId(item.id)} onDragStart={e => handleDragStart(e, item.id)} onDragEnd={handleDragEnd} className={`rounded-xl border shadow-sm cursor-pointer transition-all duration-150 flex overflow-hidden ${draggingItemId === item.id ? 'opacity-40' : ''} ${dragOverItemId === item.id ? 'ring-2 ring-blue-400 bg-white' : 'hover:shadow-md border-gray-200 bg-white'} ${selectedItemId === item.id ? 'ring-2 ring-blue-500 border-blue-400 bg-white' : ''}`}>
-                                <div className={`w-1.5 shrink-0 ${getUrgencyColor(item.urgency)}`} />
-                                <div className="p-2 flex-1">
-                                  <div className="flex items-start gap-2">
-                                    <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 cursor-grab mt-0.5 shrink-0" aria-hidden="true"><GripVertical size={12} /></div>
-                                    <div className="flex-1">
-                                      <span className="font-medium text-xs leading-tight text-gray-800">{item.procedureName}</span>
-                                      {locationText && (
-                                        <div className="text-[11px] text-gray-500 mt-1 font-medium">{locationText}</div>
-                                      )}
-                                      <div className="flex justify-between items-end mt-2">
-                                        <div className="font-bold text-base text-gray-900">${item.netFee?.toFixed(0) ?? '—'}</div>
-                                        <div className="w-6 h-6 rounded-lg flex items-center justify-center text-gray-500 bg-gray-100">
-                                            <ProcedureIcon width={14} height={14} />
-                                        </div>
-                                      </div>
-                                    </div>
+                        <div className="flex justify-between items-center text-xs text-gray-500 mt-1">
+                          <span>{phaseItems.length} procedure{phaseItems.length !== 1 ? 's' : ''}</span>
+                          {durationText && <span className="font-semibold">{durationText}</span>}
+                        </div>
+                        {openMenuPhaseId === phase.id && (
+                            <div className="absolute top-11 right-2 z-30 w-48 bg-white rounded-lg shadow-lg border border-gray-200 text-sm" onClick={e => e.stopPropagation()}>
+                                <div className="p-2">
+                                  <div className="px-1 py-1.5 flex justify-between items-center">
+                                    <label htmlFor={`monitor-switch-${phase.id}`} className="text-sm font-medium text-gray-700 cursor-pointer flex-1">Monitor Phase</label>
+                                    <IosSwitch id={`monitor-switch-${phase.id}`} checked={!!phase.isMonitorPhase} onChange={() => handleToggleMonitorPhase(phase.id)} />
                                   </div>
                                 </div>
-                              </div>
+                                <div className="border-t my-1"></div>
+                                <div className="text-xs font-semibold text-gray-500 px-3 pt-1 pb-1">Set Title To...</div>
+                                <ul className="py-1">
+                                  {PRESET_PHASE_TITLES.map(title => (
+                                    <li key={title}><button onClick={() => handleSetPhaseTitle(phase.id, title)} className="w-full text-left px-3 py-1.5 text-gray-800 hover:bg-gray-100 truncate">{title}</button></li>
+                                  ))}
+                                </ul>
+                                <div className="border-t my-1"></div>
+                                <ul className="py-1">
+                                    <li><button onClick={() => handleRenameStart(phase.id, phase.title)} className="w-full text-left px-3 py-1.5 text-gray-900 hover:bg-gray-100 flex items-center gap-2"><Edit size={14}/> Rename...</button></li>
+                                    <li><button onClick={() => handleDeletePhase(phase.id)} className="w-full text-left px-3 py-1.5 text-red-600 hover:bg-red-50 flex items-center gap-2"><Trash2 size={14}/> Delete Phase</button></li>
+                                </ul>
                             </div>
-                          );
-                        })}
+                        )}
+                      </div>
+
+                      {phase.isMonitorPhase && (
+                          <div className="p-2 bg-slate-200/50 border-b border-slate-200 shrink-0">
+                              <label className="text-xs font-semibold text-gray-600">Monitoring Duration</label>
+                              <div className="flex gap-2 mt-1">
+                                  <input
+                                      type="number"
+                                      value={phase.estimatedDurationValue ?? ''}
+                                      onChange={e => handleUpdatePhaseDuration(phase.id, 'value', e.target.value)}
+                                      className="w-full p-1 border border-gray-300 rounded-md text-sm text-center bg-white text-gray-900"
+                                  />
+                                  <select
+                                      value={phase.estimatedDurationUnit ?? 'months'}
+                                      onChange={e => handleUpdatePhaseDuration(phase.id, 'unit', e.target.value)}
+                                      className="w-full bg-white p-1 border border-gray-300 rounded-md text-sm text-gray-900"
+                                  >
+                                      <option value="days">Days</option>
+                                      <option value="weeks">Weeks</option>
+                                      <option value="months">Months</option>
+                                  </select>
+                              </div>
+                          </div>
+                      )}
+
+                      <div className={`flex-1 p-2 space-y-1.5 overflow-y-auto transition-colors duration-300 ${dragOverPhaseId === phase.id ? 'bg-blue-100/50' : ''}`}>
+                        {phaseItems.map(item => (
+                            <div key={item.id} draggable onClick={() => setSelectedItemId(item.id)} onDragStart={e => handleDragStart(e, item.id)} onDragEnd={handleDragEnd} className={`p-2 rounded-md border bg-white shadow-sm cursor-pointer hover:shadow-lg hover:border-slate-300 transition-all active:cursor-grabbing border-l-4 ${getCategoryClass(item.category)} ${draggingItemId === item.id ? 'opacity-30' : ''}`}>
+                                <div className="flex justify-between items-start">
+                                    <p className="text-xs font-semibold text-gray-800 leading-snug flex-1">{item.procedureName}</p>
+                                    <div className="font-bold text-gray-900 text-xs ml-2">${item.netFee?.toFixed(0)}</div>
+                                </div>
+                                <div className="mt-1.5 flex items-center justify-between text-[10px] text-gray-500 font-medium">
+                                    <span>{renderLocation(item) || item.procedureCode}</span>
+                                    <span className="font-semibold uppercase">{item.category}</span>
+                                </div>
+                            </div>
+                        ))}
                       </div>
                     </div>
-                  </div>
+                  );
+                }
+                
+                const isNextSlot = index === phases.length;
+                return (
+                    <div key={`empty-${index}`} className={`flex flex-col min-h-0 p-2 border-r border-slate-200 ${isTopRow ? 'border-b' : ''} ${isTopRow ? 'bg-slate-100/30' : 'bg-white'}`}>
+                        {isNextSlot ? (
+                            <button onClick={handleAddPhase} className="w-full h-full flex flex-col items-center justify-center gap-1 text-slate-400 hover:bg-slate-200/40 hover:text-slate-600 rounded-lg transition-colors border-2 border-dashed border-slate-300/70">
+                                <Plus size={16}/>
+                                <span className="text-xs font-semibold">Add Phase</span>
+                            </button>
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                                <span className="text-xs font-semibold text-slate-400/50">Phase {index + 1}</span>
+                            </div>
+                        )}
+                    </div>
                 );
               })}
-              
-              {/* Placeholder Slots */}
-              {numActivePhases < maxPhases && (
-                <div className="flex flex-col min-h-0">
-                  <div className="h-8 flex justify-center items-center"><div className="w-full h-px border-t border-dashed border-gray-300" /></div>
-                  <div className="h-[120px]" />
-                  <div className="flex-1 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-100/50 flex items-center justify-center p-3">
-                    <button onClick={handleAddPhase} className="w-full h-full flex flex-col items-center justify-center gap-2 text-slate-500 hover:bg-slate-200/60 hover:text-slate-700 rounded-lg transition-colors">
-                      <Plus size={24}/>
-                      <span className="text-sm font-semibold">Add Phase</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-              {Array.from({ length: Math.max(0, maxPhases - numActivePhases - 1) }).map((_, i) => (
-                <div key={`empty-${i}`} className="flex flex-col min-h-0">
-                  <div className="h-8 flex justify-center items-center"><div className="w-full h-px border-t border-dashed border-gray-300" /></div>
-                  <div className="h-[120px]" />
-                  <div className="flex-1 rounded-2xl bg-slate-100/80" />
-                </div>
-              ))}
-          </div>
-
-          {selectedItem && ( <FloatingInspector ref={inspectorRef} item={selectedItem} phase={itemPhaseMap.get(selectedItem.id) || null} onSave={handleUpdateItem} onClose={closeInspector} position={inspectorPosition || {top: 100, left: 100}} onDeleteItem={handleDeleteItem} /> )}
-        </main>
-        <footer className="shrink-0 px-4 py-3 border-t bg-gray-50 flex items-center justify-between">
-            <div className="text-xs text-gray-500">
-                {numActivePhases} of {maxPhases} phases used.
             </div>
-            <div className="flex items-center gap-2">
-                <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
-                <button onClick={handleSaveAndClose} className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">Save Changes</button>
-            </div>
-        </footer>
+          </main>
+          
+          <footer className="shrink-0 px-4 py-3 border-t bg-white flex items-center justify-between">
+              <div className="text-xs text-gray-500">{phases.length} of {maxPhases} phases used.</div>
+              <div className="flex items-center gap-2">
+                  <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                  <button onClick={handleSaveAndClose} className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">Save Changes</button>
+              </div>
+          </footer>
+        </div>
       </div>
-    </div>
+      {selectedItem && (
+        <ProcedureEditorModal item={selectedItem} onSave={handleUpdateItem} onClose={closeEditor} onDeleteItem={handleDeleteItem} />
+      )}
+    </>
   );
 };
