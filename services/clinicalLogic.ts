@@ -50,7 +50,7 @@ export const getItemsOnTooth = (tooth: number, items: TreatmentPlanItem[]): Trea
   // const toothArch = getToothArch(tooth); // Separated logic
 
   return items.filter(i => {
-    if (i.itemType === 'SEDATION') return false; // Sedation doesn't show on tooth hover
+    if (i.itemType === 'ADDON') return false; // Add-ons don't show on tooth hover directly
     if (i.unitType === 'PER_TOOTH' && i.selectedTeeth?.includes(tooth)) return true;
     if (i.unitType === 'PER_QUADRANT' && toothQuad && i.selectedQuadrants?.includes(toothQuad)) return true;
     
@@ -87,7 +87,7 @@ export const getItemsOnTooth = (tooth: number, items: TreatmentPlanItem[]): Trea
  */
 export const getItemsOnQuadrant = (quad: string, items: TreatmentPlanItem[]): TreatmentPlanItem[] => {
   return items.filter(i => 
-    i.itemType !== 'SEDATION' &&
+    i.itemType !== 'ADDON' &&
     i.unitType === 'PER_QUADRANT' && i.selectedQuadrants?.includes(quad as any)
   ).sort((a, b) => urgencyWeight(b.urgency) - urgencyWeight(a.urgency));
 };
@@ -97,7 +97,7 @@ export const getItemsOnQuadrant = (quad: string, items: TreatmentPlanItem[]): Tr
  */
 export const getItemsOnArch = (arch: 'UPPER' | 'LOWER', items: TreatmentPlanItem[]): TreatmentPlanItem[] => {
   return items.filter(i => 
-    i.itemType !== 'SEDATION' &&
+    i.itemType !== 'ADDON' &&
     ((i.unitType === 'PER_ARCH' && i.selectedArches?.includes(arch)) ||
     (i.unitType === 'PER_MOUTH'))
   ).sort((a, b) => {
@@ -111,7 +111,7 @@ export const getItemsOnArch = (arch: 'UPPER' | 'LOWER', items: TreatmentPlanItem
 // --- VISIT ESTIMATION ---
 export const estimateVisits = (item: TreatmentPlanItem): number => {
   if (item.estimatedVisits) return item.estimatedVisits;
-  if (item.itemType === 'SEDATION') return 0; // Sedation happens during other visits
+  if (item.itemType === 'ADDON') return 0; // Add-ons happen during other visits
 
   // Fallback heuristics based on category
   switch (item.category) {
@@ -137,7 +137,7 @@ export const estimateDuration = (item: Partial<TreatmentPlanItem>): { value: num
     return { value: item.estimatedDurationValue, unit: item.estimatedDurationUnit };
   }
   
-  if (item.itemType === 'SEDATION') return { value: 0, unit: 'days' };
+  if (item.itemType === 'ADDON') return { value: 0, unit: 'days' };
 
   // Fallback heuristics based on category
   switch (item.category) {
@@ -157,7 +157,7 @@ export const estimateDuration = (item: Partial<TreatmentPlanItem>): { value: num
 // New Helper for Chair Time (minutes)
 export const estimateChairTime = (item: TreatmentPlanItem): number => {
     // Explicit sedation check
-    if (item.itemType === 'SEDATION') {
+    if (item.itemType === 'ADDON' && item.addOnKind === 'SEDATION') {
         const name = item.procedureName.toLowerCase();
         if (name.includes('iv')) return 60;
         if (name.includes('oral')) return 60;
@@ -203,8 +203,8 @@ export const mapPlanToDiagram = (items: TreatmentPlanItem[]): DiagramData => {
   };
 
   items.forEach(item => {
-    // Sedation items don't affect the diagram directly
-    if (item.itemType === 'SEDATION') return;
+    // Add-ons don't affect the diagram directly
+    if (item.itemType === 'ADDON') return;
 
     const urgency = item.urgency || 'ELECTIVE';
 
@@ -252,7 +252,7 @@ export const mapPlanToDiagram = (items: TreatmentPlanItem[]): DiagramData => {
 // --- EXPLANATION GENERATION ---
 
 export const generateClinicalExplanation = (items: TreatmentPlanItem[]) => {
-  const procedureItems = items.filter(i => i.itemType !== 'SEDATION');
+  const procedureItems = items.filter(i => i.itemType !== 'ADDON');
   const hasUrgent = procedureItems.some(i => i.urgency === 'URGENT');
   const hasSoon = procedureItems.some(i => i.urgency === 'SOON');
   
@@ -294,7 +294,7 @@ export const generateClinicalExplanation = (items: TreatmentPlanItem[]) => {
 };
 
 export const calculateClinicalMetrics = (items: TreatmentPlanItem[]) => {
-  const procedureItems = items.filter(i => i.itemType !== 'SEDATION');
+  const procedureItems = items.filter(i => i.itemType !== 'ADDON');
   const visitCount = procedureItems.reduce((sum, item) => sum + estimateVisits(item), 0);
   const uniqueTeeth = new Set<number>();
   

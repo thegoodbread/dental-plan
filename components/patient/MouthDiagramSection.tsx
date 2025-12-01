@@ -1,7 +1,4 @@
 
-
-
-
 import React, { useState, useMemo } from 'react';
 import { TEETH_UPPER, TEETH_LOWER, DiagramData, mapPlanToDiagram, getItemsOnTooth, getToothQuadrant, getItemsOnArch, getItemsOnQuadrant } from '../../services/clinicalLogic';
 import { TreatmentPlanItem } from '../../types';
@@ -335,7 +332,7 @@ const TooltipContent = ({ items, allItems, title }: { items: TreatmentPlanItem[]
              ) : (
                  <ul className="space-y-2">
                      {items.map(i => {
-                         const linkedSedation = allItems.find(s => s.itemType === 'SEDATION' && s.linkedItemIds?.includes(i.id));
+                         const linkedSedation = allItems.find(s => s.itemType === 'ADDON' && s.addOnKind === 'SEDATION' && s.linkedItemIds?.includes(i.id));
                          return (
                              <li key={i.id} className="flex flex-col gap-0.5">
                                  <div className="flex justify-between gap-2">

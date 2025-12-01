@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { TreatmentPlanItem, UrgencyLevel } from '../types';
-import { Trash2, Edit2, Check, X, AlertTriangle, Clock, Smile, Calculator, Syringe, ChevronDown } from 'lucide-react';
+import { Trash2, Edit2, Check, X, AlertTriangle, Clock, Smile, Calculator, ChevronDown } from 'lucide-react';
 import { ToothSelectorModal } from './ToothSelectorModal';
 import { NumberPadModal } from './NumberPadModal';
 import { SEDATION_TYPES } from '../services/treatmentPlans';
@@ -22,14 +22,20 @@ interface TreatmentPlanItemRowProps {
   onUpdate: (id: string, updates: Partial<TreatmentPlanItem>) => void;
   onDelete: (id: string) => void;
   // New props for hierarchy
-  isSedation?: boolean;
+  isAddOn?: boolean;
   linkedItemNames?: string[];
   onAddSedation?: (parentItemId: string) => void;
+  // Drag & Drop
+  onDragOver?: (e: React.DragEvent, item: TreatmentPlanItem) => void;
+  onDrop?: (e: React.DragEvent, item: TreatmentPlanItem) => void;
+  isDragOver?: boolean;
+  isCompatibleDropTarget?: boolean;
 }
 
 export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ 
     item, onUpdate, onDelete, 
-    isSedation = false, linkedItemNames = [], onAddSedation 
+    isAddOn = false, linkedItemNames = [], onAddSedation,
+    onDragOver, onDrop, isDragOver, isCompatibleDropTarget
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
@@ -43,19 +49,17 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
   const handleSave = () => {
     onUpdate(item.id, {
         baseFee: Number(baseFee),
-        urgency: isSedation ? undefined : urgency
+        urgency: isAddOn ? undefined : urgency
     });
     setIsEditing(false);
   };
 
   const handleCancel = () => {
-    // Simply exit edit mode. State will be implicitly synced from props on next render.
     setIsEditing(false);
     setIsConfirmingDelete(false);
   };
 
   const handleStartEditing = () => {
-    // When editing starts, sync the local state with the current item props.
     setBaseFee(item.baseFee);
     setUrgency(item.urgency || 'ELECTIVE');
     setIsEditing(true);
@@ -68,9 +72,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
               sedationType: newType,
               procedureName: `Sedation – ${newType}`,
               baseFee: def.defaultFee
-              // netFee will be recalculated by service logic
           });
-          // Also update local baseFee state to match if currently editing or for next edit
           setBaseFee(def.defaultFee);
       }
   };
@@ -94,7 +96,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
   // --- RENDER HELPERS ---
 
   const renderSelectionInput = () => {
-    if (isSedation) {
+    if (isAddOn) {
         return (
             <div className="text-xs text-gray-400 italic">
                 {linkedItemNames.length > 0 ? (
@@ -173,7 +175,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
   };
 
   const renderUrgencyBadge = (u: UrgencyLevel) => {
-    if (isSedation) return null; // No urgency for sedation
+    if (isAddOn) return null; // No urgency for add-ons
     switch (u) {
       case 'URGENT': return <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-100 uppercase"><AlertTriangle size={10} /> Urgent</span>;
       case 'SOON': return <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-100 uppercase"><Clock size={10} /> Soon</span>;
@@ -181,24 +183,35 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
     }
   };
 
-  const rowBackground = isEditing ? 'bg-blue-50/30' : isSedation ? 'bg-slate-50' : '';
-  const textClass = isSedation ? 'text-gray-600' : 'text-gray-900';
-
-  // Determine displayed sedation type
+  const rowBackground = isDragOver 
+    ? 'bg-blue-50 ring-2 ring-inset ring-blue-500' 
+    : isCompatibleDropTarget 
+        ? 'bg-blue-50/30 ring-1 ring-inset ring-blue-300 border-blue-200' // Subtle glow for compatibility
+        : isEditing 
+            ? 'bg-blue-50/30' 
+            : isAddOn 
+                ? 'bg-slate-50' 
+                : '';
+            
+  const textClass = isAddOn ? 'text-gray-600' : 'text-gray-900';
   const displayedSedationType = item.sedationType || item.procedureName.replace('Sedation – ', '');
 
   return (
     <>
-      <tr className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 group transition-colors ${rowBackground}`}>
+      <tr 
+        onDragOver={isAddOn ? undefined : (e) => onDragOver?.(e, item)}
+        onDrop={isAddOn ? undefined : (e) => onDrop?.(e, item)}
+        className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 group transition-all ${rowBackground}`}
+      >
         {/* Procedure */}
-        <td className={`px-4 py-3 align-top ${isSedation ? 'pl-10 relative' : ''}`}>
-          {isSedation && (
+        <td className={`px-4 py-3 align-top ${isAddOn ? 'pl-10 relative' : ''}`}>
+          {isAddOn && (
              <div className="absolute left-0 top-0 bottom-0 w-8 border-r border-gray-100 flex justify-center pt-4">
                 <div className="w-2 h-2 rounded-full bg-gray-200"></div>
              </div>
           )}
           
-          {isSedation ? (
+          {isAddOn && item.addOnKind === 'SEDATION' ? (
              <div className="flex flex-col gap-1">
                   <div className="relative inline-block w-full max-w-[240px]">
                       <select 
@@ -220,7 +233,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
              </>
           )}
           
-          {isEditing && !isSedation ? (
+          {isEditing && !isAddOn ? (
             <select 
               value={urgency} 
               onChange={e => setUrgency(e.target.value as UrgencyLevel)}
@@ -231,7 +244,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
               <option value="URGENT">Urgent</option>
             </select>
           ) : (
-            !isSedation && <div className="mt-1">{renderUrgencyBadge(item.urgency || 'ELECTIVE')}</div>
+            !isAddOn && <div className="mt-1">{renderUrgencyBadge(item.urgency || 'ELECTIVE')}</div>
           )}
         </td>
 
@@ -267,7 +280,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
         </td>
 
         {/* Net Fee */}
-        <td className={`px-4 py-3 text-right text-sm font-bold align-top pt-3 ${isSedation ? 'text-gray-700 bg-slate-100/50' : 'text-gray-900 bg-gray-50/50'}`}>
+        <td className={`px-4 py-3 text-right text-sm font-bold align-top pt-3 ${isAddOn ? 'text-gray-700 bg-slate-100/50' : 'text-gray-900 bg-gray-50/50'}`}>
           ${item.netFee.toFixed(2)}
         </td>
 
@@ -286,9 +299,6 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
             </div>
           ) : (
             <div className="flex justify-end gap-2">
-              {!isSedation && onAddSedation && (
-                 <button onClick={() => onAddSedation(item.id)} className="p-1 text-purple-500 hover:bg-purple-100 rounded" title="Add Sedation"><Syringe size={16}/></button>
-              )}
               <button onClick={handleStartEditing} className="p-1 text-blue-600 hover:bg-blue-100 rounded"><Edit2 size={16}/></button>
               <button onClick={() => setIsConfirmingDelete(true)} className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16}/></button>
             </div>

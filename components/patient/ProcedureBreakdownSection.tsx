@@ -1,9 +1,10 @@
+
 import React, { useState, useMemo } from 'react';
 import { TreatmentPlan, TreatmentPlanItem } from '../../types';
-import { Calendar, AlertTriangle, Shield, Smile, ChevronDown, Star, Syringe } from 'lucide-react';
+import { Calendar, AlertTriangle, Shield, Smile, ChevronDown, Star, Syringe, Plus } from 'lucide-react';
 import { estimateVisits, getItemsOnTooth, getItemsOnQuadrant } from '../../services/clinicalLogic';
 import { getProcedureIcon } from '../../utils/getProcedureIcon';
-import { getFeeSchedule, SEDATION_TYPES } from '../../services/treatmentPlans';
+import { getFeeSchedule, SEDATION_TYPES, ADD_ON_LIBRARY } from '../../services/treatmentPlans';
 
 interface ProcedureBreakdownSectionProps {
   plan: TreatmentPlan;
@@ -27,22 +28,31 @@ const PhaseGroup: React.FC<{
     const [isExpanded, setIsExpanded] = useState(false);
     const feeSchedule = useMemo(() => getFeeSchedule(), []);
 
-    // Split items into procedures (roots) and sedations (children)
-    const procedures = useMemo(() => group.items.filter(i => i.itemType !== 'SEDATION'), [group.items]);
-    const sedations = useMemo(() => group.items.filter(i => i.itemType === 'SEDATION'), [group.items]);
+    // Split items into procedures (roots) and add-ons (children)
+    const procedures = useMemo(() => group.items.filter(i => i.itemType !== 'ADDON'), [group.items]);
+    const addOns = useMemo(() => group.items.filter(i => i.itemType === 'ADDON'), [group.items]);
 
-    // --- Financial & Clinical Calculations for the Phase (Includes Sedation) ---
+    // --- Financial & Clinical Calculations for the Phase (Includes Add-Ons) ---
     const { subtotal: phaseSubtotal, savings: totalPhaseSavings } = useMemo(() => {
         return group.items.reduce((acc, item) => {
             acc.subtotal += item.netFee;
             
             const isMembershipPlan = plan.feeScheduleType === 'membership';
             if (isMembershipPlan) {
-                if (item.itemType === 'SEDATION') {
-                     // Calculate sedation savings: standard default - current membership fee
-                     const sedDef = SEDATION_TYPES.find(d => d.label === item.sedationType);
-                     if (sedDef) {
-                         const standardFee = sedDef.defaultFee * item.units;
+                if (item.itemType === 'ADDON') {
+                     // Check AddOn Library or Legacy Sedation
+                     let def = ADD_ON_LIBRARY.find(d => d.kind === item.addOnKind && d.label === item.procedureName.replace('Sedation – ', ''));
+                     
+                     if (item.addOnKind === 'SEDATION' && !def) {
+                         const sedDef = SEDATION_TYPES.find(d => d.label === item.sedationType);
+                         if (sedDef) {
+                            const standardFee = sedDef.defaultFee * item.units;
+                            if (standardFee > item.netFee) {
+                                acc.savings += (standardFee - item.netFee);
+                            }
+                         }
+                     } else if (def && def.membershipFee) {
+                         const standardFee = def.defaultFee * item.units;
                          if (standardFee > item.netFee) {
                              acc.savings += (standardFee - item.netFee);
                          }
@@ -59,7 +69,7 @@ const PhaseGroup: React.FC<{
         }, { subtotal: 0, savings: 0 });
     }, [group.items, plan.feeScheduleType, feeSchedule]);
     
-    // Visits (Sedation usually 0 visits)
+    // Visits (Add-Ons usually 0 visits)
     const phaseVisits = group.items.reduce((sum, item) => sum + estimateVisits(item), 0);
 
     const isHighlighted = (item: TreatmentPlanItem) => {
@@ -100,9 +110,9 @@ const PhaseGroup: React.FC<{
         }
     };
 
-    // Helper to render a card (procedure or sedation)
-    const renderCard = (item: TreatmentPlanItem, isSedation: boolean, parentName?: string) => {
-        const ProcedureIcon = isSedation ? Syringe : getProcedureIcon(item);
+    // Helper to render a card
+    const renderCard = (item: TreatmentPlanItem, isAddOn: boolean, parentName?: string) => {
+        const ProcedureIcon = isAddOn ? (item.addOnKind === 'SEDATION' ? Syringe : Plus) : getProcedureIcon(item);
         const highlighted = isHighlighted(item);
         const dimmed = isDimmed(item);
         
@@ -112,13 +122,23 @@ const PhaseGroup: React.FC<{
 
         // Calculate specific item savings
         if (isMembershipPlan) {
-            if (isSedation) {
-                const sedDef = SEDATION_TYPES.find(d => d.label === item.sedationType);
-                if (sedDef) {
-                    standardItemFee = sedDef.defaultFee * item.units;
-                    if (standardItemFee > item.netFee) {
-                        itemSavings = standardItemFee - item.netFee;
-                    }
+            if (isAddOn) {
+                // AddOn logic
+                let def = ADD_ON_LIBRARY.find(d => d.kind === item.addOnKind && d.label === item.procedureName.replace('Sedation – ', ''));
+                if (!def && item.addOnKind === 'SEDATION') {
+                     // legacy fallback
+                     const sedDef = SEDATION_TYPES.find(d => d.label === item.sedationType);
+                     if (sedDef) {
+                        standardItemFee = sedDef.defaultFee * item.units;
+                         if (standardItemFee > item.netFee) {
+                             itemSavings = standardItemFee - item.netFee;
+                         }
+                     }
+                } else if (def && def.membershipFee) {
+                    standardItemFee = def.defaultFee * item.units;
+                     if (standardItemFee > item.netFee) {
+                         itemSavings = standardItemFee - item.netFee;
+                     }
                 }
             } else {
                 const feeEntry = feeSchedule.find(f => f.id === item.feeScheduleEntryId);
@@ -147,26 +167,26 @@ const PhaseGroup: React.FC<{
                                 ? 'border-gray-100 opacity-40 grayscale'
                                 : 'border-gray-200 shadow-[0_1px_3px_rgba(0,0,0,0.02)] hover:shadow-md hover:border-gray-300'
                         }
-                        ${isSedation ? 'p-3 md:p-4 bg-slate-50/50' : 'p-4 md:p-5'}
+                        ${isAddOn ? 'p-3 md:p-4 bg-slate-50/50' : 'p-4 md:p-5'}
                     `}
                 >
                     <div className="flex items-start gap-3 md:gap-4">
                         <div className={`
                             rounded-xl flex items-center justify-center shrink-0 border
-                            ${isSedation 
+                            ${isAddOn 
                                 ? 'w-8 h-8 md:w-9 md:h-9 bg-purple-50 text-purple-600 border-purple-100' 
                                 : `w-10 h-10 md:w-12 md:h-12 ${highlighted ? 'bg-gray-100 text-gray-700 border-gray-200' : 'bg-blue-50 text-blue-600 border-blue-100'}`
                             }
                         `}>
-                            <ProcedureIcon size={isSedation ? 16 : 20} className={isSedation ? '' : 'md:w-6 md:h-6'} />
+                            <ProcedureIcon size={isAddOn ? 16 : 20} className={isAddOn ? '' : 'md:w-6 md:h-6'} />
                         </div>
                         <div className="flex-1 min-w-0">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
                                 <div>
-                                    <div className={`font-bold text-gray-900 leading-tight ${isSedation ? 'text-sm' : 'text-base'}`}>
+                                    <div className={`font-bold text-gray-900 leading-tight ${isAddOn ? 'text-sm' : 'text-base'}`}>
                                         {item.procedureName}
                                     </div>
-                                    {isSedation && parentName && (
+                                    {isAddOn && parentName && (
                                         <div className="text-[11px] text-gray-500 mt-0.5 font-medium">
                                             Applies to: {parentName}
                                         </div>
@@ -178,7 +198,7 @@ const PhaseGroup: React.FC<{
                                             <Star size={10} /> MEMBER PRICE
                                         </span>
                                     )}
-                                    {!isSedation && (
+                                    {!isAddOn && (
                                         <>
                                             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden sm:block">{item.category}</div>
                                             <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getUrgencyClass(item.urgency)}`}>
@@ -189,7 +209,7 @@ const PhaseGroup: React.FC<{
                                 </div>
                             </div>
                             
-                            {!isSedation && (
+                            {!isAddOn && (
                                 <div className="text-sm text-gray-500 mt-2 font-medium flex flex-wrap items-center gap-3">
                                     <span className="bg-gray-100 px-2 py-0.5 rounded text-xs text-gray-600">{renderLocation(item)}</span>
                                     <span className="flex items-center gap-1 text-gray-400 text-xs"><Calendar size={12} /> {estimateVisits(item)} visit(s)</span>
@@ -245,25 +265,25 @@ const PhaseGroup: React.FC<{
             {/* Cards Grid with Hierarchy */}
             <div className="flex flex-col gap-4">
                 {procedures.map(item => {
-                    // Find sedation linked to this procedure
-                    const linkedSedations = sedations.filter(s => s.linkedItemIds && s.linkedItemIds[0] === item.id);
+                    // Find add-ons linked to this procedure
+                    const linkedAddOns = addOns.filter(s => s.linkedItemIds && s.linkedItemIds[0] === item.id);
 
                     return (
                         <div key={item.id} className="flex flex-col gap-2">
                             {/* Primary Procedure */}
                             {renderCard(item, false)}
 
-                            {/* Nested Sedation Items */}
-                            {linkedSedations.length > 0 && (
+                            {/* Nested Add-On Items */}
+                            {linkedAddOns.length > 0 && (
                                 <div className="flex flex-col gap-2 pl-6 md:pl-8 relative">
                                     {/* Vertical Connector Line */}
                                     <div className="absolute left-3 md:left-4 top-[-8px] bottom-6 w-px bg-gray-300/40"></div>
                                     
-                                    {linkedSedations.map(sed => (
-                                        <div key={sed.id} className="relative">
+                                    {linkedAddOns.map(addon => (
+                                        <div key={addon.id} className="relative">
                                             {/* Horizontal Connector */}
                                             <div className="absolute left-[-12px] md:left-[-16px] top-[24px] w-[12px] md:w-[16px] border-b border-gray-300/40 h-px"></div>
-                                            {renderCard(sed, true, item.procedureName)}
+                                            {renderCard(addon, true, item.procedureName)}
                                         </div>
                                     ))}
                                 </div>
@@ -272,10 +292,10 @@ const PhaseGroup: React.FC<{
                     );
                 })}
                 
-                {/* Fallback for orphaned sedations (though theoretically forbidden) */}
-                {sedations.filter(s => !s.linkedItemIds || s.linkedItemIds.length === 0 || !procedures.some(p => p.id === s.linkedItemIds![0])).map(sed => (
-                     <div key={sed.id} className="opacity-75">
-                         {renderCard(sed, true, 'Unknown Procedure')}
+                {/* Fallback for orphaned add-ons */}
+                {addOns.filter(s => !s.linkedItemIds || s.linkedItemIds.length === 0 || !procedures.some(p => p.id === s.linkedItemIds![0])).map(addon => (
+                     <div key={addon.id} className="opacity-75">
+                         {renderCard(addon, true, 'Unknown Procedure')}
                      </div>
                 ))}
             </div>

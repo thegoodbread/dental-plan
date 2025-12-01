@@ -28,15 +28,28 @@ export type FeeCategory =
   | 'PROSTHETIC'
   | 'ORTHO'
   | 'COSMETIC'
-  | 'OTHER';
+  | 'OTHER'
+  | 'SURGICAL'; // Added SURGICAL for grafts etc
 
 export type UrgencyLevel = 'URGENT' | 'SOON' | 'ELECTIVE';
 export type InsuranceMode = 'simple' | 'advanced';
 export type FeeScheduleType = 'standard' | 'membership';
 export type PhaseBucketKey = 'FOUNDATION' | 'RESTORATIVE' | 'IMPLANT' | 'ELECTIVE' | 'OTHER';
 
-export type ItemType = 'PROCEDURE' | 'SEDATION';
+export type ItemType = 'PROCEDURE' | 'ADDON'; 
 
+export type AddOnKind =
+  | 'SEDATION'
+  | 'BONE_GRAFT'
+  | 'MEMBRANE'
+  | 'PRF'
+  | 'TEMP_CROWN'
+  | 'CORE_BUILDUP'
+  | 'PULP_CAP'
+  | 'MEDICATION'
+  | 'OCCLUSAL_ADJUSTMENT'
+  | 'FOLLOWUP'
+  | 'OTHER';
 
 // Entities
 
@@ -76,16 +89,19 @@ export interface TreatmentPhase {
 export interface TreatmentPlanItem {
   id: string;
   treatmentPlanId: string;
-  feeScheduleEntryId: string; // For sedation, this might be a placeholder ID or null if custom
+  feeScheduleEntryId: string; // For add-ons, this might be a placeholder ID or null if custom
   procedureCode: string;
   procedureName: string;
   unitType: FeeUnitType;
   category: FeeCategory;
   
-  // New Fields for Sedation Support
+  // New Fields for Add-On Support
   itemType: ItemType;
-  linkedItemIds?: string[]; // IDs of procedures this sedation applies to
-  sedationType?: string; 
+  linkedItemIds?: string[]; // IDs of procedures this add-on applies to
+  
+  // Specific Add-On Data
+  addOnKind?: AddOnKind;
+  sedationType?: string; // Legacy field, kept for backward compat
 
   // Selection details
   selectedTeeth?: number[] | null;

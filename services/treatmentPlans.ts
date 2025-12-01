@@ -1,3 +1,4 @@
+
 import { 
   TreatmentPlan, 
   TreatmentPlanItem, 
@@ -10,7 +11,8 @@ import {
   FeeScheduleType,
   TreatmentPhase,
   FeeCategory,
-  PhaseBucketKey
+  PhaseBucketKey,
+  AddOnKind
 } from '../types';
 import { DEMO_PLANS, DEMO_ITEMS, DEMO_SHARES } from '../mock/seedPlans';
 import { estimateDuration } from './clinicalLogic';
@@ -32,6 +34,55 @@ export const SEDATION_TYPES = [
     { label: 'IV Deep Sedation', defaultFee: 950, membershipFee: 750 },
     { label: 'General Anesthesia', defaultFee: 1500, membershipFee: 1200 },
 ];
+
+// --- ADD-ON LIBRARY & COMPATIBILITY ---
+
+export interface AddOnDefinition {
+  kind: AddOnKind;
+  label: string;
+  defaultFee: number;
+  membershipFee?: number;
+  defaultCode: string;
+  category: FeeCategory;
+  description?: string;
+}
+
+export const ADD_ON_LIBRARY: AddOnDefinition[] = [
+  // Sedation
+  { kind: 'SEDATION', label: 'Nitrous Oxide', defaultFee: 150, membershipFee: 100, defaultCode: 'D9230', category: 'OTHER' },
+  { kind: 'SEDATION', label: 'IV Moderate Sedation', defaultFee: 650, membershipFee: 500, defaultCode: 'D9243', category: 'OTHER' },
+  // Surgical
+  { kind: 'BONE_GRAFT', label: 'Bone Graft – Particulate', defaultFee: 450, membershipFee: 395, defaultCode: 'D7953', category: 'SURGICAL', description: 'Regenerates bone' },
+  { kind: 'MEMBRANE', label: 'Barrier Membrane', defaultFee: 350, membershipFee: 295, defaultCode: 'D4266', category: 'SURGICAL', description: 'Protects graft site' },
+  { kind: 'PRF', label: 'PRF (Growth Factors)', defaultFee: 250, membershipFee: 195, defaultCode: 'D9999', category: 'SURGICAL', description: 'Accelerates healing' },
+  // Restorative
+  { kind: 'TEMP_CROWN', label: 'Provisional Crown', defaultFee: 250, membershipFee: 150, defaultCode: 'D2799', category: 'RESTORATIVE', description: 'Interim restoration' },
+  { kind: 'CORE_BUILDUP', label: 'Core Buildup', defaultFee: 295, membershipFee: 225, defaultCode: 'D2950', category: 'RESTORATIVE', description: 'Foundation for crown' },
+  { kind: 'PULP_CAP', label: 'Pulp Cap – Direct', defaultFee: 95, membershipFee: 75, defaultCode: 'D3110', category: 'RESTORATIVE', description: 'Protects nerve' },
+  // Other
+  { kind: 'MEDICATION', label: 'Antibiotic Arrestin', defaultFee: 45, membershipFee: 35, defaultCode: 'D4381', category: 'PERIO', description: 'Localized antibiotic' },
+  { kind: 'OCCLUSAL_ADJUSTMENT', label: 'Occlusal Adjustment', defaultFee: 150, membershipFee: 100, defaultCode: 'D9951', category: 'RESTORATIVE', description: 'Bite balancing' },
+];
+
+export const ADDON_COMPATIBILITY_RULES: { addOnKind: AddOnKind; allowedCategories: FeeCategory[] }[] = [
+  { addOnKind: 'SEDATION', allowedCategories: ['IMPLANT', 'SURGICAL', 'PERIO', 'RESTORATIVE', 'ENDODONTIC', 'OTHER'] },
+  { addOnKind: 'BONE_GRAFT', allowedCategories: ['IMPLANT', 'SURGICAL', 'PERIO', 'OTHER'] },
+  { addOnKind: 'MEMBRANE', allowedCategories: ['IMPLANT', 'SURGICAL', 'PERIO', 'OTHER'] },
+  { addOnKind: 'PRF', allowedCategories: ['IMPLANT', 'SURGICAL', 'PERIO', 'OTHER'] },
+  { addOnKind: 'TEMP_CROWN', allowedCategories: ['RESTORATIVE', 'IMPLANT', 'PROSTHETIC'] },
+  { addOnKind: 'CORE_BUILDUP', allowedCategories: ['RESTORATIVE', 'ENDODONTIC'] },
+  { addOnKind: 'PULP_CAP', allowedCategories: ['RESTORATIVE'] },
+  { addOnKind: 'MEDICATION', allowedCategories: ['PERIO', 'IMPLANT', 'ENDODONTIC', 'SURGICAL'] },
+  { addOnKind: 'OCCLUSAL_ADJUSTMENT', allowedCategories: ['RESTORATIVE', 'IMPLANT', 'PROSTHETIC'] },
+  { addOnKind: 'FOLLOWUP', allowedCategories: ['IMPLANT', 'SURGICAL', 'RESTORATIVE', 'PERIO', 'ORTHO'] },
+];
+
+export const checkAddOnCompatibility = (addOnKind: AddOnKind, procedureCategory: FeeCategory): boolean => {
+    const rule = ADDON_COMPATIBILITY_RULES.find(r => r.addOnKind === addOnKind);
+    if (!rule) return true; // Default allow if no strict rule
+    return rule.allowedCategories.includes(procedureCategory);
+};
+
 
 /**
  * Checks if any item in a list has detailed, non-null financial fields.
@@ -215,6 +266,7 @@ function getBucketKeyForCategory(category?: FeeCategory): PhaseBucketKey {
         case 'PROSTHETIC':
             return "RESTORATIVE";
         case 'IMPLANT':
+        case 'SURGICAL':
             return "IMPLANT";
         case 'COSMETIC':
         case 'ORTHO':
@@ -229,7 +281,7 @@ function getBucketKeyForCategory(category?: FeeCategory): PhaseBucketKey {
 const phaseConfig: { bucketKey: PhaseBucketKey, title: string, description: string, categories: FeeCategory[] }[] = [
   { bucketKey: "FOUNDATION",  title: "Foundation & Diagnostics", description: "Control infection and stabilize gums.", categories: ['DIAGNOSTIC', 'PERIO', 'PREVENTIVE'] },
   { bucketKey: "RESTORATIVE", title: "Restorative",                description: "Repair damaged teeth and restore function.", categories: ['RESTORATIVE', 'ENDODONTIC', 'PROSTHETIC'] },
-  { bucketKey: "IMPLANT",     title: "Implant & Surgical",         description: "Placement and restoration of dental implants.", categories: ['IMPLANT'] },
+  { bucketKey: "IMPLANT",     title: "Implant & Surgical",         description: "Placement and restoration of dental implants.", categories: ['IMPLANT', 'SURGICAL'] },
   { bucketKey: "ELECTIVE",    title: "Elective / Cosmetic",        description: "Enhancements for your smile.", categories: ['COSMETIC', 'ORTHO'] },
   { bucketKey: "OTHER",       title: "Additional Treatment",       description: "Other recommended procedures.", categories: ['OTHER'] },
 ];
@@ -371,8 +423,27 @@ export function loadTreatmentPlanWithItems(
 
     // Default itemType if missing (Migration)
     if (!item.itemType) {
-        item.itemType = 'PROCEDURE';
-        item.linkedItemIds = [];
+        // Legacy sedation items
+        if (item.category === 'OTHER' && (item.procedureName?.includes('Sedation') || item.procedureCode?.startsWith('D92'))) {
+           item.itemType = 'ADDON';
+           item.addOnKind = 'SEDATION';
+           // If we can infer link, great, otherwise keep generic
+           item.linkedItemIds = item.linkedItemIds || [];
+        } else {
+           item.itemType = 'PROCEDURE';
+           item.linkedItemIds = [];
+        }
+        itemsNeedSave = true;
+    }
+    
+    // Ensure AddOnKind exists if itemType is ADDON
+    if (item.itemType === 'ADDON' && !item.addOnKind) {
+        // Fallback for migrated sedation
+        if (item.sedationType || item.procedureName.includes('Sedation')) {
+            item.addOnKind = 'SEDATION';
+        } else {
+            item.addOnKind = 'OTHER';
+        }
         itemsNeedSave = true;
     }
 
@@ -516,10 +587,16 @@ export const recalculatePlanTotalsAndSave = (planId: string): TreatmentPlan | un
     const feeMap = new Map(feeSchedule.map(f => [f.id, f]));
     
     const standardTotalFee = items.reduce((total, item) => {
-      // If it's a sedation item with custom fee, try to look up standard fee
-      if (item.itemType === 'SEDATION') {
-          const sedDef = SEDATION_TYPES.find(d => d.label === item.sedationType);
+      // If it's an add-on item with custom fee (or definition), try to look up standard fee
+      if (item.itemType === 'ADDON') {
+          const addOnDef = ADD_ON_LIBRARY.find(d => d.kind === item.addOnKind && d.label === item.procedureName.replace(`${d.kind === 'SEDATION' ? 'Sedation – ' : ''}`, ''));
+          // For generic matches or renamed items, we might fall back to looking at addOnKind + known price lists
+          // For now, simpler check:
+          const sedDef = SEDATION_TYPES.find(d => d.label === item.sedationType); 
           if (sedDef) return total + sedDef.defaultFee;
+          
+          if (addOnDef) return total + addOnDef.defaultFee;
+          
           return total + item.netFee;
       }
 
@@ -574,11 +651,16 @@ export const repriceAllItemsForPlan = (planId: string): TreatmentPlan | undefine
   
   const updatedItems = allItems.map(item => {
     if (item.treatmentPlanId === planId) {
-      if (item.itemType === 'SEDATION') {
-          const sedDef = SEDATION_TYPES.find(d => d.label === item.sedationType);
-          if (sedDef) {
-             // For repricing sedation, we use standard vs membership logic
-             const newBaseFee = plan.feeScheduleType === 'membership' ? (sedDef.membershipFee ?? sedDef.defaultFee) : sedDef.defaultFee;
+      if (item.itemType === 'ADDON') {
+          // Try to find definition
+          let def = ADD_ON_LIBRARY.find(d => d.kind === item.addOnKind && d.label === item.procedureName.replace('Sedation – ', ''));
+          if (!def && item.sedationType) {
+             const sedDef = SEDATION_TYPES.find(s => s.label === item.sedationType);
+             if (sedDef) def = { ...sedDef, kind: 'SEDATION', category: 'OTHER', defaultCode: 'D92XX', label: sedDef.label };
+          }
+
+          if (def) {
+             const newBaseFee = plan.feeScheduleType === 'membership' ? (def.membershipFee ?? def.defaultFee) : def.defaultFee;
              const grossFee = newBaseFee * item.units;
              const netFee = Math.max(0, grossFee - (item.discount || 0));
              return { ...item, baseFee: newBaseFee, grossFee, netFee };
@@ -668,9 +750,14 @@ export const savePlanAndItems = (planToSave: TreatmentPlan, itemsForPlan: Treatm
     const feeSchedule = getFeeSchedule();
     const feeMap = new Map(feeSchedule.map(f => [f.id, f]));
     const standardTotalFee = itemsForPlan.reduce((total, item) => {
-      if (item.itemType === 'SEDATION') {
+      if (item.itemType === 'ADDON') {
+          // simplified lookup logic for save aggregation
           const sedDef = SEDATION_TYPES.find(d => d.label === item.sedationType);
           if (sedDef) return total + sedDef.defaultFee;
+          
+          const def = ADD_ON_LIBRARY.find(d => d.kind === item.addOnKind && d.label === item.procedureName);
+          if (def) return total + def.defaultFee;
+          
           return total + item.netFee;
       }
       
@@ -822,48 +909,45 @@ export const createTreatmentPlanItem = (
   return computedItem;
 };
 
-// NEW: Explicit Sedation Creation
-export const createSedationItem = (
+// NEW: Explicit Add-On Creation (Replacing specific sedation creator)
+export const createAddOnItem = (
   planId: string,
   data: {
-      sedationType: string;
+      addOnKind: AddOnKind;
+      label?: string; // override name
       appliesToItemIds: string[];
       fee: number;
       phaseId: string;
+      code?: string; // D-code
+      category?: FeeCategory;
   }
 ): TreatmentPlanItem => {
   const planResult = loadTreatmentPlanWithItems(planId);
   if (!planResult) throw new Error("Plan not found");
   const { plan, items } = planResult;
 
-  // Determine the correct fee to apply, respecting plan type if possible
-  // Use passed fee as default, but verify against schedule if appropriate
   let appliedFee = data.fee;
   
-  // If we want to strictly enforce schedule pricing on creation (optional, but good for consistency)
-  // we could do this:
-  const sedDef = SEDATION_TYPES.find(d => d.label === data.sedationType);
-  if (sedDef) {
-      if (plan.feeScheduleType === 'membership') {
-          // If the user passed the DEFAULT fee (not overridden), use membership fee
-          // A simple heuristic is: if data.fee equals standard default, switch to member fee.
-          if (data.fee === sedDef.defaultFee && sedDef.membershipFee) {
-              appliedFee = sedDef.membershipFee;
-          }
+  // Verify fee against schedule/library if appropriate
+  if (plan.feeScheduleType === 'membership') {
+      const def = ADD_ON_LIBRARY.find(d => d.kind === data.addOnKind && d.label === data.label);
+      if (def && def.defaultFee === data.fee && def.membershipFee) {
+          appliedFee = def.membershipFee;
       }
   }
 
   const newItem: TreatmentPlanItem = {
       id: generateId(),
       treatmentPlanId: planId,
-      feeScheduleEntryId: 'sedation-custom',
-      procedureCode: 'D92XX',
-      procedureName: `Sedation – ${data.sedationType}`,
+      feeScheduleEntryId: 'addon-custom',
+      procedureCode: data.code || 'DXXXX',
+      procedureName: data.label || (data.addOnKind === 'SEDATION' ? `Sedation` : 'Add-On'),
       unitType: 'PER_PROCEDURE',
-      category: 'OTHER',
-      itemType: 'SEDATION',
+      category: data.category || 'OTHER',
+      itemType: 'ADDON',
       linkedItemIds: data.appliesToItemIds,
-      sedationType: data.sedationType,
+      addOnKind: data.addOnKind,
+      sedationType: data.addOnKind === 'SEDATION' ? data.label : undefined, // Backward compat
       phaseId: data.phaseId,
       sortOrder: (items.length > 0 ? Math.max(...items.map(i => i.sortOrder)) : 0) + 1,
       estimatedDurationValue: 0,
@@ -879,8 +963,6 @@ export const createSedationItem = (
   const phaseInPlan = plan.phases?.find(p => p.id === data.phaseId);
   if (phaseInPlan) {
       phaseInPlan.itemIds.push(newItem.id);
-  } else {
-      console.warn("Could not find phase for sedation item:", data.phaseId);
   }
 
   const allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
@@ -892,6 +974,19 @@ export const createSedationItem = (
   recalculatePlanTotalsAndSave(planId);
   
   return newItem;
+};
+
+// Backward compat wrapper
+export const createSedationItem = (planId: string, data: { sedationType: string, appliesToItemIds: string[], fee: number, phaseId: string }): TreatmentPlanItem => {
+    return createAddOnItem(planId, {
+        addOnKind: 'SEDATION',
+        label: data.sedationType,
+        appliesToItemIds: data.appliesToItemIds,
+        fee: data.fee,
+        phaseId: data.phaseId,
+        category: 'OTHER',
+        code: 'D92XX'
+    });
 };
 
 export const updateTreatmentPlanItem = (id: string, updates: Partial<TreatmentPlanItem>): { plan: TreatmentPlan, items: TreatmentPlanItem[] } | undefined => {
@@ -909,8 +1004,8 @@ export const updateTreatmentPlanItem = (id: string, updates: Partial<TreatmentPl
   
   let finalItemState = { ...currentItem, ...updates };
 
-  // Re-pricing logic only for procedures, unless sedation fee is manually updated
-  if (currentItem.itemType !== 'SEDATION' && updates.baseFee === undefined) {
+  // Re-pricing logic only for procedures, unless add-on fee is manually updated
+  if (currentItem.itemType !== 'ADDON' && updates.baseFee === undefined) {
      const feeSchedule = getFeeSchedule();
      const feeEntry = feeSchedule.find(f => f.id === currentItem.feeScheduleEntryId);
      if (feeEntry) {
@@ -918,20 +1013,20 @@ export const updateTreatmentPlanItem = (id: string, updates: Partial<TreatmentPl
          const repricedPart = computeItemPricing(finalItemState, feeEntry);
          finalItemState = { ...finalItemState, ...repricedPart };
      }
-  } else if (currentItem.itemType !== 'SEDATION' && updates.baseFee !== undefined) {
+  } else if (currentItem.itemType !== 'ADDON' && updates.baseFee !== undefined) {
        // Manual fee override on procedure
        const feeSchedule = getFeeSchedule();
        const feeEntry = feeSchedule.find(f => f.id === currentItem.feeScheduleEntryId);
        const repricedPart = computeItemPricing(finalItemState, feeEntry);
        finalItemState = { ...finalItemState, ...repricedPart };
-  } else if (currentItem.itemType === 'SEDATION') {
-      // Logic for sedation updates
-      // If updating sedation type, we might want to refresh fee
-      if (updates.sedationType) {
+  } else if (currentItem.itemType === 'ADDON') {
+      // Logic for add-on updates (e.g. changing type)
+      if (updates.sedationType && currentItem.addOnKind === 'SEDATION') {
          const def = SEDATION_TYPES.find(d => d.label === updates.sedationType);
          if (def && updates.baseFee === undefined) {
              const newBaseFee = plan.feeScheduleType === 'membership' ? (def.membershipFee ?? def.defaultFee) : def.defaultFee;
              finalItemState.baseFee = newBaseFee;
+             finalItemState.procedureName = `Sedation – ${def.label}`;
          }
       }
 
@@ -966,26 +1061,25 @@ export const deleteTreatmentPlanItem = (itemIdToDelete: string) => {
   let itemsToPersist = allItems.filter(i => i.id !== itemIdToDelete);
   let idsToRemove = [itemIdToDelete];
 
-  // CASCADE DELETE LOGIC FOR SEDATION
-  // If we delete a procedure, we must check for any sedation linked TO it.
-  if (itemToDelete.itemType !== 'SEDATION') {
-      const linkedSedationItems = allItems.filter(i => 
-          i.itemType === 'SEDATION' && i.linkedItemIds?.includes(itemIdToDelete)
+  // CASCADE DELETE LOGIC FOR ADD-ONS
+  if (itemToDelete.itemType !== 'ADDON') {
+      const linkedAddOnItems = allItems.filter(i => 
+          i.itemType === 'ADDON' && i.linkedItemIds?.includes(itemIdToDelete)
       );
 
-      linkedSedationItems.forEach(sed => {
-          if (sed.linkedItemIds && sed.linkedItemIds.length === 1) {
-              // This sedation only applies to the item being deleted. Delete sedation too.
-              itemsToPersist = itemsToPersist.filter(i => i.id !== sed.id);
-              idsToRemove.push(sed.id);
-          } else if (sed.linkedItemIds && sed.linkedItemIds.length > 1) {
-              // This sedation applies to others too. Just unlink this one.
-              const updatedSed = { 
-                  ...sed, 
-                  linkedItemIds: sed.linkedItemIds.filter(id => id !== itemIdToDelete) 
+      linkedAddOnItems.forEach(addon => {
+          if (addon.linkedItemIds && addon.linkedItemIds.length === 1) {
+              // This add-on only applies to the item being deleted. Delete add-on too.
+              itemsToPersist = itemsToPersist.filter(i => i.id !== addon.id);
+              idsToRemove.push(addon.id);
+          } else if (addon.linkedItemIds && addon.linkedItemIds.length > 1) {
+              // This add-on applies to others too. Just unlink this one.
+              const updatedAddOn = { 
+                  ...addon, 
+                  linkedItemIds: addon.linkedItemIds.filter(id => id !== itemIdToDelete) 
               };
               // Update in our working list
-              itemsToPersist = itemsToPersist.map(i => i.id === sed.id ? updatedSed : i);
+              itemsToPersist = itemsToPersist.map(i => i.id === addon.id ? updatedAddOn : i);
           }
       });
   }

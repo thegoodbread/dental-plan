@@ -1,29 +1,23 @@
 
-
-
-
-
-
-
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  ArrowLeft, Share2, Sparkles, CheckCircle, XCircle, 
-  Clock, AlertCircle, Printer, Eye, X, Menu, ClipboardList, Calculator, ChevronsUpDown, ArrowUp, ArrowDown, FolderInput, LayoutGrid
+  ArrowLeft, Share2, CheckCircle, XCircle, 
+  Clock, AlertCircle, Eye, X, ClipboardList, Calculator, FolderInput, LayoutGrid
 } from 'lucide-react';
 import { 
   loadTreatmentPlanWithItems, updateTreatmentPlan, createShareLink,
   createTreatmentPlanItem, updateTreatmentPlanItem, deleteTreatmentPlanItem,
-  getActivityForPlan, clearAllItemInsuranceForPlan, savePlanAndItems
+  savePlanAndItems
 } from '../services/treatmentPlans';
-import { explainPlanForPatient } from '../services/geminiExplainPlan';
-import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, TreatmentPlanStatus, InsuranceMode, FeeScheduleType, TreatmentPhase } from '../types';
+import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, TreatmentPlanStatus, InsuranceMode, FeeScheduleType, AddOnKind } from '../types';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { TreatmentPlanItemsTable } from '../components/TreatmentPlanItemsTable';
 import { PremiumPatientLayout } from '../components/patient/PremiumPatientLayout';
 import { FinancialsTable } from '../components/FinancialsTable';
 import { NumberPadModal } from '../components/NumberPadModal';
 import { TreatmentPlanBoardModal } from '../components/board/TreatmentPlanBoardModal';
+import { AddOnsLibraryPanel } from '../components/board/AddOnsLibraryPanel';
 
 type ViewMode = 'CLINICAL' | 'FINANCIAL';
 type SaveStatus = 'IDLE' | 'SAVED';
@@ -52,13 +46,15 @@ export const TreatmentPlanDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [generatingAi, setGeneratingAi] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('CLINICAL');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('IDLE');
   const [modalConfig, setModalConfig] = useState<{ isOpen: boolean; field: ModalField | null; title: string; }>({ isOpen: false, field: null, title: '' });
   const [isBoardOpen, setIsBoardOpen] = useState(false);
-
+  
+  // Lifted state for Add-Ons Library
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [draggingAddOnKind, setDraggingAddOnKind] = useState<AddOnKind | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -230,15 +226,6 @@ export const TreatmentPlanDetailPage: React.FC = () => {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-
-  const handleAiExplanation = async () => {
-    if (!plan || !items) return;
-    setGeneratingAi(true);
-    const explanation = await explainPlanForPatient(plan, items);
-    const updatedPlan = updateTreatmentPlan(plan.id, { explanationForPatient: explanation });
-    setGeneratingAi(false);
-    if(updatedPlan) setPlan(updatedPlan);
-  };
   
   const handleBoardSaveChanges = (updatedPlan: TreatmentPlan, updatedItems: TreatmentPlanItem[]) => {
     const result = savePlanAndItems(updatedPlan, updatedItems);
@@ -321,7 +308,7 @@ export const TreatmentPlanDetailPage: React.FC = () => {
             </div>
         </div>
         
-        <div className="flex-1 flex flex-col lg:flex-row lg:overflow-hidden">
+        <div className="flex-1 flex flex-col lg:flex-row lg:overflow-hidden relative">
             <div className="flex-1 p-4 md:p-5 lg:p-6 lg:overflow-y-auto flex flex-col gap-4 md:gap-6 order-1">
                 {shareUrl && (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex flex-col relative animate-in slide-in-from-top-4">
@@ -347,29 +334,6 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                         </div>
                     </div>
                 )}
-
-                <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                    <div className="flex justify-between items-center mb-3">
-                        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                            <Sparkles size={16} className="text-purple-500" />
-                            Patient Explanation
-                        </h3>
-                        <button 
-                            onClick={handleAiExplanation} 
-                            disabled={generatingAi}
-                            className="text-xs bg-purple-50 text-purple-700 px-3 py-1.5 rounded-lg border border-purple-200 hover:bg-purple-100 transition-colors"
-                        >
-                            {generatingAi ? 'Generating...' : plan.explanationForPatient ? 'Regenerate' : 'Generate with AI'}
-                        </button>
-                    </div>
-                    {plan.explanationForPatient ? (
-                        <p className="text-sm text-gray-600 bg-purple-50/50 p-3 rounded-lg border border-purple-100">
-                            {plan.explanationForPatient}
-                        </p>
-                    ) : (
-                        <p className="text-sm text-gray-400 italic">No explanation generated yet. Click above to create one.</p>
-                    )}
-                </div>
 
                 {/* VIEW MODE TOGGLE */}
                 <div className="bg-gray-100 rounded-lg p-1 flex w-full md:w-auto self-start">
@@ -398,6 +362,10 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                           onAddItem={handleAddItem}
                           onUpdateItem={handleUpdateItem}
                           onDeleteItem={handleDeleteItem}
+                          onRefresh={() => loadData(plan.id)}
+                          isLibraryOpen={isLibraryOpen}
+                          onToggleLibrary={() => setIsLibraryOpen(!isLibraryOpen)}
+                          draggingAddOnKind={draggingAddOnKind}
                       />
                     ) : (
                       <FinancialsTable
@@ -529,6 +497,18 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* AddOns Library Overlay - Sits on top of Right Sidebar */}
+            {isLibraryOpen && (
+                 <div className="absolute top-0 right-0 bottom-0 w-80 bg-white border-l border-gray-200 shadow-2xl z-40 animate-in slide-in-from-right duration-200">
+                      <AddOnsLibraryPanel 
+                          onClose={() => setIsLibraryOpen(false)}
+                          feeScheduleType={plan.feeScheduleType}
+                          onDragStartAddOn={setDraggingAddOnKind}
+                          onDragEndAddOn={() => setDraggingAddOnKind(null)}
+                      />
+                 </div>
+            )}
         </div>
 
         {showPreview && (

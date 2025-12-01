@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { TreatmentPlanItem, FeeScheduleType } from '../types';
 import { X, Check } from 'lucide-react';
@@ -26,7 +27,7 @@ export const SedationManagerModal: React.FC<SedationManagerModalProps> = ({
   const [fee, setFee] = useState(getDefaultFee(SEDATION_TYPES[2].label));
   
   // Filter out existing sedation items from the selection list (can't sedate a sedation)
-  const availableItems = phaseItems.filter(i => i.itemType !== 'SEDATION');
+  const availableItems = phaseItems.filter(i => !(i.itemType === 'ADDON' && i.addOnKind === 'SEDATION'));
   
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>(
     preselectedItemId ? [preselectedItemId] : []

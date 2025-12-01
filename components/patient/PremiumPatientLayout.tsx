@@ -118,7 +118,7 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
         onHoverItem={handleItemHover}
       />
 
-      <WhyItMattersSection items={items} explanation={plan.explanationForPatient} />
+      <WhyItMattersSection items={items} />
 
       <SummaryMetricsSection 
         visitCount={metrics.visitCount}
