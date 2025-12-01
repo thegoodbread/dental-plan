@@ -63,6 +63,59 @@ const formatPhaseDuration = (phase: TreatmentPhase): string | null => {
     return null;
 };
 
+const convertToDays = (value: number | null | undefined, unit: 'days' | 'weeks' | 'months' | null | undefined): number => {
+    if (!value || !unit) return 0;
+    switch(unit) {
+        case 'days': return value;
+        case 'weeks': return value * 7;
+        case 'months': return value * 30.44; // More accurate average
+    }
+    return 0;
+}
+
+const recalculatePhaseDuration = (phase: TreatmentPhase, items: TreatmentPlanItem[]): { estimatedDurationValue: number | null; estimatedDurationUnit: 'days' | 'weeks' | 'months' | null } => {
+    const itemMap = new Map(items.map(i => [i.id, i]));
+    const phaseItems = phase.itemIds.map(id => itemMap.get(id)).filter(Boolean) as TreatmentPlanItem[];
+    if (phaseItems.length === 0) {
+        return { estimatedDurationValue: null, estimatedDurationUnit: null };
+    }
+
+    let totalDays = 0;
+    let hasMonths = false;
+    let hasWeeks = false;
+
+    for (const item of phaseItems) {
+        totalDays += convertToDays(item.estimatedDurationValue, item.estimatedDurationUnit);
+        if (item.estimatedDurationUnit === 'months') hasMonths = true;
+        if (item.estimatedDurationUnit === 'weeks') hasWeeks = true;
+    }
+
+    if (totalDays <= 0) {
+        return { estimatedDurationValue: null, estimatedDurationUnit: null };
+    }
+
+    let finalValue: number;
+    let finalUnit: 'days' | 'weeks' | 'months';
+
+    if (hasMonths) {
+        finalValue = Math.round(totalDays / 30.44);
+        finalUnit = 'months';
+    } else if (hasWeeks) {
+        finalValue = Math.round(totalDays / 7);
+        finalUnit = 'weeks';
+    } else {
+        finalValue = Math.round(totalDays);
+        finalUnit = 'days';
+    }
+
+    if (finalValue < 1 && totalDays > 0) {
+        finalValue = 1;
+    }
+
+    return { estimatedDurationValue: finalValue, estimatedDurationUnit: finalUnit };
+};
+
+
 // --- Sub-components for SaaS UI ---
 
 const IosSwitch = ({ checked, onChange, id }: { checked: boolean, onChange: () => void, id: string }) => (
@@ -287,12 +340,24 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
         phases: prev.phases?.map(p => {
             if (p.id === phaseId) {
                 const isNowMonitor = !p.isMonitorPhase;
-                return {
-                    ...p,
-                    isMonitorPhase: isNowMonitor,
-                    estimatedDurationValue: isNowMonitor ? 2 : null,
-                    estimatedDurationUnit: isNowMonitor ? 'months' : null,
-                };
+                if (isNowMonitor) {
+                    // Toggling ON: Set manual duration
+                    return {
+                        ...p,
+                        isMonitorPhase: true,
+                        estimatedDurationValue: 2, // Default monitor duration
+                        estimatedDurationUnit: 'months',
+                    };
+                } else {
+                    // Toggling OFF: Recalculate from items
+                    const { estimatedDurationValue, estimatedDurationUnit } = recalculatePhaseDuration(p, localItems);
+                    return {
+                        ...p,
+                        isMonitorPhase: false,
+                        estimatedDurationValue,
+                        estimatedDurationUnit,
+                    };
+                }
             }
             return p;
         })
@@ -341,7 +406,7 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setOpenMenuPhaseId(null)} aria-modal="true" role="dialog">
-        <div className="bg-slate-50 w-[95vw] h-[95vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-300" onClick={e => e.stopPropagation()}>
+        <div className="bg-slate-50 w-[95vw] h-[95vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-300">
           <header className="shrink-0 px-5 py-3 border-b bg-white/80 backdrop-blur-sm flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold text-gray-900">Treatment Plan Board</h2>
@@ -383,7 +448,7 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
                             ) : (
                                 <h3 className="font-semibold text-gray-800 truncate text-sm">{`Phase ${index + 1} — ${phase.title}`}</h3>
                             )}
-                            <button onClick={(e) => { e.stopPropagation(); setOpenMenuPhaseId(phase.id === openMenuPhaseId ? null : phase.id); }} className={`p-1 rounded transition-colors ${openMenuPhaseId === phase.id ? 'bg-slate-200 ring-2 ring-blue-400' : 'text-gray-400 hover:text-gray-600 hover:bg-slate-100'}`}><MoreHorizontal size={16}/></button>
+                            <button onClick={(e) => { e.stopPropagation(); setOpenMenuPhaseId(phase.id === openMenuPhaseId ? null : phase.id); }} className={`p-1 rounded transition-colors ${openMenuPhaseId === phase.id ? 'bg-slate-200 text-gray-800 ring-2 ring-blue-400' : 'text-gray-400 hover:text-gray-600 hover:bg-slate-100'}`}><MoreHorizontal size={16}/></button>
                         </div>
                         <div className="flex justify-between items-center text-xs text-gray-500 mt-1">
                           <span>{phaseItems.length} procedure{phaseItems.length !== 1 ? 's' : ''}</span>
