@@ -49,8 +49,11 @@ export interface AddOnDefinition {
 
 export const ADD_ON_LIBRARY: AddOnDefinition[] = [
   // Sedation
-  { kind: 'SEDATION', label: 'Nitrous Oxide', defaultFee: 150, membershipFee: 100, defaultCode: 'D9230', category: 'OTHER' },
-  { kind: 'SEDATION', label: 'IV Moderate Sedation', defaultFee: 650, membershipFee: 500, defaultCode: 'D9243', category: 'OTHER' },
+  { kind: 'SEDATION', label: 'Nitrous Oxide', defaultFee: 150, membershipFee: 100, defaultCode: 'D9230', category: 'OTHER', description: 'Relaxing gas (Laughing gas)' },
+  { kind: 'SEDATION', label: 'Oral Sedation', defaultFee: 350, membershipFee: 250, defaultCode: 'D9248', category: 'OTHER', description: 'Prescription sedative medication' },
+  { kind: 'SEDATION', label: 'IV Moderate Sedation', defaultFee: 650, membershipFee: 500, defaultCode: 'D9243', category: 'OTHER', description: 'Twilight sleep via IV' },
+  { kind: 'SEDATION', label: 'IV Deep Sedation', defaultFee: 950, membershipFee: 750, defaultCode: 'D9223', category: 'OTHER', description: 'Deep sleep via IV' },
+  { kind: 'SEDATION', label: 'General Anesthesia', defaultFee: 1500, membershipFee: 1200, defaultCode: 'D9222', category: 'OTHER', description: 'Complete unconsciousness' },
   // Surgical
   { kind: 'BONE_GRAFT', label: 'Bone Graft – Particulate', defaultFee: 450, membershipFee: 395, defaultCode: 'D7953', category: 'SURGICAL', description: 'Regenerates bone' },
   { kind: 'MEMBRANE', label: 'Barrier Membrane', defaultFee: 350, membershipFee: 295, defaultCode: 'D4266', category: 'SURGICAL', description: 'Protects graft site' },
@@ -287,7 +290,7 @@ const phaseConfig: { bucketKey: PhaseBucketKey, title: string, description: stri
 ];
 
 /**
- * Creates default, clinically-grouped phases for a plan based on its items.
+ * Creates default, clinically-grouped phases for a plan based on items.
  * This is a private helper meant to be called during plan loading for backward compatibility.
  */
 const createDefaultPhasesForPlan = (plan: TreatmentPlan, items: TreatmentPlanItem[]): { planWithPhases: TreatmentPlan, itemsWithPhaseId: TreatmentPlanItem[] } => {

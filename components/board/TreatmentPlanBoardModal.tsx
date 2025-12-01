@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useCallback } from 'react';
-import { TreatmentPlan, TreatmentPlanItem, TreatmentPhase, UrgencyLevel, FeeCategory } from '../../types';
+import { TreatmentPlan, TreatmentPlanItem, TreatmentPhase, UrgencyLevel, FeeCategory, AddOnKind } from '../../types';
 import { Plus, X, MoreHorizontal, Clock, GripVertical, Edit, Trash2, Library } from 'lucide-react';
 import { SEDATION_TYPES, checkAddOnCompatibility, createAddOnItem, ADD_ON_LIBRARY, AddOnDefinition } from '../../services/treatmentPlans';
 import { AddOnsLibraryPanel } from './AddOnsLibraryPanel';
@@ -239,6 +239,7 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
   const [localPlan, setLocalPlan] = useState<TreatmentPlan>(plan);
   const [localItems, setLocalItems] = useState<TreatmentPlanItem[]>(items);
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
+  const [draggingAddOnKind, setDraggingAddOnKind] = useState<AddOnKind | null>(null);
   const [dragOverPhaseId, setDragOverPhaseId] = useState<string | null>(null);
   const [dragOverProcedureId, setDragOverProcedureId] = useState<string | null>(null); // For dropping add-ons onto procedures
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -249,7 +250,6 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
   const [renamingPhaseId, setRenamingPhaseId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
-  
   const selectedItem = useMemo(() => localItems.find(i => i.id === selectedItemId) || null, [localItems, selectedItemId]);
   const closeEditor = useCallback(() => setSelectedItemId(null), []);
 
@@ -265,16 +265,22 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
     return { phases: sortedPhases, itemsByPhase: itemsByPhaseMap };
   }, [localPlan.phases, localItems]);
 
+  const handleGlobalDragEnd = () => {
+    setDraggingItemId(null);
+    setDraggingAddOnKind(null);
+    setDragOverPhaseId(null);
+    setDragOverProcedureId(null);
+  };
+
   const handleDragStart = (e: React.DragEvent, itemId: string) => { 
     e.dataTransfer.effectAllowed = 'move'; 
     e.dataTransfer.setData('text/plain', itemId); 
     setDraggingItemId(itemId); 
   };
-  const handleDragEnd = () => { setDraggingItemId(null); setDragOverPhaseId(null); setDragOverProcedureId(null); };
   
   // Phase Drag Handlers
   const handlePhaseDragOver = (e: React.DragEvent, phaseId: string) => { 
-      // Only allow procedure drag over phases
+      // Only allow procedure drag over phases (not add-ons from library)
       if (draggingItemId) {
         e.preventDefault(); 
         setDragOverPhaseId(phaseId);
@@ -283,19 +289,39 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
   
   // Procedure Drag Handlers (For incoming Add-ons)
   const handleProcedureDragOver = (e: React.DragEvent, procedure: TreatmentPlanItem) => {
-      // Check if we are dragging a template from library
+      // 1. Check state-based tracking first (Library Drag)
+      if (draggingAddOnKind) {
+          if (checkAddOnCompatibility(draggingAddOnKind, procedure.category)) {
+              e.preventDefault();
+              e.stopPropagation();
+              setDragOverProcedureId(procedure.id);
+          }
+          return;
+      }
+      
+      // 2. Fallback for template checks (Safety)
       const isTemplate = e.dataTransfer.types.includes('application/json');
       if (isTemplate) {
+          // If we somehow don't have state but it's JSON, allow it but we rely on check above mainly
           e.preventDefault();
-          e.stopPropagation(); // Don't bubble to phase
+          e.stopPropagation();
           setDragOverProcedureId(procedure.id);
+      }
+  };
+  
+  const handleProcedureDragLeave = (e: React.DragEvent, procedure: TreatmentPlanItem) => {
+      // Prevent flickering when entering child elements (labels, prices)
+      if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+      
+      if (dragOverProcedureId === procedure.id) {
+          setDragOverProcedureId(null);
       }
   };
   
   const handleDropOnPhase = (e: React.DragEvent, phaseId: string) => {
     e.preventDefault(); e.stopPropagation();
     const draggedId = e.dataTransfer.getData('text/plain');
-    if (!draggedId) { handleDragEnd(); return; }
+    if (!draggedId) { handleGlobalDragEnd(); return; }
 
     // Existing move logic for items between phases...
     // 1. Identify all items to move (Parent + Linked Add-ons)
@@ -326,13 +352,13 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
         return item;
     }));
     
-    handleDragEnd();
+    handleGlobalDragEnd();
   };
 
   const handleDropOnProcedure = (e: React.DragEvent, targetProcedure: TreatmentPlanItem) => {
       e.preventDefault(); e.stopPropagation();
       const rawData = e.dataTransfer.getData('application/json');
-      if (!rawData) return handleDragEnd();
+      if (!rawData) return handleGlobalDragEnd();
 
       try {
           const data = JSON.parse(rawData);
@@ -342,7 +368,7 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
               // Check Compatibility
               if (!checkAddOnCompatibility(definition.kind, targetProcedure.category)) {
                   alert(`Cannot attach ${definition.label} to this procedure type.`);
-                  handleDragEnd();
+                  handleGlobalDragEnd();
                   return;
               }
 
@@ -370,7 +396,7 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
       } catch (err) {
           console.error("Drop error", err);
       }
-      handleDragEnd();
+      handleGlobalDragEnd();
   };
 
   const handleUpdateItem = (updatedItem: TreatmentPlanItem) => {
@@ -653,18 +679,42 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
                             {procedureItems.map(item => {
                                 // Find attached add-ons for this item
                                 const linkedAddOns = addOnItems.filter(s => s.linkedItemIds && s.linkedItemIds[0] === item.id);
+                                
+                                const isCompatibleTarget = draggingAddOnKind ? checkAddOnCompatibility(draggingAddOnKind, item.category) : false;
                                 const isTargeted = dragOverProcedureId === item.id;
                                 
+                                let cardClass = `p-2 rounded-md border bg-white shadow-sm cursor-pointer transition-all border-l-4 ${getCategoryClass(item.category)}`;
+                                
+                                if (draggingAddOnKind) {
+                                   if (isCompatibleTarget) {
+                                       cardClass += " ring-2 ring-blue-200 bg-blue-50/30"; // Soft glow for compatible
+                                       if (isTargeted) {
+                                            cardClass += " ring-2 ring-blue-600 bg-blue-100 shadow-xl scale-[1.02]";
+                                       }
+                                   } else {
+                                       cardClass += " opacity-30 grayscale"; // Dim incompatible
+                                   }
+                                } else if (draggingItemId === item.id) {
+                                    cardClass += " opacity-30";
+                                } else {
+                                    cardClass += " hover:shadow-lg hover:border-slate-300 active:cursor-grabbing";
+                                    if (isTargeted) { 
+                                         // For internal DnD if implemented or generic template
+                                         cardClass += " ring-2 ring-blue-500 border-blue-500 shadow-xl";
+                                    }
+                                }
+
                                 return (
                                     <React.Fragment key={item.id}>
                                         <div 
                                             draggable 
                                             onClick={() => setSelectedItemId(item.id)} 
                                             onDragStart={e => handleDragStart(e, item.id)} 
-                                            onDragEnd={handleDragEnd} 
+                                            onDragEnd={handleGlobalDragEnd} 
                                             onDragOver={e => handleProcedureDragOver(e, item)}
+                                            onDragLeave={e => handleProcedureDragLeave(e, item)}
                                             onDrop={e => handleDropOnProcedure(e, item)}
-                                            className={`p-2 rounded-md border bg-white shadow-sm cursor-pointer hover:shadow-lg hover:border-slate-300 transition-all active:cursor-grabbing border-l-4 ${getCategoryClass(item.category)} ${draggingItemId === item.id ? 'opacity-30' : ''} ${isTargeted ? 'ring-2 ring-blue-500 border-blue-500 shadow-xl' : ''}`}
+                                            className={cardClass}
                                         >
                                             <div className="flex justify-between items-start">
                                                 <p className="text-xs font-semibold text-gray-800 leading-snug flex-1">{item.procedureName}</p>
@@ -729,6 +779,8 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
                  <AddOnsLibraryPanel 
                     onClose={() => setIsLibraryOpen(false)}
                     feeScheduleType={localPlan.feeScheduleType}
+                    onDragStartAddOn={setDraggingAddOnKind}
+                    onDragEndAddOn={handleGlobalDragEnd}
                  />
              )}
           </div>

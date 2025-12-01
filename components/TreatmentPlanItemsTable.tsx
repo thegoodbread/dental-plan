@@ -99,6 +99,18 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
       }
   };
 
+  const handleDragLeaveRow = (e: React.DragEvent, item: TreatmentPlanItem) => {
+      // e.relatedTarget is the element being entered. 
+      // If we are entering a child element of the current row (e.currentTarget), ignore.
+      if (e.currentTarget.contains(e.relatedTarget as Node)) {
+          return;
+      }
+      
+      if (dragOverItemId === item.id) {
+          setDragOverItemId(null);
+      }
+  };
+
   const handleDropOnRow = (e: React.DragEvent, targetItem: TreatmentPlanItem) => {
       e.preventDefault();
       e.stopPropagation();
@@ -190,6 +202,7 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
                             onAddSedation={handleAddSedationClick} 
                             isDragOver={dragOverItemId === item.id}
                             onDragOver={(e) => handleDragOverRow(e, item)}
+                            onDragLeave={(e) => handleDragLeaveRow(e, item)}
                             onDrop={(e) => handleDropOnRow(e, item)}
                             isCompatibleDropTarget={isCompatible}
                         />

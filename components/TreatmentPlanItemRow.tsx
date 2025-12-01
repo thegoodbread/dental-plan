@@ -27,6 +27,7 @@ interface TreatmentPlanItemRowProps {
   onAddSedation?: (parentItemId: string) => void;
   // Drag & Drop
   onDragOver?: (e: React.DragEvent, item: TreatmentPlanItem) => void;
+  onDragLeave?: (e: React.DragEvent, item: TreatmentPlanItem) => void;
   onDrop?: (e: React.DragEvent, item: TreatmentPlanItem) => void;
   isDragOver?: boolean;
   isCompatibleDropTarget?: boolean;
@@ -35,7 +36,7 @@ interface TreatmentPlanItemRowProps {
 export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ 
     item, onUpdate, onDelete, 
     isAddOn = false, linkedItemNames = [], onAddSedation,
-    onDragOver, onDrop, isDragOver, isCompatibleDropTarget
+    onDragOver, onDragLeave, onDrop, isDragOver, isCompatibleDropTarget
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
@@ -200,6 +201,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
     <>
       <tr 
         onDragOver={isAddOn ? undefined : (e) => onDragOver?.(e, item)}
+        onDragLeave={isAddOn ? undefined : (e) => onDragLeave?.(e, item)}
         onDrop={isAddOn ? undefined : (e) => onDrop?.(e, item)}
         className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 group transition-all ${rowBackground}`}
       >
