@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useMemo } from 'react';
 import { TEETH_UPPER, TEETH_LOWER, DiagramData, mapPlanToDiagram, getItemsOnTooth, getToothQuadrant, getItemsOnArch, getItemsOnQuadrant } from '../../services/clinicalLogic';
 import { TreatmentPlanItem } from '../../types';
@@ -106,9 +107,9 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
      if (!hoveredTooth && hoveredQuadrant === quad) {
         const urgency = data.quadrantUrgency[quad];
         switch(urgency) {
-            case 'URGENT': return "bg-red-50 border-red-400 border-dashed shadow-inner";
-            case 'SOON': return "bg-orange-50 border-orange-300 border-dashed shadow-inner";
-            case 'ELECTIVE': return "bg-blue-50 border-blue-400 border-dashed shadow-inner";
+            case 'URGENT': return "bg-red-50 border-red-500 border-dashed shadow-inner";
+            case 'SOON': return "bg-orange-50 border-orange-400 border-dashed shadow-inner";
+            case 'ELECTIVE': return "bg-blue-50 border-blue-500 border-dashed shadow-inner";
             default: return "bg-gray-50 border-gray-300 border-dashed shadow-inner";
         }
      }
@@ -117,16 +118,16 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
      if (hoveredItemId) {
         const item = items.find(i => i.id === hoveredItemId);
         if (item && item.unitType === 'PER_QUADRANT' && item.selectedQuadrants?.includes(quad as any)) {
-            return "bg-blue-50 border-blue-300 border-dashed";
+            return "bg-blue-50 border-blue-400 border-dashed";
         }
      }
 
      const urgency = data.quadrantUrgency[quad];
      if (urgency) {
          switch(urgency) {
-             case 'URGENT': return "bg-red-50 border-red-200 border-dashed";
-             case 'SOON': return "bg-orange-50 border-orange-200 border-dashed";
-             case 'ELECTIVE': return "bg-blue-50 border-blue-200 border-dashed";
+             case 'URGENT': return "bg-red-50 border-red-300 border-dashed shadow-sm";
+             case 'SOON': return "bg-orange-50 border-orange-300 border-dashed shadow-sm";
+             case 'ELECTIVE': return "bg-blue-50 border-blue-300 border-dashed shadow-sm";
          }
      }
      

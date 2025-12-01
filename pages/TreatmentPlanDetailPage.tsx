@@ -1,26 +1,30 @@
 
 
 
+
+
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Share2, Sparkles, CheckCircle, XCircle, 
-  Clock, AlertCircle, Printer, Eye, X, Menu, ClipboardList, Calculator, ChevronsUpDown, ArrowUp, ArrowDown, FolderInput
+  Clock, AlertCircle, Printer, Eye, X, Menu, ClipboardList, Calculator, ChevronsUpDown, ArrowUp, ArrowDown, FolderInput, LayoutGrid
 } from 'lucide-react';
 import { 
   loadTreatmentPlanWithItems, updateTreatmentPlan, createShareLink,
   createTreatmentPlanItem, updateTreatmentPlanItem, deleteTreatmentPlanItem,
-  getActivityForPlan, clearAllItemInsuranceForPlan, updatePhase, reorderPhases, assignItemToPhase
+  getActivityForPlan, clearAllItemInsuranceForPlan, updatePhase, reorderPhases, assignItemToPhase, reorderItemsInPhase
 } from '../services/treatmentPlans';
 import { explainPlanForPatient } from '../services/geminiExplainPlan';
 import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, TreatmentPlanStatus, InsuranceMode, FeeScheduleType, TreatmentPhase } from '../types';
-import { StatusBadge } from '../components/StatusBadge';
+import { StatusBadge } from '../components/ui/StatusBadge';
 import { TreatmentPlanItemsTable } from '../components/TreatmentPlanItemsTable';
 import { PremiumPatientLayout } from '../components/patient/PremiumPatientLayout';
 import { FinancialsTable } from '../components/FinancialsTable';
 import { NumberPadModal } from '../components/NumberPadModal';
+import { TreatmentPlanBoardModal } from '../components/board/TreatmentPlanBoardModal';
 
-type ViewMode = 'CLINICAL' | 'FINANCIAL' | 'PHASES';
+type ViewMode = 'CLINICAL' | 'FINANCIAL';
 type SaveStatus = 'IDLE' | 'SAVED';
 type ModalField = 'estBenefit' | 'clinicDiscount';
 
@@ -52,6 +56,7 @@ export const TreatmentPlanDetailPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('CLINICAL');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('IDLE');
   const [modalConfig, setModalConfig] = useState<{ isOpen: boolean; field: ModalField | null; title: string; }>({ isOpen: false, field: null, title: '' });
+  const [isBoardOpen, setIsBoardOpen] = useState(false);
 
 
   useEffect(() => {
@@ -143,12 +148,6 @@ export const TreatmentPlanDetailPage: React.FC = () => {
     if (!plan || plan.insuranceMode === newMode) return;
 
     if (newMode === 'simple') {
-      // SIMPLE MODE:
-      // - Do NOT clear item-level insurance.
-      // - Just tell the plan to use its plan-level estimate.
-      // - Keep whatever estimatedInsurance the plan currently has 
-      //   (the recalc service already set it to the advanced sum).
-      // This makes the toggle non-destructive.
       const updatedPlan = updateTreatmentPlan(plan.id, { 
         insuranceMode: 'simple',
         estimatedInsurance: plan.estimatedInsurance ?? 0,
@@ -160,10 +159,6 @@ export const TreatmentPlanDetailPage: React.FC = () => {
       }
 
     } else {
-      // ADVANCED MODE:
-      // - Do NOT clear anything.
-      // - The plan will now use the (preserved) line-item estimatedInsurance values
-      //   as the source of truth for its totals.
       const updatedPlan = updateTreatmentPlan(plan.id, { insuranceMode: 'advanced' });
 
       if (updatedPlan) {
@@ -184,7 +179,6 @@ export const TreatmentPlanDetailPage: React.FC = () => {
 
   const handleStatusChange = (status: TreatmentPlanStatus) => {
     if (!plan) return;
-    // If clicking the currently active status, revert to DRAFT. Otherwise, set the new status.
     const newStatus = plan.status === status ? 'DRAFT' : status;
     const updatedPlan = updateTreatmentPlan(plan.id, { status: newStatus });
     if (updatedPlan) {
@@ -202,9 +196,6 @@ export const TreatmentPlanDetailPage: React.FC = () => {
 
   const handleUpdateItem = (itemId: string, updates: Partial<TreatmentPlanItem>) => {
     if (!plan) return;
-    
-    // Use the updated service that returns the new state directly.
-    // This avoids a full `loadData()` call and preserves UI state like input focus.
     const result = updateTreatmentPlanItem(itemId, updates);
     if (result) {
       setPlan(result.plan);
@@ -218,7 +209,6 @@ export const TreatmentPlanDetailPage: React.FC = () => {
   const handleDeleteItem = (itemId: string) => {
     if (!plan) return;
     deleteTreatmentPlanItem(itemId);
-    // Reload from source of truth after deletion and recalculation.
     loadData(plan.id);
   };
 
@@ -228,7 +218,7 @@ export const TreatmentPlanDetailPage: React.FC = () => {
     const baseUrl = window.location.href.split('#')[0]; 
     const url = `${baseUrl}#/p/${link.token}`;
     setShareUrl(url);
-    setCopied(false); // Reset copy status
+    setCopied(false);
     const updatedPlan = updateTreatmentPlan(plan.id, { status: 'PRESENTED', presentedAt: new Date().toISOString() });
     if (updatedPlan) setPlan(updatedPlan);
   };
@@ -249,40 +239,20 @@ export const TreatmentPlanDetailPage: React.FC = () => {
     if(updatedPlan) setPlan(updatedPlan);
   };
   
-  // --- PHASE HANDLERS ---
-  const handleUpdatePhase = (phaseId: string, updates: Partial<TreatmentPhase>) => {
-    if (!plan) return;
-    const result = updatePhase(plan.id, phaseId, updates);
-    if (result) {
-      setPlan(result.plan);
-    }
-  };
-  
-  const handleReorderPhases = (phaseId: string, direction: 'up' | 'down') => {
-    if (!plan || !plan.phases) return;
-    const currentIndex = plan.phases.findIndex(p => p.id === phaseId);
-    if (currentIndex === -1) return;
-    
-    const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-    if (newIndex < 0 || newIndex >= plan.phases.length) return;
-
-    const newPhases = [...plan.phases];
-    const [movedPhase] = newPhases.splice(currentIndex, 1);
-    newPhases.splice(newIndex, 0, movedPhase);
-
-    const orderedIds = newPhases.map(p => p.id);
-    const result = reorderPhases(plan.id, orderedIds);
-    if (result) {
-      setPlan(result.plan);
-    }
-  };
-
-  const handleAssignItemToPhase = (itemId: string, newPhaseId: string) => {
-    if (!plan) return;
-    const result = assignItemToPhase(plan.id, itemId, newPhaseId);
+  // --- BOARD HANDLERS ---
+  const handleAssignItemToPhase = (planId: string, itemId: string, newPhaseId: string) => {
+    const result = assignItemToPhase(planId, itemId, newPhaseId);
     if (result) {
       setPlan(result.plan);
       setItems(result.items);
+    }
+  };
+
+  const handleReorderItemsInPhase = (planId: string, phaseId: string, orderedItemIds: string[]) => {
+    const result = reorderItemsInPhase(planId, phaseId, orderedItemIds);
+    if (result) {
+        setPlan(result.plan);
+        setItems(result.items);
     }
   };
 
@@ -422,9 +392,9 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                         <Calculator size={14} /> Financials
                     </button>
                     <button 
-                        onClick={() => setViewMode('PHASES')}
-                        className={`flex-1 flex items-center justify-center gap-2 text-xs md:text-sm font-bold px-3 py-1.5 rounded-md transition-colors ${viewMode === 'PHASES' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>
-                        <ChevronsUpDown size={14} /> Phases
+                        onClick={() => setIsBoardOpen(true)}
+                        className={`flex-1 flex items-center justify-center gap-2 text-xs md:text-sm font-bold px-3 py-1.5 rounded-md transition-colors text-gray-500 hover:text-gray-800`}>
+                        <LayoutGrid size={14} /> Board
                     </button>
                 </div>
 
@@ -437,21 +407,13 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                           onUpdateItem={handleUpdateItem}
                           onDeleteItem={handleDeleteItem}
                       />
-                    ) : viewMode === 'FINANCIAL' ? (
+                    ) : (
                       <FinancialsTable
                           plan={plan}
                           items={items}
                           onUpdateItem={handleUpdateItem}
                           saveStatus={saveStatus}
                           insuranceMode={plan.insuranceMode}
-                      />
-                    ) : (
-                      <PhasesEditor 
-                        plan={plan} 
-                        items={items}
-                        onUpdatePhase={handleUpdatePhase}
-                        onReorderPhases={handleReorderPhases}
-                        onAssignItemToPhase={handleAssignItemToPhase}
                       />
                     )}
                 </div>
@@ -612,93 +574,17 @@ export const TreatmentPlanDetailPage: React.FC = () => {
             title={modalConfig.title || ''}
             isPercentage={false}
         />
-    </div>
-  );
-};
 
-// --- PHASES EDITOR COMPONENT ---
-
-const PhasesEditor: React.FC<{
-  plan: TreatmentPlan;
-  items: TreatmentPlanItem[];
-  onUpdatePhase: (phaseId: string, updates: Partial<TreatmentPhase>) => void;
-  onReorderPhases: (phaseId: string, direction: 'up' | 'down') => void;
-  onAssignItemToPhase: (itemId: string, newPhaseId: string) => void;
-}> = ({ plan, items, onUpdatePhase, onReorderPhases, onAssignItemToPhase }) => {
-  const itemMap = useMemo(() => new Map(items.map(item => [item.id, item])), [items]);
-  const sortedPhases = useMemo(() => [...(plan.phases || [])].sort((a, b) => a.sortOrder - b.sortOrder), [plan.phases]);
-
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
-      <div className="p-4 bg-gray-50 border-b border-gray-200">
-        <h3 className="font-bold text-lg">Organize Treatment Phases</h3>
-        <p className="text-sm text-gray-500 mt-1">Group procedures into a clear timeline for the patient. Changes are saved automatically.</p>
-      </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {sortedPhases.map((phase, index) => (
-          <div key={phase.id} className="bg-white border border-gray-200 rounded-lg">
-            <div className="p-4 border-b border-gray-100 flex justify-between items-start gap-3">
-              <div>
-                <input
-                  value={phase.title}
-                  onChange={(e) => onUpdatePhase(phase.id, { title: e.target.value })}
-                  className="font-bold text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none bg-transparent w-full"
-                />
-                <textarea
-                  value={phase.description || ''}
-                  onChange={(e) => onUpdatePhase(phase.id, { description: e.target.value })}
-                  placeholder="Optional phase description..."
-                  className="text-sm text-gray-500 mt-1 w-full resize-none border-none focus:ring-0 p-0 bg-transparent"
-                  rows={1}
-                />
-              </div>
-              <div className="flex flex-col gap-1 shrink-0">
-                <button 
-                  onClick={() => onReorderPhases(phase.id, 'up')} 
-                  disabled={index === 0}
-                  className="p-1 rounded text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-30"
-                ><ArrowUp size={16} /></button>
-                <button 
-                  onClick={() => onReorderPhases(phase.id, 'down')} 
-                  disabled={index === sortedPhases.length - 1}
-                  className="p-1 rounded text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-30"
-                ><ArrowDown size={16} /></button>
-              </div>
-            </div>
-            <div className="divide-y divide-gray-100">
-              {phase.itemIds.map(itemId => {
-                const item = itemMap.get(itemId);
-                if (!item) return null;
-                const location = item.selectedTeeth?.length ? `(#${item.selectedTeeth.join(', ')})` : '';
-
-                return (
-                  <div key={item.id} className="px-4 py-2 flex justify-between items-center gap-4 text-sm hover:bg-gray-50/50">
-                    <div className="flex-1">
-                      <span className="font-medium text-gray-800">{item.procedureName}</span>
-                      <span className="text-gray-500 ml-2">{location}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <FolderInput size={14} className="text-gray-400" />
-                      <select 
-                        value={item.phaseId || ''}
-                        onChange={(e) => onAssignItemToPhase(item.id, e.target.value)}
-                        className="text-xs border border-gray-200 rounded p-1 bg-white text-gray-700 shadow-sm outline-none focus:ring-1 focus:ring-blue-500"
-                      >
-                        {sortedPhases.map(p => (
-                          <option key={p.id} value={p.id}>{p.title}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                );
-              })}
-               {phase.itemIds.length === 0 && (
-                <p className="px-4 py-4 text-center text-xs text-gray-400 italic">No procedures in this phase.</p>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+        {isBoardOpen && (
+            <TreatmentPlanBoardModal
+                plan={plan}
+                items={items}
+                onClose={() => setIsBoardOpen(false)}
+                onAssignItemToPhase={handleAssignItemToPhase}
+                onReorderItemsInPhase={handleReorderItemsInPhase}
+                onUpdateItem={handleUpdateItem}
+            />
+        )}
     </div>
   );
 };

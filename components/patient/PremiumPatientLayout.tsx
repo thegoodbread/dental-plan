@@ -85,7 +85,7 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
 
   // --- CLINICAL LOGIC INTEGRATION ---
   const metrics = calculateClinicalMetrics(items);
-  const phaseCount = plan.phases ? plan.phases.length : 0;
+  const phaseCount = plan.phases ? plan.phases.filter(p => p.itemIds && p.itemIds.length > 0).length : 0;
 
   return (
     <div className="min-h-screen bg-blue-50/30 text-gray-900 font-sans selection:bg-blue-100 select-none">

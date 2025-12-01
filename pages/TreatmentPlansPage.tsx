@@ -1,11 +1,12 @@
 
 
+
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, MoreHorizontal, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getAllTreatmentPlans, createTreatmentPlan } from '../services/treatmentPlans';
 import { TreatmentPlan } from '../types';
-import { StatusBadge } from '../components/StatusBadge';
+import { StatusBadge } from '../components/ui/StatusBadge';
 
 export const TreatmentPlansPage: React.FC = () => {
   const navigate = useNavigate();

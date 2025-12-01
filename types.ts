@@ -1,4 +1,3 @@
-
 // Enums
 export type UserRole = 'DOCTOR' | 'TREATMENT_COORDINATOR' | 'ADMIN';
 
@@ -33,6 +32,7 @@ export type FeeCategory =
 export type UrgencyLevel = 'URGENT' | 'SOON' | 'ELECTIVE';
 export type InsuranceMode = 'simple' | 'advanced';
 export type FeeScheduleType = 'standard' | 'membership';
+export type PhaseBucketKey = 'FOUNDATION' | 'RESTORATIVE' | 'IMPLANT' | 'ELECTIVE' | 'OTHER';
 
 
 // Entities
@@ -59,11 +59,14 @@ export interface FeeScheduleEntry {
 export interface TreatmentPhase {
   id: string;
   planId: string;
+  bucketKey: PhaseBucketKey;
   title: string;
   description?: string;
   sortOrder: number;
   itemIds: string[];
   estimatedVisits?: number;
+  estimatedDurationValue?: number | null;
+  estimatedDurationUnit?: 'days' | 'weeks' | 'months' | null;
 }
 
 export interface TreatmentPlanItem {
@@ -83,7 +86,8 @@ export interface TreatmentPlanItem {
   // Clinical Logic
   urgency?: UrgencyLevel;
   estimatedVisits?: number;
-  estimatedDurationWeeks?: number;
+  estimatedDurationValue?: number | null;
+  estimatedDurationUnit?: 'days' | 'weeks' | 'months' | null;
   phaseId?: string | null;
 
   // Pricing

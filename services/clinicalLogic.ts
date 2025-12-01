@@ -1,4 +1,3 @@
-
 import { TreatmentPlanItem, UrgencyLevel, FeeCategory } from '../types';
 
 // --- CONSTANTS ---
@@ -126,6 +125,28 @@ export const estimateVisits = (item: TreatmentPlanItem): number => {
     default: return 1;
   }
 };
+
+// --- DURATION ESTIMATION ---
+export const estimateDuration = (item: Partial<TreatmentPlanItem>): { value: number; unit: 'days' | 'weeks' | 'months' } => {
+  if (item.estimatedDurationValue && item.estimatedDurationUnit) {
+    return { value: item.estimatedDurationValue, unit: item.estimatedDurationUnit };
+  }
+
+  // Fallback heuristics based on category
+  switch (item.category) {
+    case 'IMPLANT': return { value: 4, unit: 'months' };
+    case 'PROSTHETIC': return { value: 3, unit: 'weeks' };
+    case 'ORTHO': return { value: 12, unit: 'months' };
+    case 'ENDODONTIC': return { value: 2, unit: 'weeks' };
+    case 'RESTORATIVE':
+      if (item.procedureName && item.procedureName.toLowerCase().includes('crown')) return { value: 2, unit: 'weeks' };
+      return { value: 1, unit: 'days' };
+    case 'PERIO': return { value: 6, unit: 'weeks' };
+    case 'COSMETIC': return { value: 3, unit: 'weeks' };
+    default: return { value: 1, unit: 'days' };
+  }
+};
+
 
 // --- DATA TRANSFORMATION ---
 

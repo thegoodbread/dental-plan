@@ -11,9 +11,11 @@ import {
   InsuranceMode,
   FeeScheduleType,
   TreatmentPhase,
-  FeeCategory
+  FeeCategory,
+  PhaseBucketKey
 } from '../types';
 import { DEMO_PLANS, DEMO_ITEMS, DEMO_SHARES } from '../mock/seedPlans';
+import { estimateDuration } from './clinicalLogic';
 
 // --- KEYS (Bumped to v7 to force re-seed with new Library) ---
 const KEY_PLANS = 'dental_plans_v7';
@@ -193,30 +195,38 @@ export const findFeeByCode = (code: string): FeeScheduleEntry | undefined => {
 // --- PHASES ---
 
 /**
- * [NEW] Centralized helper to determine the default phase title for a given fee category.
+ * [REFACTORED] Centralized helper to determine the stable, internal phase bucket key for a given fee category.
  */
-function getPhaseBucketTitleForCategory(category?: FeeCategory): string {
-    if (!category) return "Additional Treatment";
+function getBucketKeyForCategory(category?: FeeCategory): PhaseBucketKey {
+    if (!category) return "OTHER";
     switch (category) {
         case 'DIAGNOSTIC':
         case 'PERIO':
         case 'PREVENTIVE':
-            return "Foundation & Diagnostics";
+            return "FOUNDATION";
         case 'RESTORATIVE':
         case 'ENDODONTIC':
         case 'PROSTHETIC':
-            return "Restorative";
+            return "RESTORATIVE";
         case 'IMPLANT':
-            return "Implant & Surgical";
+            return "IMPLANT";
         case 'COSMETIC':
         case 'ORTHO':
-            return "Elective / Cosmetic";
+            return "ELECTIVE";
         case 'OTHER':
-            return "Additional Treatment";
+            return "OTHER";
         default:
-            return "Additional Treatment";
+            return "OTHER";
     }
 }
+
+const phaseConfig: { bucketKey: PhaseBucketKey, title: string, description: string, categories: FeeCategory[] }[] = [
+  { bucketKey: "FOUNDATION",  title: "Foundation & Diagnostics", description: "Control infection and stabilize gums.", categories: ['DIAGNOSTIC', 'PERIO', 'PREVENTIVE'] },
+  { bucketKey: "RESTORATIVE", title: "Restorative",                description: "Repair damaged teeth and restore function.", categories: ['RESTORATIVE', 'ENDODONTIC', 'PROSTHETIC'] },
+  { bucketKey: "IMPLANT",     title: "Implant & Surgical",         description: "Placement and restoration of dental implants.", categories: ['IMPLANT'] },
+  { bucketKey: "ELECTIVE",    title: "Elective / Cosmetic",        description: "Enhancements for your smile.", categories: ['COSMETIC', 'ORTHO'] },
+  { bucketKey: "OTHER",       title: "Additional Treatment",       description: "Other recommended procedures.", categories: ['OTHER'] },
+];
 
 /**
  * Creates default, clinically-grouped phases for a plan based on its items.
@@ -225,18 +235,9 @@ function getPhaseBucketTitleForCategory(category?: FeeCategory): string {
 const createDefaultPhasesForPlan = (plan: TreatmentPlan, items: TreatmentPlanItem[]): { planWithPhases: TreatmentPlan, itemsWithPhaseId: TreatmentPlanItem[] } => {
     const newPhases: TreatmentPhase[] = [];
     const itemsCopy = JSON.parse(JSON.stringify(items)); // Deep copy for mutation
-
-    const phaseConfig: { title: string, description: string, categories: FeeCategory[] }[] = [
-      { title: "Foundation & Diagnostics", description: "Control infection and stabilize gums.", categories: ['DIAGNOSTIC', 'PERIO', 'PREVENTIVE'] },
-      { title: "Restorative", description: "Repair damaged teeth and restore function.", categories: ['RESTORATIVE', 'ENDODONTIC', 'PROSTHETIC'] },
-      { title: "Implant & Surgical", description: "Placement and restoration of dental implants.", categories: ['IMPLANT'] },
-      { title: "Elective / Cosmetic", description: "Enhancements for your smile.", categories: ['COSMETIC', 'ORTHO'] },
-      { title: "Additional Treatment", description: "Other recommended procedures.", categories: ['OTHER'] },
-    ];
     
     let sortOrder = 0;
     phaseConfig.forEach(config => {
-        // Find items that match this phase's categories and haven't been assigned yet
         const itemsForPhase = itemsCopy.filter((item: TreatmentPlanItem) => config.categories.includes(item.category) && !item.phaseId);
 
         if (itemsForPhase.length > 0) {
@@ -244,6 +245,7 @@ const createDefaultPhasesForPlan = (plan: TreatmentPlan, items: TreatmentPlanIte
             const newPhase: TreatmentPhase = {
                 id: phaseId,
                 planId: plan.id,
+                bucketKey: config.bucketKey,
                 title: config.title,
                 description: config.description,
                 sortOrder: sortOrder++,
@@ -251,26 +253,26 @@ const createDefaultPhasesForPlan = (plan: TreatmentPlan, items: TreatmentPlanIte
             };
             newPhases.push(newPhase);
 
-            // Assign phaseId to the items
             itemsForPhase.forEach((item: TreatmentPlanItem) => {
                 item.phaseId = phaseId;
             });
         }
     });
 
-    // Handle any unassigned items by adding them to a generic phase
+    // Handle any unassigned items by adding them to the 'OTHER' phase
     const unassignedItems = itemsCopy.filter((item: TreatmentPlanItem) => !item.phaseId);
     if (unassignedItems.length > 0) {
-        // 1. Try to find the dedicated 'Additional Treatment' phase
-        let fallbackPhase = newPhases.find(p => p.title === 'Additional Treatment');
+        let fallbackPhase = newPhases.find(p => p.bucketKey === 'OTHER');
         
-        // 2. If it doesn't exist, create a catch-all 'Other Procedures' phase
         if (!fallbackPhase) {
+            const otherConfig = phaseConfig.find(c => c.bucketKey === 'OTHER')!;
             const phaseId = generateId();
             fallbackPhase = {
                 id: phaseId,
                 planId: plan.id,
-                title: 'Other Procedures',
+                bucketKey: 'OTHER',
+                title: otherConfig.title,
+                description: otherConfig.description,
                 sortOrder: sortOrder++,
                 itemIds: [],
             };
@@ -355,28 +357,84 @@ export function loadTreatmentPlanWithItems(
     itemsForPlan = allItems.filter(i => i.treatmentPlanId === planId);
     itemsForPlan.sort((a,b) => a.sortOrder - b.sortOrder);
   }
+  
+  // --- BACKWARD COMPATIBILITY & DURATION DEFAULTS ---
+  let itemsNeedSave = false;
+  const processedItems = itemsForPlan.map(originalItem => {
+    const item = { ...originalItem };
 
-  // --- BACKWARD COMPATIBILITY ---
-  // 1. Insurance Mode
-  if (!planFromStorage.insuranceMode) {
-    planFromStorage.insuranceMode = hasDetailedInsurance(itemsForPlan) ? 'advanced' : 'simple';
-  }
-  // 2. Fee Schedule
-  if (!planFromStorage.feeScheduleType) {
-    planFromStorage.feeScheduleType = 'standard';
-  }
-  // 3. Phases
-  if (!planFromStorage.phases || planFromStorage.phases.length === 0) {
-    const { planWithPhases, itemsWithPhaseId } = createDefaultPhasesForPlan(planFromStorage, itemsForPlan);
+    // Step 1: Migrate old format (estimatedDurationWeeks)
+    const legacyItem = item as any;
+    if (legacyItem.estimatedDurationWeeks != null && item.estimatedDurationValue == null) {
+      itemsNeedSave = true;
+      item.estimatedDurationValue = legacyItem.estimatedDurationWeeks;
+      item.estimatedDurationUnit = 'weeks';
+      delete (item as any).estimatedDurationWeeks;
+    }
     
-    // Persist the auto-generated phase data
+    // Step 2: Back-fill defaults for any items that still lack a duration.
+    if (item.estimatedDurationValue == null) {
+      itemsNeedSave = true;
+      const { value, unit } = estimateDuration(item);
+      item.estimatedDurationValue = value;
+      item.estimatedDurationUnit = unit;
+    }
+    return item;
+  });
+
+  if (itemsNeedSave) {
+    const allItemsFromStorage: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
+    const processedItemMap = new Map(processedItems.map(i => [i.id, i]));
+    const allItemsUpdated = allItemsFromStorage.map(item => processedItemMap.get(item.id) || item);
+    localStorage.setItem(KEY_ITEMS, JSON.stringify(allItemsUpdated));
+    itemsForPlan = processedItems; // Use the updated items for the current session
+  }
+
+
+  // --- BACKWARD COMPATIBILITY & PHASE GENERATION ---
+  if (planFromStorage.phases && planFromStorage.phases.length > 0) {
+    // Plan has phases, but they might be missing bucketKey
+    let needsSave = false;
+    planFromStorage.phases.forEach(phase => {
+        if (!phase.bucketKey) {
+            needsSave = true;
+            const title = phase.title.toLowerCase();
+            if (title.includes('foundation') || title.includes('diagnostic')) {
+                phase.bucketKey = 'FOUNDATION';
+            } else if (title.includes('restorative')) {
+                phase.bucketKey = 'RESTORATIVE';
+            } else if (title.includes('implant') || title.includes('surgical')) {
+                phase.bucketKey = 'IMPLANT';
+            } else if (title.includes('elective') || title.includes('cosmetic')) {
+                phase.bucketKey = 'ELECTIVE';
+            } else {
+                phase.bucketKey = 'OTHER';
+                if (phase.title === 'Other Procedures') {
+                    phase.title = 'Additional Treatment';
+                }
+            }
+        }
+    });
+    if (needsSave) {
+        savePlan(planFromStorage);
+    }
+  } else {
+    // Plan has no phases, create them from scratch.
+    const { planWithPhases, itemsWithPhaseId } = createDefaultPhasesForPlan(planFromStorage, itemsForPlan);
     const allItemsWithUpdates = allItems.map(item => itemsWithPhaseId.find(i => i.id === item.id) || item);
     localStorage.setItem(KEY_ITEMS, JSON.stringify(allItemsWithUpdates));
     savePlan(planWithPhases);
-
-    // Use the newly generated data for the return value
     planFromStorage = planWithPhases;
     itemsForPlan = itemsWithPhaseId;
+  }
+  
+  planFromStorage = aggregatePhaseDurations(planFromStorage, itemsForPlan);
+
+  if (!planFromStorage.insuranceMode) {
+    planFromStorage.insuranceMode = hasDetailedInsurance(itemsForPlan) ? 'advanced' : 'simple';
+  }
+  if (!planFromStorage.feeScheduleType) {
+    planFromStorage.feeScheduleType = 'standard';
   }
 
   return { plan: planFromStorage, items: itemsForPlan };
@@ -432,6 +490,8 @@ export const recalculatePlanTotalsAndSave = (planId: string): TreatmentPlan | un
     return undefined;
   }
   let { plan, items } = result;
+  
+  plan = aggregatePhaseDurations(plan, items);
 
   const totalFee = items.reduce((sum, item) => sum + item.netFee, 0);
   let estimatedInsurance = 0;
@@ -607,7 +667,6 @@ export const createTreatmentPlanItem = (
     baseFeeOverride?: number;
   }
 ): TreatmentPlanItem => {
-  // We need the full plan data to decide which phase to add the item to.
   const planResult = loadTreatmentPlanWithItems(planId);
   if (!planResult) throw new Error("Plan not found when creating item");
   let { plan, items } = planResult;
@@ -617,6 +676,8 @@ export const createTreatmentPlanItem = (
   if (!feeEntry) throw new Error("Fee entry not found");
 
   const effectiveBaseFee = getEffectiveBaseFee(feeEntry, plan.feeScheduleType);
+  
+  const { value, unit } = estimateDuration({ category: feeEntry.category, procedureName: feeEntry.procedureName } as TreatmentPlanItem);
 
   const rawItem: Partial<TreatmentPlanItem> = {
     id: generateId(),
@@ -627,20 +688,20 @@ export const createTreatmentPlanItem = (
     unitType: feeEntry.unitType,
     category: feeEntry.category,
     baseFee: data.baseFeeOverride ?? effectiveBaseFee,
-    urgency: 'ELECTIVE', // Default
+    urgency: 'ELECTIVE',
     sortOrder: (items.length > 0 ? Math.max(...items.map(i => i.sortOrder)) : 0) + 1,
-    phaseId: null // will be assigned below
+    phaseId: null,
+    estimatedDurationValue: value,
+    estimatedDurationUnit: unit,
   };
 
   const computedItem = computeItemPricing(rawItem, feeEntry) as TreatmentPlanItem;
   
-  // Assign to a default phase
-  const bucketTitle = getPhaseBucketTitleForCategory(computedItem.category as FeeCategory | undefined);
-  let targetPhase = plan.phases?.find(p => p.title === bucketTitle) || plan.phases?.[0] || null;
+  const bucketKey = getBucketKeyForCategory(computedItem.category);
+  let targetPhase = plan.phases?.find(p => p.bucketKey === bucketKey) || plan.phases?.[0] || null;
 
   if (targetPhase) {
     computedItem.phaseId = targetPhase.id;
-    // Find the actual phase object in the plan to mutate it before saving
     const phaseInPlan = plan.phases?.find(p => p.id === targetPhase!.id);
     if(phaseInPlan) {
         phaseInPlan.itemIds.push(computedItem.id);
@@ -678,19 +739,14 @@ export const updateTreatmentPlanItem = (id: string, updates: Partial<TreatmentPl
     return undefined;
   }
   
-  // 1. Prepare an intermediate object with the new updates.
   const itemWithUpdates = { ...currentItem, ...updates };
 
-  // 2. If the base fee wasn't explicitly updated, ensure it's correct for the plan's pricing mode.
   if (updates.baseFee === undefined) {
     itemWithUpdates.baseFee = getEffectiveBaseFee(feeEntry, plan.feeScheduleType);
   }
   
-  // 3. Recalculate core pricing fields (like netFee) based on the intermediate object.
   const repricedPart = computeItemPricing(itemWithUpdates, feeEntry);
 
-  // 4. FIX: Create the final state by applying the repriced values to the intermediate object.
-  // This ensures that fields NOT handled by computeItemPricing (like insurance fields from `updates`) are preserved.
   const finalItemState = {
     ...itemWithUpdates,
     ...repricedPart,
@@ -700,7 +756,6 @@ export const updateTreatmentPlanItem = (id: string, updates: Partial<TreatmentPl
   
   localStorage.setItem(KEY_ITEMS, JSON.stringify(allItems));
 
-  // 5. Recalculate plan totals and return the full, updated state.
   const updatedPlanWithItems = recalculatePlanTotalsAndSave(currentItem.treatmentPlanId);
   
   if (updatedPlanWithItems) {
@@ -727,7 +782,6 @@ export const deleteTreatmentPlanItem = (itemIdToDelete: string) => {
   
   if (planIndex !== -1) {
     const originalPlan = allPlans[planIndex];
-    // Also remove item from its phase
     if (originalPlan.phases && itemToDelete.phaseId) {
         const phase = originalPlan.phases.find(p => p.id === itemToDelete.phaseId);
         if (phase) {
@@ -756,6 +810,66 @@ export const reorderTreatmentPlanItems = (planId: string, orderedIds: string[]) 
 
 // --- PHASE MANAGEMENT ---
 
+const convertToDays = (value: number | null | undefined, unit: 'days' | 'weeks' | 'months' | null | undefined): number => {
+    if (!value || !unit) return 0;
+    switch(unit) {
+        case 'days': return value;
+        case 'weeks': return value * 7;
+        case 'months': return value * 30.44; // More accurate average
+    }
+    return 0;
+}
+
+const aggregatePhaseDurations = (plan: TreatmentPlan, items: TreatmentPlanItem[]): TreatmentPlan => {
+    if (!plan.phases) return plan;
+
+    const itemMap = new Map(items.map(i => [i.id, i]));
+    const updatedPhases = plan.phases.map(phase => {
+        const phaseItems = phase.itemIds.map(id => itemMap.get(id)).filter(Boolean) as TreatmentPlanItem[];
+        if (phaseItems.length === 0) {
+            return { ...phase, estimatedDurationValue: null, estimatedDurationUnit: null };
+        }
+
+        let totalDays = 0;
+        let hasMonths = false;
+        let hasWeeks = false;
+
+        for (const item of phaseItems) {
+            totalDays += convertToDays(item.estimatedDurationValue, item.estimatedDurationUnit);
+            if (item.estimatedDurationUnit === 'months') hasMonths = true;
+            if (item.estimatedDurationUnit === 'weeks') hasWeeks = true;
+        }
+
+        if (totalDays <= 0) {
+            return { ...phase, estimatedDurationValue: null, estimatedDurationUnit: null };
+        }
+
+        let finalValue: number;
+        let finalUnit: 'days' | 'weeks' | 'months';
+
+        if (hasMonths) {
+            finalValue = Math.round(totalDays / 30.44);
+            finalUnit = 'months';
+        } else if (hasWeeks) {
+            finalValue = Math.round(totalDays / 7);
+            finalUnit = 'weeks';
+        } else {
+            finalValue = Math.round(totalDays);
+            finalUnit = 'days';
+        }
+
+        // Ensure the value is at least 1 if there's any duration
+        if (finalValue < 1 && totalDays > 0) {
+            finalValue = 1;
+        }
+
+        return { ...phase, estimatedDurationValue: finalValue, estimatedDurationUnit: finalUnit };
+    });
+
+    return { ...plan, phases: updatedPhases };
+}
+
+
 export const updatePhase = (planId: string, phaseId: string, updates: Partial<TreatmentPhase>): { plan: TreatmentPlan, items: TreatmentPlanItem[] } | null => {
     const result = loadTreatmentPlanWithItems(planId);
     if (!result) return null;
@@ -766,6 +880,24 @@ export const updatePhase = (planId: string, phaseId: string, updates: Partial<Tr
     plan.phases = plan.phases.map(p => p.id === phaseId ? { ...p, ...updates } : p);
     savePlan(plan);
     return { plan, items };
+};
+
+export const reorderItemsInPhase = (planId: string, phaseId: string, orderedItemIds: string[]): { plan: TreatmentPlan, items: TreatmentPlanItem[] } | null => {
+    const result = loadTreatmentPlanWithItems(planId);
+    if (!result || !result.plan.phases) return null;
+
+    let { plan } = result;
+
+    const phaseIndex = plan.phases.findIndex(p => p.id === phaseId);
+    if (phaseIndex === -1) {
+        console.error(`reorderItemsInPhase: Phase with ID ${phaseId} not found in plan ${planId}`);
+        return result;
+    }
+
+    plan.phases[phaseIndex].itemIds = orderedItemIds;
+
+    savePlan(plan);
+    return loadTreatmentPlanWithItems(planId);
 };
 
 export const reorderPhases = (planId: string, orderedPhaseIds: string[]): { plan: TreatmentPlan, items: TreatmentPlanItem[] } | null => {
@@ -800,10 +932,8 @@ export const assignItemToPhase = (planId: string, itemId: string, newPhaseId: st
     const itemToMove = allItems[itemIndex];
     const oldPhaseId = itemToMove.phaseId;
 
-    // Update item's phaseId
     itemToMove.phaseId = newPhaseId;
     
-    // Update plan's phases itemIds
     if (oldPhaseId) {
         const oldPhase = plan.phases.find(p => p.id === oldPhaseId);
         if (oldPhase) {
@@ -828,15 +958,11 @@ export const regroupPhasesForPlan = (planId: string): { plan: TreatmentPlan, ite
     const initialResult = loadTreatmentPlanWithItems(planId);
     if (!initialResult) return null;
     
-    // Create a clean slate for regeneration: items with no phaseId and a plan with no phases
     const itemsToRegroup = initialResult.items.map(i => ({ ...i, phaseId: null as string | null }));
     const planToRegroup = { ...initialResult.plan, phases: [] };
 
-    // This will create fresh phases and assign items to them
     const { planWithPhases, itemsWithPhaseId } = createDefaultPhasesForPlan(planToRegroup, itemsToRegroup);
 
-    // Now, persist these changes.
-    // We need to update all items in localStorage, not just the ones for this plan.
     const allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
     const planItemMap = new Map(itemsWithPhaseId.map(i => [i.id, i]));
     
@@ -850,7 +976,7 @@ export const regroupPhasesForPlan = (planId: string): { plan: TreatmentPlan, ite
     localStorage.setItem(KEY_ITEMS, JSON.stringify(mergedItems));
     savePlan(planWithPhases);
 
-    return loadTreatmentPlanWithItems(planId); // Return the final, consistent state
+    return loadTreatmentPlanWithItems(planId);
 };
 
 
