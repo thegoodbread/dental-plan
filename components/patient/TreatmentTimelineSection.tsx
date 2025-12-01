@@ -1,37 +1,70 @@
 import React from 'react';
 import { Clock } from 'lucide-react';
-import { TreatmentPlan, TreatmentPlanItem } from '../../types';
+import { TreatmentPlan, TreatmentPlanItem, TreatmentPhase } from '../../types';
 
 interface TreatmentTimelineSectionProps {
   plan: TreatmentPlan;
   items: TreatmentPlanItem[];
 }
 
+const renderPhaseMetric = (phase: TreatmentPhase) => {
+  if (phase.isMonitorPhase && (!phase.itemIds || phase.itemIds.length === 0)) {
+      return "Monitoring Period";
+  }
+  if (phase.estimatedDurationValue && phase.estimatedDurationUnit) {
+      const { estimatedDurationValue: value, estimatedDurationUnit: unit } = phase;
+      let unitText = unit.charAt(0).toUpperCase() + unit.slice(1);
+      if (value === 1) unitText = unitText.slice(0, -1); // De-pluralize
+      return `Est. ${value} ${unitText}`;
+  }
+  if (phase.estimatedVisits) {
+      return `Est. ${phase.estimatedVisits} visits`;
+  }
+  return null;
+};
+
+const PhaseItem: React.FC<{ phase: TreatmentPhase; index: number; }> = ({ phase, index }) => {
+  const metricText = renderPhaseMetric(phase);
+  return (
+    <div key={phase.id} className="relative z-10 flex flex-col items-center text-center group">
+      <div className="w-16 h-16 rounded-full bg-blue-600 text-white font-bold text-2xl flex items-center justify-center mb-6 shadow-lg shadow-blue-200 border-4 border-white transition-transform group-hover:scale-110">
+        {index + 1}
+      </div>
+      <h3 className="text-lg font-bold text-gray-900 mb-2">{phase.title}</h3>
+      <p className="text-sm text-gray-500 mb-4 max-w-[240px] mx-auto leading-relaxed">{phase.description}</p>
+      {metricText && (
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 px-3 py-1.5 rounded-full">
+          <Clock size={12} />
+          {metricText}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const TreatmentTimelineSection: React.FC<TreatmentTimelineSectionProps> = ({ plan, items }) => {
   const phases = plan.phases
     ? [...plan.phases]
-        .filter(p => p.itemIds && p.itemIds.length > 0)
+        .filter(p => (p.itemIds && p.itemIds.length > 0) || p.isMonitorPhase)
         .sort((a, b) => a.sortOrder - b.sortOrder)
     : [];
 
   if (!phases || phases.length === 0) return null;
 
-  const count = phases.length;
-  // Calculate the center point of the first and last column
-  const centerOffset = (100 / count) / 2; 
+  let phaseRows: TreatmentPhase[][];
+  const numPhases = phases.length;
 
-  const renderPhaseMetric = (phase: typeof phases[0]) => {
-    if (phase.estimatedDurationValue && phase.estimatedDurationUnit) {
-        const { estimatedDurationValue: value, estimatedDurationUnit: unit } = phase;
-        let unitText = unit.charAt(0).toUpperCase() + unit.slice(1);
-        if (value === 1) unitText = unitText.slice(0, -1); // De-pluralize
-        return `Est. ${value} ${unitText}`;
-    }
-    if (phase.estimatedVisits) {
-        return `Est. ${phase.estimatedVisits} visits`;
-    }
-    return null;
-  };
+  if (numPhases <= 4) {
+    phaseRows = [phases];
+  } else if (numPhases === 5) {
+    phaseRows = [phases.slice(0, 3), phases.slice(3, 5)]; // 3+2 layout
+  } else if (numPhases === 6) {
+    phaseRows = [phases.slice(0, 3), phases.slice(3, 6)]; // 3+3 layout
+  } else { // 7 or 8 phases
+    phaseRows = [phases.slice(0, 4), phases.slice(4)]; // 4+3 or 4+4 layout
+  }
+
+  let phaseCounter = 0;
 
   return (
     <section className="py-12 md:py-16 px-6 bg-white border-b border-gray-100">
@@ -39,44 +72,49 @@ export const TreatmentTimelineSection: React.FC<TreatmentTimelineSectionProps> =
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Treatment Timeline</h2>
         <p className="text-gray-500 mb-10 md:mb-12">How your treatment will progress over time</p>
         
-        {/* Desktop & Tablet Container */}
-        <div 
-            className="hidden md:block relative mx-auto"
-            style={{ maxWidth: `${Math.min(100, count * 25)}rem` }}
-        >
-          {count > 1 && (
-            <div 
-              className="absolute top-8 h-0.5 bg-blue-100 -z-0"
-              style={{ 
-                  left: `${centerOffset}%`, 
-                  right: `${centerOffset}%` 
-              }}
-            ></div>
-          )}
+        {/* Desktop & Tablet Container - DYNAMIC MULTI-ROW */}
+        <div className="hidden md:block relative mx-auto space-y-16">
+          {phaseRows.map((row, rowIndex) => {
+            const rowCount = row.length;
+            const centerOffset = (100 / rowCount) / 2;
+            
+            const isMultiRow = phaseRows.length > 1;
+            const lineStyle: React.CSSProperties = {
+              left: `${centerOffset}%`,
+              right: `${centerOffset}%`,
+            };
 
-          <div 
-            className="grid grid-flow-col gap-0"
-            style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }}
-          >
-            {phases.map((phase, idx) => {
-              const metricText = renderPhaseMetric(phase);
-              return (
-                <div key={phase.id} className="relative z-10 flex flex-col items-center text-center group">
-                  <div className="w-16 h-16 rounded-full bg-blue-600 text-white font-bold text-2xl flex items-center justify-center mb-6 shadow-lg shadow-blue-200 border-4 border-white transition-transform group-hover:scale-110">
-                    {idx + 1}
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900 mb-2">{phase.title}</h3>
-                  <p className="text-sm text-gray-500 mb-4 max-w-[240px] mx-auto leading-relaxed">{phase.description}</p>
-                  {metricText && (
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 px-3 py-1.5 rounded-full">
-                      <Clock size={12} />
-                      {metricText}
-                    </div>
-                  )}
+            if (isMultiRow) {
+              if (rowIndex === 0) {
+                // First row: extend to the right edge
+                lineStyle.right = '0%';
+              } else {
+                // Second (and subsequent) rows: extend from the left edge
+                lineStyle.left = '0%';
+              }
+            }
+            
+            return (
+              <div key={rowIndex} className="relative">
+                {rowCount > 1 && (
+                  <div
+                    className="absolute top-8 h-0.5 bg-blue-100 -z-0"
+                    style={lineStyle}
+                  />
+                )}
+                <div
+                  className="grid gap-0"
+                  style={{ gridTemplateColumns: `repeat(${rowCount}, minmax(0, 1fr))` }}
+                >
+                  {row.map((phase) => {
+                    const currentPhaseIndex = phaseCounter;
+                    phaseCounter++;
+                    return <PhaseItem key={phase.id} phase={phase} index={currentPhaseIndex} />;
+                  })}
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Mobile Container - Vertical Stack with Connected Line */}

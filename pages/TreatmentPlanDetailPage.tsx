@@ -4,6 +4,7 @@
 
 
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -13,7 +14,7 @@ import {
 import { 
   loadTreatmentPlanWithItems, updateTreatmentPlan, createShareLink,
   createTreatmentPlanItem, updateTreatmentPlanItem, deleteTreatmentPlanItem,
-  getActivityForPlan, clearAllItemInsuranceForPlan, updatePhase, reorderPhases, assignItemToPhase, reorderItemsInPhase
+  getActivityForPlan, clearAllItemInsuranceForPlan, savePlanAndItems
 } from '../services/treatmentPlans';
 import { explainPlanForPatient } from '../services/geminiExplainPlan';
 import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, TreatmentPlanStatus, InsuranceMode, FeeScheduleType, TreatmentPhase } from '../types';
@@ -239,17 +240,8 @@ export const TreatmentPlanDetailPage: React.FC = () => {
     if(updatedPlan) setPlan(updatedPlan);
   };
   
-  // --- BOARD HANDLERS ---
-  const handleAssignItemToPhase = (planId: string, itemId: string, newPhaseId: string) => {
-    const result = assignItemToPhase(planId, itemId, newPhaseId);
-    if (result) {
-      setPlan(result.plan);
-      setItems(result.items);
-    }
-  };
-
-  const handleReorderItemsInPhase = (planId: string, phaseId: string, orderedItemIds: string[]) => {
-    const result = reorderItemsInPhase(planId, phaseId, orderedItemIds);
+  const handleBoardSaveChanges = (updatedPlan: TreatmentPlan, updatedItems: TreatmentPlanItem[]) => {
+    const result = savePlanAndItems(updatedPlan, updatedItems);
     if (result) {
         setPlan(result.plan);
         setItems(result.items);
@@ -580,9 +572,7 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                 plan={plan}
                 items={items}
                 onClose={() => setIsBoardOpen(false)}
-                onAssignItemToPhase={handleAssignItemToPhase}
-                onReorderItemsInPhase={handleReorderItemsInPhase}
-                onUpdateItem={handleUpdateItem}
+                onSaveChanges={handleBoardSaveChanges}
             />
         )}
     </div>

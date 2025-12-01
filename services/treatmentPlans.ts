@@ -25,7 +25,8 @@ const KEY_SHARES = 'dental_shares_v7';
 const KEY_LOGS = 'dental_logs_v7';
 
 // --- UTILS ---
-const generateId = () => Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+const generateId = () => `id-${Math.random().toString(36).substring(2, 10)}`;
+
 
 /**
  * Checks if any item in a list has detailed, non-null financial fields.
@@ -611,6 +612,69 @@ export const updateTreatmentPlan = (id: string, updates: Partial<TreatmentPlan>)
     return recalculatePlanTotalsAndSave(id);
   }
 };
+
+/**
+ * Saves a plan and all its associated items. This is a more holistic save operation
+ * useful for modals like the board view that manage the whole state locally.
+ */
+export const savePlanAndItems = (planToSave: TreatmentPlan, itemsForPlan: TreatmentPlanItem[]): { plan: TreatmentPlan, items: TreatmentPlanItem[] } => {
+  // Step 1: Persist the updated items.
+  const allItemsFromStorage: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
+  const otherPlanItems = allItemsFromStorage.filter(i => i.treatmentPlanId !== planToSave.id);
+  const updatedAllItems = [...otherPlanItems, ...itemsForPlan];
+  localStorage.setItem(KEY_ITEMS, JSON.stringify(updatedAllItems));
+
+  // Step 2: Recalculate totals directly on the provided plan object.
+  let planWithUpdatedTotals = { ...planToSave };
+  
+  planWithUpdatedTotals = aggregatePhaseDurations(planWithUpdatedTotals, itemsForPlan);
+
+  const totalFee = itemsForPlan.reduce((sum, item) => sum + item.netFee, 0);
+  let estimatedInsurance = 0;
+
+  let membershipSavings = 0;
+  if (planWithUpdatedTotals.feeScheduleType === 'membership') {
+    const feeSchedule = getFeeSchedule();
+    const feeMap = new Map(feeSchedule.map(f => [f.id, f]));
+    const standardTotalFee = itemsForPlan.reduce((total, item) => {
+      const feeEntry = feeMap.get(item.feeScheduleEntryId);
+      if (!feeEntry) return total + item.netFee;
+      const standardItemPrice = feeEntry.baseFee * item.units;
+      return total + standardItemPrice;
+    }, 0);
+    membershipSavings = Math.max(0, standardTotalFee - totalFee);
+  }
+
+  if (planWithUpdatedTotals.insuranceMode === 'advanced') {
+    estimatedInsurance = itemsForPlan.reduce(
+      (sum, i) => sum + (i.estimatedInsurance ?? 0),
+      0
+    );
+  } else {
+    estimatedInsurance = planWithUpdatedTotals.estimatedInsurance ?? 0;
+  }
+
+  const clinicDiscount = planWithUpdatedTotals.clinicDiscount || 0;
+  const patientPortion = totalFee - estimatedInsurance - clinicDiscount;
+
+  const finalPlanToSave: TreatmentPlan = {
+    ...planWithUpdatedTotals,
+    itemIds: itemsForPlan.map(i => i.id), // Ensure itemIds are in sync
+    totalFee,
+    estimatedInsurance,
+    clinicDiscount,
+    membershipSavings,
+    patientPortion: Math.max(0, patientPortion),
+    updatedAt: new Date().toISOString(),
+  };
+
+  // Step 3: Save the final, recalculated plan object to storage.
+  savePlan(finalPlanToSave);
+
+  // Step 4: Return the updated state, including the hydrated items on the plan object.
+  return { plan: { ...finalPlanToSave, items: itemsForPlan }, items: itemsForPlan };
+};
+
 
 // --- ITEMS CRUD & CALCULATIONS ---
 

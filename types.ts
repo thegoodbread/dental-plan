@@ -67,6 +67,7 @@ export interface TreatmentPhase {
   estimatedVisits?: number;
   estimatedDurationValue?: number | null;
   estimatedDurationUnit?: 'days' | 'weeks' | 'months' | null;
+  isMonitorPhase?: boolean;
 }
 
 export interface TreatmentPlanItem {
