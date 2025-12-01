@@ -1,11 +1,9 @@
-
-
-
 import React, { useState, useMemo } from 'react';
 import { TreatmentPlan, TreatmentPlanItem } from '../../types';
-import { Calendar, AlertTriangle, Shield, Smile, ChevronDown } from 'lucide-react';
+import { Calendar, AlertTriangle, Shield, Smile, ChevronDown, Star } from 'lucide-react';
 import { estimateVisits, getItemsOnTooth, getItemsOnQuadrant } from '../../services/clinicalLogic';
 import { getProcedureIcon } from '../../utils/getProcedureIcon';
+import { getFeeSchedule } from '../../services/treatmentPlans';
 
 interface ProcedureBreakdownSectionProps {
   plan: TreatmentPlan;
@@ -27,11 +25,27 @@ const PhaseGroup: React.FC<{
     onHoverItem: (id: string | null) => void;
 }> = ({ phaseIndex, group, plan, allItems, hoveredTooth, hoveredQuadrant, hoveredItemId, onHoverItem }) => {
     const [isExpanded, setIsExpanded] = useState(false);
+    const feeSchedule = useMemo(() => getFeeSchedule(), []);
 
     // --- Financial & Clinical Calculations for the Phase ---
-    // Per best practice, insurance is only shown at the PLAN level, not distributed per-phase.
-    // This component calculates the fee subtotal for this phase only.
-    const phaseSubtotal = group.items.reduce((sum, item) => sum + item.netFee, 0);
+    // FIX: Destructure the object returned by reduce and rename properties.
+    const { subtotal: phaseSubtotal, savings: totalPhaseSavings } = useMemo(() => {
+        return group.items.reduce((acc, item) => {
+            acc.subtotal += item.netFee;
+            
+            const isMembershipPlan = plan.feeScheduleType === 'membership';
+            if (isMembershipPlan) {
+                const feeEntry = feeSchedule.find(f => f.id === item.feeScheduleEntryId);
+                if (feeEntry && feeEntry.membershipFee != null && feeEntry.membershipFee < feeEntry.baseFee) {
+                    const savingsPerUnit = feeEntry.baseFee - feeEntry.membershipFee;
+                    acc.savings += savingsPerUnit * item.units;
+                }
+            }
+            
+            return acc;
+        }, { subtotal: 0, savings: 0 });
+    }, [group.items, plan.feeScheduleType, feeSchedule]);
+    
     const phaseVisits = group.items.reduce((sum, item) => sum + estimateVisits(item), 0);
 
     const isHighlighted = (item: TreatmentPlanItem) => {
@@ -89,6 +103,18 @@ const PhaseGroup: React.FC<{
                     const highlighted = isHighlighted(item);
                     const dimmed = isDimmed(item);
 
+                    const isMembershipPlan = plan.feeScheduleType === 'membership';
+                    const feeEntry = feeSchedule.find(f => f.id === item.feeScheduleEntryId);
+                    let itemSavings = 0;
+                    let standardItemFee = item.netFee;
+
+                    if (isMembershipPlan && feeEntry && feeEntry.membershipFee != null && feeEntry.membershipFee < feeEntry.baseFee) {
+                        const savingsPerUnit = feeEntry.baseFee - feeEntry.membershipFee;
+                        itemSavings = savingsPerUnit * item.units;
+                        standardItemFee = feeEntry.baseFee * item.units;
+                    }
+
+
                     return (
                         <div key={item.id} onMouseEnter={() => onHoverItem(item.id)} onMouseLeave={() => onHoverItem(null)}>
                             <div
@@ -111,6 +137,11 @@ const PhaseGroup: React.FC<{
                                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
                                             <div className="font-bold text-gray-900 text-base leading-tight">{item.procedureName}</div>
                                             <div className="flex items-center gap-2 mt-1 md:mt-0">
+                                                {itemSavings > 0 && (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                                                        <Star size={10} /> MEMBER PRICE
+                                                    </span>
+                                                )}
                                                 <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{item.category}</div>
                                                 <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getUrgencyClass(item.urgency)}`}>
                                                     {getUrgencyIcon(item.urgency)} {item.urgency || 'Elective'}
@@ -125,15 +156,33 @@ const PhaseGroup: React.FC<{
                                 </div>
                             </div>
                             {/* Expandable Financial Row */}
-                            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-20' : 'max-h-0'}`}>
-                                <div className="px-5 py-3 text-xs text-gray-500 bg-slate-50/80 rounded-b-xl border-x border-b border-gray-200 border-t border-slate-200 flex justify-between items-center">
-                                    <span className="font-medium">
-                                        {item.units} × ${item.baseFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                    </span>
-                                    <span className="font-bold text-gray-700">
-                                        Total ${item.netFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                    </span>
-                                </div>
+                            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-40' : 'max-h-0'}`}>
+                                {itemSavings > 0 ? (
+                                    <div className="px-5 py-3 text-xs text-gray-500 bg-slate-50/80 rounded-b-xl border-x border-b border-gray-200 border-t border-slate-200 space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <span>Standard Fee</span>
+                                            <span className="font-medium text-gray-500 line-through">${standardItemFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-green-500">
+                                            <span className="font-medium">Member Savings</span>
+                                            <span className="font-bold">-${itemSavings.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                                        </div>
+                                        <div className="border-t border-slate-200 !my-1"></div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="font-bold text-gray-700">Your Price</span>
+                                            <span className="font-bold text-gray-900 text-sm">${item.netFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="px-5 py-3 text-xs text-gray-500 bg-slate-50/80 rounded-b-xl border-x border-b border-gray-200 border-t border-slate-200 flex justify-between items-center">
+                                        <span className="font-medium">
+                                            {item.units} × ${item.baseFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                        </span>
+                                        <span className="font-bold text-gray-700">
+                                            Total ${item.netFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     );
@@ -154,6 +203,12 @@ const PhaseGroup: React.FC<{
             <div className="mt-4 flex justify-between items-center p-2 pl-4 bg-gray-100/70 rounded-lg border border-gray-200/80">
                 <div className="text-sm font-semibold text-gray-700">
                     <span>Phase Subtotal: <span className="text-gray-900">${phaseSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+                    {totalPhaseSavings > 0.005 && (
+                        <>
+                            <span className="mx-2 text-gray-300">•</span>
+                            <span className="text-green-500">Member Savings: <span className="font-bold">-${totalPhaseSavings.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+                        </>
+                    )}
                     <span className="mx-2 text-gray-300">•</span>
                     <span>Est. Visits: {phaseVisits}</span>
                 </div>
