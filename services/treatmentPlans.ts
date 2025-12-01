@@ -1,4 +1,5 @@
 
+
 import { 
   TreatmentPlan, 
   TreatmentPlanItem, 
@@ -8,7 +9,9 @@ import {
   TreatmentPlanStatus,
   FeeUnitType,
   InsuranceMode,
-  FeeScheduleType
+  FeeScheduleType,
+  TreatmentPhase,
+  FeeCategory
 } from '../types';
 import { DEMO_PLANS, DEMO_ITEMS, DEMO_SHARES } from '../mock/seedPlans';
 
@@ -187,6 +190,104 @@ export const findFeeByCode = (code: string): FeeScheduleEntry | undefined => {
   return fees.find(f => f.procedureCode === code);
 };
 
+// --- PHASES ---
+
+/**
+ * [NEW] Centralized helper to determine the default phase title for a given fee category.
+ */
+function getPhaseBucketTitleForCategory(category?: FeeCategory): string {
+    if (!category) return "Additional Treatment";
+    switch (category) {
+        case 'DIAGNOSTIC':
+        case 'PERIO':
+        case 'PREVENTIVE':
+            return "Foundation & Diagnostics";
+        case 'RESTORATIVE':
+        case 'ENDODONTIC':
+        case 'PROSTHETIC':
+            return "Restorative";
+        case 'IMPLANT':
+            return "Implant & Surgical";
+        case 'COSMETIC':
+        case 'ORTHO':
+            return "Elective / Cosmetic";
+        case 'OTHER':
+            return "Additional Treatment";
+        default:
+            return "Additional Treatment";
+    }
+}
+
+/**
+ * Creates default, clinically-grouped phases for a plan based on its items.
+ * This is a private helper meant to be called during plan loading for backward compatibility.
+ */
+const createDefaultPhasesForPlan = (plan: TreatmentPlan, items: TreatmentPlanItem[]): { planWithPhases: TreatmentPlan, itemsWithPhaseId: TreatmentPlanItem[] } => {
+    const newPhases: TreatmentPhase[] = [];
+    const itemsCopy = JSON.parse(JSON.stringify(items)); // Deep copy for mutation
+
+    const phaseConfig: { title: string, description: string, categories: FeeCategory[] }[] = [
+      { title: "Foundation & Diagnostics", description: "Control infection and stabilize gums.", categories: ['DIAGNOSTIC', 'PERIO', 'PREVENTIVE'] },
+      { title: "Restorative", description: "Repair damaged teeth and restore function.", categories: ['RESTORATIVE', 'ENDODONTIC', 'PROSTHETIC'] },
+      { title: "Implant & Surgical", description: "Placement and restoration of dental implants.", categories: ['IMPLANT'] },
+      { title: "Elective / Cosmetic", description: "Enhancements for your smile.", categories: ['COSMETIC', 'ORTHO'] },
+      { title: "Additional Treatment", description: "Other recommended procedures.", categories: ['OTHER'] },
+    ];
+    
+    let sortOrder = 0;
+    phaseConfig.forEach(config => {
+        // Find items that match this phase's categories and haven't been assigned yet
+        const itemsForPhase = itemsCopy.filter((item: TreatmentPlanItem) => config.categories.includes(item.category) && !item.phaseId);
+
+        if (itemsForPhase.length > 0) {
+            const phaseId = generateId();
+            const newPhase: TreatmentPhase = {
+                id: phaseId,
+                planId: plan.id,
+                title: config.title,
+                description: config.description,
+                sortOrder: sortOrder++,
+                itemIds: itemsForPhase.map((i: TreatmentPlanItem) => i.id),
+            };
+            newPhases.push(newPhase);
+
+            // Assign phaseId to the items
+            itemsForPhase.forEach((item: TreatmentPlanItem) => {
+                item.phaseId = phaseId;
+            });
+        }
+    });
+
+    // Handle any unassigned items by adding them to a generic phase
+    const unassignedItems = itemsCopy.filter((item: TreatmentPlanItem) => !item.phaseId);
+    if (unassignedItems.length > 0) {
+        // 1. Try to find the dedicated 'Additional Treatment' phase
+        let fallbackPhase = newPhases.find(p => p.title === 'Additional Treatment');
+        
+        // 2. If it doesn't exist, create a catch-all 'Other Procedures' phase
+        if (!fallbackPhase) {
+            const phaseId = generateId();
+            fallbackPhase = {
+                id: phaseId,
+                planId: plan.id,
+                title: 'Other Procedures',
+                sortOrder: sortOrder++,
+                itemIds: [],
+            };
+            newPhases.push(fallbackPhase);
+        }
+        
+        unassignedItems.forEach((item: TreatmentPlanItem) => {
+            item.phaseId = fallbackPhase!.id;
+            fallbackPhase!.itemIds.push(item.id);
+        });
+    }
+
+    const planWithPhases = { ...plan, phases: newPhases };
+    return { planWithPhases, itemsWithPhaseId: itemsCopy };
+};
+
+
 // --- PLAN CRUD ---
 
 export const getAllTreatmentPlans = (): TreatmentPlan[] => {
@@ -228,6 +329,7 @@ export const getTreatmentPlanById = (id: string): TreatmentPlan | undefined => {
 /**
  * A central loader to fetch a plan and its items together.
  * This is the single source of truth for the detail page.
+ * It now handles backward compatibility for phases.
  */
 export function loadTreatmentPlanWithItems(
   planId: string
@@ -235,7 +337,7 @@ export function loadTreatmentPlanWithItems(
   const allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
   const allPlans: TreatmentPlan[]     = JSON.parse(localStorage.getItem(KEY_PLANS) || '[]');
 
-  const planFromStorage = allPlans.find(p => p.id === planId);
+  let planFromStorage = allPlans.find(p => p.id === planId);
   if (!planFromStorage) {
     console.warn(`Plan not found in loadTreatmentPlanWithItems: ${planId}`);
     return null;
@@ -254,20 +356,30 @@ export function loadTreatmentPlanWithItems(
     itemsForPlan.sort((a,b) => a.sortOrder - b.sortOrder);
   }
 
-  // Backward compatibility: Set insurance mode if it's missing on a loaded plan
+  // --- BACKWARD COMPATIBILITY ---
+  // 1. Insurance Mode
   if (!planFromStorage.insuranceMode) {
     planFromStorage.insuranceMode = hasDetailedInsurance(itemsForPlan) ? 'advanced' : 'simple';
   }
-  // Backward compatibility for fee schedule type
+  // 2. Fee Schedule
   if (!planFromStorage.feeScheduleType) {
     planFromStorage.feeScheduleType = 'standard';
   }
+  // 3. Phases
+  if (!planFromStorage.phases || planFromStorage.phases.length === 0) {
+    const { planWithPhases, itemsWithPhaseId } = createDefaultPhasesForPlan(planFromStorage, itemsForPlan);
+    
+    // Persist the auto-generated phase data
+    const allItemsWithUpdates = allItems.map(item => itemsWithPhaseId.find(i => i.id === item.id) || item);
+    localStorage.setItem(KEY_ITEMS, JSON.stringify(allItemsWithUpdates));
+    savePlan(planWithPhases);
 
-  const plan: TreatmentPlan = {
-    ...planFromStorage,
-  };
+    // Use the newly generated data for the return value
+    planFromStorage = planWithPhases;
+    itemsForPlan = itemsWithPhaseId;
+  }
 
-  return { plan, items: itemsForPlan };
+  return { plan: planFromStorage, items: itemsForPlan };
 }
 
 const savePlan = (plan: TreatmentPlan) => {
@@ -300,7 +412,8 @@ export const createTreatmentPlan = (data: { title?: string }): TreatmentPlan => 
     patientPortion: 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    itemIds: []
+    itemIds: [],
+    phases: [],
   };
   savePlan(newPlan);
   logActivity({ treatmentPlanId: newPlan.id, type: 'PLAN_CREATED', message: 'Plan created' });
@@ -494,8 +607,10 @@ export const createTreatmentPlanItem = (
     baseFeeOverride?: number;
   }
 ): TreatmentPlanItem => {
-  const plan = getTreatmentPlanById(planId);
-  if (!plan) throw new Error("Plan not found when creating item");
+  // We need the full plan data to decide which phase to add the item to.
+  const planResult = loadTreatmentPlanWithItems(planId);
+  if (!planResult) throw new Error("Plan not found when creating item");
+  let { plan, items } = planResult;
   
   const fees = getFeeSchedule();
   const feeEntry = fees.find(f => f.id === data.feeScheduleEntryId);
@@ -513,23 +628,32 @@ export const createTreatmentPlanItem = (
     category: feeEntry.category,
     baseFee: data.baseFeeOverride ?? effectiveBaseFee,
     urgency: 'ELECTIVE', // Default
-    sortOrder: 999
+    sortOrder: (items.length > 0 ? Math.max(...items.map(i => i.sortOrder)) : 0) + 1,
+    phaseId: null // will be assigned below
   };
 
   const computedItem = computeItemPricing(rawItem, feeEntry) as TreatmentPlanItem;
+  
+  // Assign to a default phase
+  const bucketTitle = getPhaseBucketTitleForCategory(computedItem.category as FeeCategory | undefined);
+  let targetPhase = plan.phases?.find(p => p.title === bucketTitle) || plan.phases?.[0] || null;
+
+  if (targetPhase) {
+    computedItem.phaseId = targetPhase.id;
+    // Find the actual phase object in the plan to mutate it before saving
+    const phaseInPlan = plan.phases?.find(p => p.id === targetPhase!.id);
+    if(phaseInPlan) {
+        phaseInPlan.itemIds.push(computedItem.id);
+    }
+  }
   
   const allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
   allItems.push(computedItem);
   localStorage.setItem(KEY_ITEMS, JSON.stringify(allItems));
 
-  // The plan object from getTreatmentPlanById above is stale after adding items.
-  // We need to re-fetch or just update its itemIds.
-  const currentPlan = getTreatmentPlanById(planId);
-  if (currentPlan) {
-    currentPlan.itemIds.push(computedItem.id);
-    savePlan(currentPlan);
-    recalculatePlanTotalsAndSave(planId);
-  }
+  plan.itemIds.push(computedItem.id);
+  savePlan(plan);
+  recalculatePlanTotalsAndSave(planId);
 
   return computedItem;
 };
@@ -603,6 +727,13 @@ export const deleteTreatmentPlanItem = (itemIdToDelete: string) => {
   
   if (planIndex !== -1) {
     const originalPlan = allPlans[planIndex];
+    // Also remove item from its phase
+    if (originalPlan.phases && itemToDelete.phaseId) {
+        const phase = originalPlan.phases.find(p => p.id === itemToDelete.phaseId);
+        if (phase) {
+            phase.itemIds = phase.itemIds.filter(id => id !== itemIdToDelete);
+        }
+    }
     allPlans[planIndex] = {
       ...originalPlan,
       itemIds: originalPlan.itemIds.filter(id => id !== itemIdToDelete),
@@ -622,6 +753,106 @@ export const reorderTreatmentPlanItems = (planId: string, orderedIds: string[]) 
     plan.itemIds = orderedIds;
     savePlan(plan);
 };
+
+// --- PHASE MANAGEMENT ---
+
+export const updatePhase = (planId: string, phaseId: string, updates: Partial<TreatmentPhase>): { plan: TreatmentPlan, items: TreatmentPlanItem[] } | null => {
+    const result = loadTreatmentPlanWithItems(planId);
+    if (!result) return null;
+
+    let { plan, items } = result;
+    if (!plan.phases) return result;
+
+    plan.phases = plan.phases.map(p => p.id === phaseId ? { ...p, ...updates } : p);
+    savePlan(plan);
+    return { plan, items };
+};
+
+export const reorderPhases = (planId: string, orderedPhaseIds: string[]): { plan: TreatmentPlan, items: TreatmentPlanItem[] } | null => {
+    const result = loadTreatmentPlanWithItems(planId);
+    if (!result) return null;
+    
+    let { plan, items } = result;
+    if (!plan.phases) return result;
+
+    const phaseMap = new Map(plan.phases.map(p => [p.id, p]));
+    plan.phases = orderedPhaseIds.map((id, index) => {
+        const phase = phaseMap.get(id)!;
+        phase.sortOrder = index;
+        return phase;
+    });
+
+    savePlan(plan);
+    return { plan, items };
+};
+
+export const assignItemToPhase = (planId: string, itemId: string, newPhaseId: string): { plan: TreatmentPlan, items: TreatmentPlanItem[] } | null => {
+    const result = loadTreatmentPlanWithItems(planId);
+    if (!result) return null;
+    
+    let { plan, items } = result;
+    if (!plan.phases) return result;
+    
+    const allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
+    const itemIndex = allItems.findIndex(i => i.id === itemId);
+    if (itemIndex === -1) return result;
+
+    const itemToMove = allItems[itemIndex];
+    const oldPhaseId = itemToMove.phaseId;
+
+    // Update item's phaseId
+    itemToMove.phaseId = newPhaseId;
+    
+    // Update plan's phases itemIds
+    if (oldPhaseId) {
+        const oldPhase = plan.phases.find(p => p.id === oldPhaseId);
+        if (oldPhase) {
+            oldPhase.itemIds = oldPhase.itemIds.filter(id => id !== itemId);
+        }
+    }
+    const newPhase = plan.phases.find(p => p.id === newPhaseId);
+    if (newPhase && !newPhase.itemIds.includes(itemId)) {
+        newPhase.itemIds.push(itemId);
+    }
+
+    localStorage.setItem(KEY_ITEMS, JSON.stringify(allItems));
+    savePlan(plan);
+
+    return loadTreatmentPlanWithItems(planId);
+};
+
+/**
+ * [NEW] Regenerates phases from scratch for a plan based on its current items.
+ */
+export const regroupPhasesForPlan = (planId: string): { plan: TreatmentPlan, items: TreatmentPlanItem[] } | null => {
+    const initialResult = loadTreatmentPlanWithItems(planId);
+    if (!initialResult) return null;
+    
+    // Create a clean slate for regeneration: items with no phaseId and a plan with no phases
+    const itemsToRegroup = initialResult.items.map(i => ({ ...i, phaseId: null as string | null }));
+    const planToRegroup = { ...initialResult.plan, phases: [] };
+
+    // This will create fresh phases and assign items to them
+    const { planWithPhases, itemsWithPhaseId } = createDefaultPhasesForPlan(planToRegroup, itemsToRegroup);
+
+    // Now, persist these changes.
+    // We need to update all items in localStorage, not just the ones for this plan.
+    const allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
+    const planItemMap = new Map(itemsWithPhaseId.map(i => [i.id, i]));
+    
+    const mergedItems = allItems.map(item => {
+        if (planItemMap.has(item.id)) {
+            return planItemMap.get(item.id)!;
+        }
+        return item;
+    });
+
+    localStorage.setItem(KEY_ITEMS, JSON.stringify(mergedItems));
+    savePlan(planWithPhases);
+
+    return loadTreatmentPlanWithItems(planId); // Return the final, consistent state
+};
+
 
 // --- SHARING ---
 

@@ -1,20 +1,20 @@
 
 
+
 import React from 'react';
 import { Clock } from 'lucide-react';
-
-interface Phase {
-  id: string;
-  title: string;
-  description?: string;
-  durationEstimate?: string;
-}
+import { TreatmentPlan, TreatmentPlanItem } from '../../types';
 
 interface TreatmentTimelineSectionProps {
-  phases: Phase[];
+  plan: TreatmentPlan;
+  items: TreatmentPlanItem[];
 }
 
-export const TreatmentTimelineSection: React.FC<TreatmentTimelineSectionProps> = ({ phases }) => {
+export const TreatmentTimelineSection: React.FC<TreatmentTimelineSectionProps> = ({ plan, items }) => {
+  const phases = plan.phases && plan.phases.length > 0
+    ? [...plan.phases].sort((a, b) => a.sortOrder - b.sortOrder)
+    : [];
+
   if (!phases || phases.length === 0) return null;
 
   const count = phases.length;
@@ -53,10 +53,10 @@ export const TreatmentTimelineSection: React.FC<TreatmentTimelineSectionProps> =
                 </div>
                 <h3 className="text-lg font-bold text-gray-900 mb-2">{phase.title}</h3>
                 <p className="text-sm text-gray-500 mb-4 max-w-[240px] mx-auto leading-relaxed">{phase.description}</p>
-                {phase.durationEstimate && (
+                {phase.estimatedVisits && (
                   <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 px-3 py-1.5 rounded-full">
                     <Clock size={12} />
-                    {phase.durationEstimate}
+                    Est. {phase.estimatedVisits} visits
                   </div>
                 )}
               </div>
@@ -82,10 +82,10 @@ export const TreatmentTimelineSection: React.FC<TreatmentTimelineSectionProps> =
                 <div className="flex-1 pb-10">
                    <h3 className="text-lg font-bold text-gray-900 mb-1 leading-tight">{phase.title}</h3>
                    <p className="text-sm text-gray-600 leading-relaxed mb-3">{phase.description}</p>
-                   {phase.durationEstimate && (
+                   {phase.estimatedVisits && (
                       <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 bg-gray-50 px-2.5 py-1 rounded-md border border-gray-100">
                         <Clock size={12} />
-                        {phase.durationEstimate}
+                        Est. {phase.estimatedVisits} visits
                       </div>
                    )}
                 </div>

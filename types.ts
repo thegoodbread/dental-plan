@@ -56,6 +56,16 @@ export interface FeeScheduleEntry {
   isActive: boolean;
 }
 
+export interface TreatmentPhase {
+  id: string;
+  planId: string;
+  title: string;
+  description?: string;
+  sortOrder: number;
+  itemIds: string[];
+  estimatedVisits?: number;
+}
+
 export interface TreatmentPlanItem {
   id: string;
   treatmentPlanId: string;
@@ -74,6 +84,7 @@ export interface TreatmentPlanItem {
   urgency?: UrgencyLevel;
   estimatedVisits?: number;
   estimatedDurationWeeks?: number;
+  phaseId?: string | null;
 
   // Pricing
   baseFee: number;
@@ -116,6 +127,7 @@ export interface TreatmentPlan {
   
   itemIds: string[]; // List of IDs for persistence order
   items?: TreatmentPlanItem[]; // Hydrated
+  phases?: TreatmentPhase[];
 }
 
 export interface ShareLink {

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { TreatmentPlan, TreatmentPlanItem } from '../../types';
 import { DollarSign } from 'lucide-react';
@@ -84,40 +85,7 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
 
   // --- CLINICAL LOGIC INTEGRATION ---
   const metrics = calculateClinicalMetrics(items);
-
-  // Phases Logic (Simple Heuristic for now, could be in service)
-  const phases = [];
-  const hasPerio = items.some(i => i.category === 'PERIO' || i.category === 'PREVENTIVE');
-  const hasRestorative = items.some(i => i.category === 'RESTORATIVE' || i.category === 'ENDODONTIC');
-  const hasImplant = items.some(i => i.category === 'IMPLANT' || i.category === 'PROSTHETIC' || i.category === 'OTHER');
-
-  if (hasPerio) {
-     phases.push({ 
-       id: '1', 
-       title: 'Foundation & Hygiene', 
-       description: 'Addressing gum health to ensure a solid foundation.', 
-       durationEstimate: '1-2 visits' 
-     });
-  }
-  if (hasRestorative) {
-     phases.push({ 
-       id: '2', 
-       title: 'Restorative Phase', 
-       description: 'Repairing damaged teeth to restore function.', 
-       durationEstimate: '2-3 weeks' 
-     });
-  }
-  if (hasImplant) {
-     phases.push({ 
-       id: '3', 
-       title: 'Implant & Replacement', 
-       description: 'Permanent replacement of missing teeth.', 
-       durationEstimate: '3-6 months' 
-     });
-  }
-  if (phases.length === 0) {
-     phases.push({ id: '1', title: 'Treatment', description: 'Scheduled procedures', durationEstimate: 'Flexible' });
-  }
+  const phaseCount = plan.phases ? plan.phases.length : 0;
 
   return (
     <div className="min-h-screen bg-blue-50/30 text-gray-900 font-sans selection:bg-blue-100 select-none">
@@ -138,13 +106,12 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
         />
       </div>
 
-      <TreatmentTimelineSection phases={phases} />
+      <TreatmentTimelineSection plan={plan} items={items} />
 
       {/* Procedure List with Hover State */}
       <ProcedureBreakdownSection 
         plan={plan}
         items={items} 
-        phases={phases}
         hoveredTooth={hoveredTooth}
         hoveredQuadrant={hoveredQuadrant}
         hoveredItemId={hoveredItemId}
@@ -155,7 +122,7 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
 
       <SummaryMetricsSection 
         visitCount={metrics.visitCount}
-        phaseCount={phases.length}
+        phaseCount={phaseCount}
         procedureCount={items.length}
       />
 

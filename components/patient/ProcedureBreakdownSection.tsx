@@ -1,6 +1,7 @@
 
 
-import React, { useState } from 'react';
+
+import React, { useState, useMemo } from 'react';
 import { TreatmentPlan, TreatmentPlanItem } from '../../types';
 import { Calendar, AlertTriangle, Shield, Smile, ChevronDown } from 'lucide-react';
 import { estimateVisits, getItemsOnTooth, getItemsOnQuadrant } from '../../services/clinicalLogic';
@@ -9,7 +10,6 @@ import { getProcedureIcon } from '../../utils/getProcedureIcon';
 interface ProcedureBreakdownSectionProps {
   plan: TreatmentPlan;
   items: TreatmentPlanItem[];
-  phases?: { id: string; title: string }[];
   hoveredTooth: number | null;
   hoveredQuadrant: string | null;
   hoveredItemId: string | null;
@@ -173,36 +173,28 @@ const PhaseGroup: React.FC<{
 export const ProcedureBreakdownSection: React.FC<ProcedureBreakdownSectionProps> = ({
   plan,
   items,
-  phases,
   hoveredTooth,
   hoveredQuadrant,
   hoveredItemId,
   onHoverItem
 }) => {
-  const getItemsForPhase = (phaseTitle: string) => {
-    if (phaseTitle.includes('Hygiene') || phaseTitle.includes('Foundation'))
-      return items.filter(i => i.category === 'PERIO' || i.category === 'OTHER');
-    if (phaseTitle.includes('Restorative'))
-      return items.filter(i => i.category === 'RESTORATIVE' || i.category === 'ENDODONTIC');
-    if (phaseTitle.includes('Replacement') || phaseTitle.includes('Implant'))
-      return items.filter(i => i.category === 'IMPLANT' || i.category === 'PROSTHETIC');
-    return items.filter(i => !['PERIO', 'OTHER', 'RESTORATIVE', 'ENDODONTIC', 'IMPLANT', 'PROSTHETIC'].includes(i.category));
-  };
+  const itemMap = useMemo(() => new Map(items.map(item => [item.id, item])), [items]);
 
-  let displayGroups = [];
-  if (phases && phases.length > 0) {
-    displayGroups = phases.map(p => ({
-      title: p.title,
-      items: getItemsForPhase(p.title)
-    })).filter(g => g.items.length > 0);
-    const mappedIds = new Set(displayGroups.flatMap(g => g.items.map(i => i.id)));
-    const unmapped = items.filter(i => !mappedIds.has(i.id));
-    if (unmapped.length > 0) {
-      displayGroups.push({ title: 'Other Procedures', items: unmapped });
+  const displayGroups = useMemo(() => {
+    if (plan.phases && plan.phases.length > 0) {
+      return [...plan.phases]
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map(phase => ({
+          title: phase.title,
+          items: phase.itemIds
+            .map(id => itemMap.get(id))
+            .filter((item): item is TreatmentPlanItem => !!item)
+        }))
+        .filter(group => group.items.length > 0);
     }
-  } else {
-    displayGroups = [{ title: 'All Procedures', items: items }];
-  }
+    // Fallback for older plans or if phases are empty
+    return [{ title: 'All Procedures', items: items }];
+  }, [plan.phases, items, itemMap]);
 
   return (
     <section className="py-12 md:py-16 px-4 md:px-6 bg-gray-50 border-b border-gray-200">
