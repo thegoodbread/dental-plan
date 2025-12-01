@@ -349,121 +349,165 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
     onSaveChanges(localPlan, localItems);
     onClose();
   };
+  
+  const maxPhases = 8;
+  const numActivePhases = phases.length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" aria-modal="true" role="dialog">
       <div className="bg-white w-[95vw] h-[95vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
         <main ref={boardRef} className="flex-1 overflow-auto p-5 flex flex-col bg-gradient-to-r from-slate-100/50 via-white to-white relative">
-          <div className="flex gap-4">
-              {phases.map((phase, index) => (
-                <div key={phase.id} className="flex-1 min-w-[280px] flex flex-col group">
-                  <div className="relative h-8 flex justify-center items-center">
-                    {index > 0 && <div className="absolute right-1/2 w-1/2 h-px bg-gray-300" />}
-                    {index < phases.length - 1 && <div className="absolute left-1/2 w-1/2 h-px bg-gray-300" />}
-                    <div className="relative w-5 h-5 rounded-full flex items-center justify-center bg-slate-50 border-2 border-gray-200">
-                      {index === 0 ? <div className="w-3 h-3 rounded-full bg-blue-600 border-2 border-white" /> : <div className="w-2 h-2 rounded-full bg-gray-300" />}
-                    </div>
-                  </div>
-                  <div className={`mb-3 px-1 relative text-center`}>
-                    <div className="text-sm font-semibold text-gray-900 truncate flex items-center justify-center gap-1">
-                        <select value={phase.title} onChange={e => handleUpdatePhase(phase.id, { title: e.target.value })} className="w-full text-center font-semibold bg-transparent border-none outline-none focus:ring-0 appearance-none">
-                            <option value={phase.title}>{`Phase ${index + 1} — ${phase.title}`}</option>
-                            {PHASE_PRESETS.map(p => <option key={p} value={p}>{`Phase ${index + 1} — ${p}`}</option>)}
-                        </select>
-                        {deletingPhaseId === phase.id ? (
-                          <div className="flex items-center gap-1.5 ml-1 animate-in fade-in">
-                            <span className="text-xs font-bold text-red-600">Delete?</span>
-                            <button onClick={() => handleDeletePhase(phase.id)} className="px-2 py-0.5 text-xs text-white bg-red-600 rounded-md hover:bg-red-700">Yes</button>
-                            <button onClick={() => setDeletingPhaseId(null)} className="px-2 py-0.5 text-xs text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">No</button>
-                          </div>
-                        ) : (
-                          <button onClick={() => setDeletingPhaseId(phase.id)} className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Trash2 size={13} />
-                          </button>
-                        )}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">{itemsByPhase[phase.id]?.length || 0} procedure{itemsByPhase[phase.id]?.length !== 1 ? 's' : ''}</div>
-                    {getAggregatedPhaseDuration(itemsByPhase[phase.id] || []) && <div className="text-xs text-gray-600 mt-1 font-medium">{getAggregatedPhaseDuration(itemsByPhase[phase.id] || [])}</div>}
-                    <div className="mt-2 text-xs">
-                        <label className="flex items-center justify-center gap-2 cursor-pointer text-sm font-medium text-blue-600">
-                            <input
-                                type="checkbox"
-                                checked={!!phase.isMonitorPhase}
-                                onChange={e => handleUpdatePhase(phase.id, { isMonitorPhase: e.target.checked })}
-                                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                            />
-                            Monitor Phase
-                        </label>
-                        {phase.isMonitorPhase && (
-                            <div className="mt-2 pt-2 border-t border-slate-200">
-                                <label className="text-xs font-medium text-gray-600 mb-1 block text-center">Monitoring Duration</label>
-                                <div className="flex gap-1.5">
-                                    <input 
-                                        type="number" 
-                                        value={phase.estimatedDurationValue ?? ''} 
-                                        onChange={e => handleUpdatePhase(phase.id, { estimatedDurationValue: e.target.value ? parseInt(e.target.value, 10) : null })}
-                                        className="w-full bg-gray-100 border border-gray-200 text-gray-900 rounded-lg px-2 py-1 text-sm text-center" 
-                                        placeholder="Time"
-                                    />
-                                    <select 
-                                        value={phase.estimatedDurationUnit ?? 'months'} 
-                                        onChange={e => handleUpdatePhase(phase.id, { estimatedDurationUnit: e.target.value as any })} 
-                                        className="bg-gray-100 border border-gray-200 text-gray-900 rounded-lg px-1 py-1 text-sm"
-                                    >
-                                        <option value="days">Days</option>
-                                        <option value="weeks">Weeks</option>
-                                        <option value="months">Months</option>
-                                    </select>
-                                </div>
+          <div className="grid grid-cols-4 grid-rows-2 gap-x-4 gap-y-6 flex-1 min-h-0">
+              {phases.map((phase, index) => {
+                const isLastInRow = (index + 1) % 4 === 0;
+                const isLastPhase = index === phases.length - 1;
+                const showArrow = !isLastInRow && !isLastPhase;
+                const phaseItems = itemsByPhase[phase.id] || [];
+                const phaseDuration = getAggregatedPhaseDuration(phaseItems);
+
+                return (
+                  <div key={phase.id} className="flex flex-col min-h-0 group relative">
+                    {/* Compact Phase Header */}
+                    <div className="px-1 pb-1 text-center">
+                      <div className="relative h-8 flex justify-center items-center">
+                        <div className="absolute left-0 right-0 h-px bg-gray-300" />
+                        <div className="relative w-5 h-5 rounded-full flex items-center justify-center bg-slate-50 border-2 border-gray-200">
+                          {index === 0 ? <div className="w-3 h-3 rounded-full bg-blue-600 border-2 border-white" /> : <div className="w-2 h-2 rounded-full bg-gray-300" />}
+                        </div>
+                      </div>
+
+                      <div className="text-sm font-bold text-gray-900 truncate flex items-center justify-center gap-1">
+                          <select value={phase.title} onChange={e => handleUpdatePhase(phase.id, { title: e.target.value })} className="w-full text-center font-bold text-gray-900 bg-transparent border-none outline-none focus:ring-0 appearance-none p-0 cursor-pointer">
+                              <option value={phase.title}>{`Phase ${index + 1} — ${phase.title}`}</option>
+                              {PHASE_PRESETS.map(p => <option key={p} value={p}>{`Phase ${index + 1} — ${p}`}</option>)}
+                          </select>
+                          {deletingPhaseId === phase.id ? (
+                            <div className="flex items-center gap-1.5 ml-1 animate-in fade-in">
+                              <span className="text-xs font-bold text-red-600">Delete?</span>
+                              <button onClick={() => handleDeletePhase(phase.id)} className="px-2 py-0.5 text-xs text-white bg-red-600 rounded-md hover:bg-red-700">Yes</button>
+                              <button onClick={() => setDeletingPhaseId(null)} className="px-2 py-0.5 text-xs text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">No</button>
                             </div>
+                          ) : (
+                            <button onClick={() => setDeletingPhaseId(phase.id)} className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                      </div>
+
+                      <div className="text-xs text-gray-500 mt-1 h-4">
+                        <span>{phaseItems.length} procedure{phaseItems.length !== 1 ? 's' : ''}</span>
+                        {phaseDuration && (
+                          <>
+                            <span className="mx-1.5">•</span>
+                            <span>{phaseDuration}</span>
+                          </>
                         )}
+                      </div>
+                      
+                      <div className="mt-2">
+                          <label className="inline-flex items-center justify-center gap-2 cursor-pointer text-sm font-medium text-gray-700 group/monitor">
+                              <input
+                                  type="checkbox"
+                                  checked={!!phase.isMonitorPhase}
+                                  onChange={e => handleUpdatePhase(phase.id, { isMonitorPhase: e.target.checked })}
+                                  className="hidden peer"
+                              />
+                              <div className="w-4 h-4 rounded border-2 p-0.5 transition-all duration-200 border-gray-400 bg-white group-hover/monitor:border-blue-500 peer-checked:border-gray-800 peer-checked:bg-gray-800">
+                                  <div className="w-full h-full rounded-sm bg-gray-200 peer-checked:bg-gray-500 transition-colors"></div>
+                              </div>
+                              <span className="font-semibold text-blue-600">Monitor Phase</span>
+                          </label>
+                          {phase.isMonitorPhase && (
+                              <div className="mt-2 pt-2 border-t border-slate-200 w-4/5 mx-auto">
+                                  <div className="flex gap-1.5">
+                                      <input 
+                                          type="number" 
+                                          value={phase.estimatedDurationValue ?? ''} 
+                                          onChange={e => handleUpdatePhase(phase.id, { estimatedDurationValue: e.target.value ? parseInt(e.target.value, 10) : null })}
+                                          className="w-full bg-gray-100 border border-gray-200 text-gray-900 rounded-lg px-2 py-1 text-sm text-center" 
+                                          placeholder="Time"
+                                      />
+                                      <select 
+                                          value={phase.estimatedDurationUnit ?? 'months'} 
+                                          onChange={e => handleUpdatePhase(phase.id, { estimatedDurationUnit: e.target.value as any })} 
+                                          className="bg-gray-100 border border-gray-200 text-gray-900 rounded-lg px-1 py-1 text-sm"
+                                      >
+                                          <option value="days">Days</option>
+                                          <option value="weeks">Weeks</option>
+                                          <option value="months">Months</option>
+                                      </select>
+                                  </div>
+                              </div>
+                          )}
+                      </div>
+                      {showArrow && <div className="absolute -right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"><ArrowRight size={16} /></div>}
                     </div>
-                    {index < phases.length - 1 && <div className="absolute -right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"><ArrowRight size={16} /></div>}
-                  </div>
-                </div>
-              ))}
-          </div>
-          <div className="flex gap-4 flex-1 min-h-0">
-            {phases.map(phase => (
-              <div key={phase.id} className={`flex-1 min-w-[280px] rounded-2xl border p-3 flex flex-col transition-colors bg-slate-50 shadow-sm ${dragOverPhaseId === phase.id && !dragOverItemId ? 'border-blue-300 bg-blue-50/50' : 'border-slate-200'}`} onDragOver={e => handlePhaseDragOver(e, phase.id)} onDrop={e => handleDrop(e, phase.id)}>
-                <div className="flex flex-col gap-2 overflow-y-auto pr-1 -mr-2 flex-1 relative">
-                  {(itemsByPhase[phase.id] || []).map(item => {
-                    const ProcedureIcon = getProcedureIcon(item);
-                    const locationText = renderLocation(item);
-                    return (
-                      <div key={item.id} className="relative z-10" onDragOver={e => handleItemDragOver(e, phase.id, item.id)} onDrop={e => handleDrop(e, phase.id, item.id)}>
-                        <div ref={el => { if (el) cardRefs.current.set(item.id, el); else cardRefs.current.delete(item.id); }} draggable onClick={() => setSelectedItemId(item.id)} onDragStart={e => handleDragStart(e, item.id)} onDragEnd={handleDragEnd} className={`rounded-xl border shadow-sm cursor-pointer transition-all duration-150 flex overflow-hidden ${draggingItemId === item.id ? 'opacity-40' : ''} ${dragOverItemId === item.id ? 'ring-2 ring-blue-400 bg-white' : 'hover:shadow-md border-gray-200 bg-white'} ${selectedItemId === item.id ? 'ring-2 ring-blue-500 border-blue-400 bg-white' : ''}`}>
-                          <div className={`w-1.5 shrink-0 ${getUrgencyColor(item.urgency)}`} />
-                          <div className="p-2 flex-1">
-                            <div className="flex items-start gap-2">
-                              <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 cursor-grab mt-0.5 shrink-0" aria-hidden="true"><GripVertical size={12} /></div>
-                              <div className="flex-1">
-                                <span className="font-medium text-xs leading-tight text-gray-800">{item.procedureName}</span>
-                                {locationText && (
-                                  <div className="text-[11px] text-gray-500 mt-1 font-medium">{locationText}</div>
-                                )}
-                                <div className="flex justify-between items-end mt-2">
-                                  <div className="font-bold text-base text-gray-900">${item.netFee?.toFixed(0) ?? '—'}</div>
-                                  <div className="w-6 h-6 rounded-lg flex items-center justify-center text-gray-500 bg-gray-100">
-                                      {/* FIX: Changed size prop to width and height for SVG component */}
-                                      <ProcedureIcon width={14} height={14} />
+
+                    {/* Phase Lane */}
+                    <div className={`mt-2 flex-1 min-h-0 rounded-2xl border p-3 flex flex-col transition-colors bg-slate-50 shadow-sm ${dragOverPhaseId === phase.id && !dragOverItemId ? 'border-blue-300 bg-blue-50/50' : 'border-slate-200'}`} onDragOver={e => handlePhaseDragOver(e, phase.id)} onDrop={e => handleDrop(e, phase.id)}>
+                      <div className="flex flex-col gap-2 overflow-y-auto pr-1 -mr-2 flex-1 relative">
+                        {phaseItems.map(item => {
+                          const ProcedureIcon = getProcedureIcon(item);
+                          const locationText = renderLocation(item);
+                          return (
+                            <div key={item.id} className="relative z-10" onDragOver={e => handleItemDragOver(e, phase.id, item.id)} onDrop={e => handleDrop(e, phase.id, item.id)}>
+                              <div ref={el => { if (el) cardRefs.current.set(item.id, el); else cardRefs.current.delete(item.id); }} draggable onClick={() => setSelectedItemId(item.id)} onDragStart={e => handleDragStart(e, item.id)} onDragEnd={handleDragEnd} className={`rounded-xl border shadow-sm cursor-pointer transition-all duration-150 flex overflow-hidden ${draggingItemId === item.id ? 'opacity-40' : ''} ${dragOverItemId === item.id ? 'ring-2 ring-blue-400 bg-white' : 'hover:shadow-md border-gray-200 bg-white'} ${selectedItemId === item.id ? 'ring-2 ring-blue-500 border-blue-400 bg-white' : ''}`}>
+                                <div className={`w-1.5 shrink-0 ${getUrgencyColor(item.urgency)}`} />
+                                <div className="p-2 flex-1">
+                                  <div className="flex items-start gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 cursor-grab mt-0.5 shrink-0" aria-hidden="true"><GripVertical size={12} /></div>
+                                    <div className="flex-1">
+                                      <span className="font-medium text-xs leading-tight text-gray-800">{item.procedureName}</span>
+                                      {locationText && (
+                                        <div className="text-[11px] text-gray-500 mt-1 font-medium">{locationText}</div>
+                                      )}
+                                      <div className="flex justify-between items-end mt-2">
+                                        <div className="font-bold text-base text-gray-900">${item.netFee?.toFixed(0) ?? '—'}</div>
+                                        <div className="w-6 h-6 rounded-lg flex items-center justify-center text-gray-500 bg-gray-100">
+                                            <ProcedureIcon width={14} height={14} />
+                                        </div>
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })}
+                    </div>
+                  </div>
+                );
+              })}
+              
+              {/* Placeholder Slots */}
+              {numActivePhases < maxPhases && (
+                <div className="flex flex-col min-h-0">
+                  <div className="h-8 flex justify-center items-center"><div className="w-full h-px border-t border-dashed border-gray-300" /></div>
+                  <div className="h-[120px]" />
+                  <div className="flex-1 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-100/50 flex items-center justify-center p-3">
+                    <button onClick={handleAddPhase} className="w-full h-full flex flex-col items-center justify-center gap-2 text-slate-500 hover:bg-slate-200/60 hover:text-slate-700 rounded-lg transition-colors">
+                      <Plus size={24}/>
+                      <span className="text-sm font-semibold">Add Phase</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )}
+              {Array.from({ length: Math.max(0, maxPhases - numActivePhases - 1) }).map((_, i) => (
+                <div key={`empty-${i}`} className="flex flex-col min-h-0">
+                  <div className="h-8 flex justify-center items-center"><div className="w-full h-px border-t border-dashed border-gray-300" /></div>
+                  <div className="h-[120px]" />
+                  <div className="flex-1 rounded-2xl bg-slate-100/80" />
+                </div>
+              ))}
           </div>
+
           {selectedItem && ( <FloatingInspector ref={inspectorRef} item={selectedItem} phase={itemPhaseMap.get(selectedItem.id) || null} onSave={handleUpdateItem} onClose={closeInspector} position={inspectorPosition || {top: 100, left: 100}} onDeleteItem={handleDeleteItem} /> )}
         </main>
         <footer className="shrink-0 px-4 py-3 border-t bg-gray-50 flex items-center justify-between">
-            <button onClick={handleAddPhase} disabled={(localPlan.phases?.length ?? 0) >= 8} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"><Plus size={14}/> Add Phase</button>
+            <div className="text-xs text-gray-500">
+                {numActivePhases} of {maxPhases} phases used.
+            </div>
             <div className="flex items-center gap-2">
                 <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
                 <button onClick={handleSaveAndClose} className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">Save Changes</button>
