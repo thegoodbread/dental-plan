@@ -1,5 +1,3 @@
-
-
 import { 
   TreatmentPlan, 
   TreatmentPlanItem, 
@@ -27,6 +25,13 @@ const KEY_LOGS = 'dental_logs_v7';
 // --- UTILS ---
 const generateId = () => `id-${Math.random().toString(36).substring(2, 10)}`;
 
+export const SEDATION_TYPES = [
+    { label: 'Nitrous Oxide', defaultFee: 150, membershipFee: 100 },
+    { label: 'Oral Sedation', defaultFee: 350, membershipFee: 250 },
+    { label: 'IV Moderate Sedation', defaultFee: 650, membershipFee: 500 },
+    { label: 'IV Deep Sedation', defaultFee: 950, membershipFee: 750 },
+    { label: 'General Anesthesia', defaultFee: 1500, membershipFee: 1200 },
+];
 
 /**
  * Checks if any item in a list has detailed, non-null financial fields.
@@ -364,6 +369,13 @@ export function loadTreatmentPlanWithItems(
   const processedItems = itemsForPlan.map(originalItem => {
     const item = { ...originalItem };
 
+    // Default itemType if missing (Migration)
+    if (!item.itemType) {
+        item.itemType = 'PROCEDURE';
+        item.linkedItemIds = [];
+        itemsNeedSave = true;
+    }
+
     // Step 1: Migrate old format (estimatedDurationWeeks)
     const legacyItem = item as any;
     if (legacyItem.estimatedDurationWeeks != null && item.estimatedDurationValue == null) {
@@ -504,6 +516,13 @@ export const recalculatePlanTotalsAndSave = (planId: string): TreatmentPlan | un
     const feeMap = new Map(feeSchedule.map(f => [f.id, f]));
     
     const standardTotalFee = items.reduce((total, item) => {
+      // If it's a sedation item with custom fee, try to look up standard fee
+      if (item.itemType === 'SEDATION') {
+          const sedDef = SEDATION_TYPES.find(d => d.label === item.sedationType);
+          if (sedDef) return total + sedDef.defaultFee;
+          return total + item.netFee;
+      }
+
       const feeEntry = feeMap.get(item.feeScheduleEntryId);
       if (!feeEntry) return total + item.netFee; // Fallback
       const standardItemPrice = feeEntry.baseFee * item.units;
@@ -555,6 +574,18 @@ export const repriceAllItemsForPlan = (planId: string): TreatmentPlan | undefine
   
   const updatedItems = allItems.map(item => {
     if (item.treatmentPlanId === planId) {
+      if (item.itemType === 'SEDATION') {
+          const sedDef = SEDATION_TYPES.find(d => d.label === item.sedationType);
+          if (sedDef) {
+             // For repricing sedation, we use standard vs membership logic
+             const newBaseFee = plan.feeScheduleType === 'membership' ? (sedDef.membershipFee ?? sedDef.defaultFee) : sedDef.defaultFee;
+             const grossFee = newBaseFee * item.units;
+             const netFee = Math.max(0, grossFee - (item.discount || 0));
+             return { ...item, baseFee: newBaseFee, grossFee, netFee };
+          }
+          return item; 
+      }
+
       const feeEntry = feeSchedule.find(f => f.id === item.feeScheduleEntryId);
       if (feeEntry) {
         const newBaseFee = getEffectiveBaseFee(feeEntry, plan.feeScheduleType);
@@ -637,6 +668,12 @@ export const savePlanAndItems = (planToSave: TreatmentPlan, itemsForPlan: Treatm
     const feeSchedule = getFeeSchedule();
     const feeMap = new Map(feeSchedule.map(f => [f.id, f]));
     const standardTotalFee = itemsForPlan.reduce((total, item) => {
+      if (item.itemType === 'SEDATION') {
+          const sedDef = SEDATION_TYPES.find(d => d.label === item.sedationType);
+          if (sedDef) return total + sedDef.defaultFee;
+          return total + item.netFee;
+      }
+      
       const feeEntry = feeMap.get(item.feeScheduleEntryId);
       if (!feeEntry) return total + item.netFee;
       const standardItemPrice = feeEntry.baseFee * item.units;
@@ -757,6 +794,8 @@ export const createTreatmentPlanItem = (
     phaseId: null,
     estimatedDurationValue: value,
     estimatedDurationUnit: unit,
+    itemType: 'PROCEDURE', // Default
+    linkedItemIds: [],
   };
 
   const computedItem = computeItemPricing(rawItem, feeEntry) as TreatmentPlanItem;
@@ -783,6 +822,78 @@ export const createTreatmentPlanItem = (
   return computedItem;
 };
 
+// NEW: Explicit Sedation Creation
+export const createSedationItem = (
+  planId: string,
+  data: {
+      sedationType: string;
+      appliesToItemIds: string[];
+      fee: number;
+      phaseId: string;
+  }
+): TreatmentPlanItem => {
+  const planResult = loadTreatmentPlanWithItems(planId);
+  if (!planResult) throw new Error("Plan not found");
+  const { plan, items } = planResult;
+
+  // Determine the correct fee to apply, respecting plan type if possible
+  // Use passed fee as default, but verify against schedule if appropriate
+  let appliedFee = data.fee;
+  
+  // If we want to strictly enforce schedule pricing on creation (optional, but good for consistency)
+  // we could do this:
+  const sedDef = SEDATION_TYPES.find(d => d.label === data.sedationType);
+  if (sedDef) {
+      if (plan.feeScheduleType === 'membership') {
+          // If the user passed the DEFAULT fee (not overridden), use membership fee
+          // A simple heuristic is: if data.fee equals standard default, switch to member fee.
+          if (data.fee === sedDef.defaultFee && sedDef.membershipFee) {
+              appliedFee = sedDef.membershipFee;
+          }
+      }
+  }
+
+  const newItem: TreatmentPlanItem = {
+      id: generateId(),
+      treatmentPlanId: planId,
+      feeScheduleEntryId: 'sedation-custom',
+      procedureCode: 'D92XX',
+      procedureName: `Sedation – ${data.sedationType}`,
+      unitType: 'PER_PROCEDURE',
+      category: 'OTHER',
+      itemType: 'SEDATION',
+      linkedItemIds: data.appliesToItemIds,
+      sedationType: data.sedationType,
+      phaseId: data.phaseId,
+      sortOrder: (items.length > 0 ? Math.max(...items.map(i => i.sortOrder)) : 0) + 1,
+      estimatedDurationValue: 0,
+      estimatedDurationUnit: 'days',
+      baseFee: appliedFee,
+      units: 1,
+      grossFee: appliedFee,
+      discount: 0,
+      netFee: appliedFee,
+  };
+  
+  // Attach to phase
+  const phaseInPlan = plan.phases?.find(p => p.id === data.phaseId);
+  if (phaseInPlan) {
+      phaseInPlan.itemIds.push(newItem.id);
+  } else {
+      console.warn("Could not find phase for sedation item:", data.phaseId);
+  }
+
+  const allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
+  allItems.push(newItem);
+  localStorage.setItem(KEY_ITEMS, JSON.stringify(allItems));
+
+  plan.itemIds.push(newItem.id);
+  savePlan(plan);
+  recalculatePlanTotalsAndSave(planId);
+  
+  return newItem;
+};
+
 export const updateTreatmentPlanItem = (id: string, updates: Partial<TreatmentPlanItem>): { plan: TreatmentPlan, items: TreatmentPlanItem[] } | undefined => {
   const allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
   const idx = allItems.findIndex(i => i.id === id);
@@ -796,25 +907,39 @@ export const updateTreatmentPlanItem = (id: string, updates: Partial<TreatmentPl
     return undefined;
   }
   
-  const feeSchedule = getFeeSchedule();
-  const feeEntry = feeSchedule.find(f => f.id === currentItem.feeScheduleEntryId);
-  if (!feeEntry) {
-    console.error(`Fee entry not found for item ${id}`);
-    return undefined;
-  }
-  
-  const itemWithUpdates = { ...currentItem, ...updates };
+  let finalItemState = { ...currentItem, ...updates };
 
-  if (updates.baseFee === undefined) {
-    itemWithUpdates.baseFee = getEffectiveBaseFee(feeEntry, plan.feeScheduleType);
-  }
-  
-  const repricedPart = computeItemPricing(itemWithUpdates, feeEntry);
+  // Re-pricing logic only for procedures, unless sedation fee is manually updated
+  if (currentItem.itemType !== 'SEDATION' && updates.baseFee === undefined) {
+     const feeSchedule = getFeeSchedule();
+     const feeEntry = feeSchedule.find(f => f.id === currentItem.feeScheduleEntryId);
+     if (feeEntry) {
+         finalItemState.baseFee = getEffectiveBaseFee(feeEntry, plan.feeScheduleType);
+         const repricedPart = computeItemPricing(finalItemState, feeEntry);
+         finalItemState = { ...finalItemState, ...repricedPart };
+     }
+  } else if (currentItem.itemType !== 'SEDATION' && updates.baseFee !== undefined) {
+       // Manual fee override on procedure
+       const feeSchedule = getFeeSchedule();
+       const feeEntry = feeSchedule.find(f => f.id === currentItem.feeScheduleEntryId);
+       const repricedPart = computeItemPricing(finalItemState, feeEntry);
+       finalItemState = { ...finalItemState, ...repricedPart };
+  } else if (currentItem.itemType === 'SEDATION') {
+      // Logic for sedation updates
+      // If updating sedation type, we might want to refresh fee
+      if (updates.sedationType) {
+         const def = SEDATION_TYPES.find(d => d.label === updates.sedationType);
+         if (def && updates.baseFee === undefined) {
+             const newBaseFee = plan.feeScheduleType === 'membership' ? (def.membershipFee ?? def.defaultFee) : def.defaultFee;
+             finalItemState.baseFee = newBaseFee;
+         }
+      }
 
-  const finalItemState = {
-    ...itemWithUpdates,
-    ...repricedPart,
-  };
+      if (finalItemState.baseFee !== undefined) {
+          finalItemState.grossFee = finalItemState.baseFee * finalItemState.units;
+          finalItemState.netFee = Math.max(0, finalItemState.grossFee - (finalItemState.discount || 0));
+      }
+  }
 
   allItems[idx] = finalItemState as TreatmentPlanItem;
   
@@ -838,23 +963,54 @@ export const deleteTreatmentPlanItem = (itemIdToDelete: string) => {
   }
   
   const planId = itemToDelete.treatmentPlanId;
-  const updatedItems = allItems.filter(i => i.id !== itemIdToDelete);
-  localStorage.setItem(KEY_ITEMS, JSON.stringify(updatedItems));
+  let itemsToPersist = allItems.filter(i => i.id !== itemIdToDelete);
+  let idsToRemove = [itemIdToDelete];
+
+  // CASCADE DELETE LOGIC FOR SEDATION
+  // If we delete a procedure, we must check for any sedation linked TO it.
+  if (itemToDelete.itemType !== 'SEDATION') {
+      const linkedSedationItems = allItems.filter(i => 
+          i.itemType === 'SEDATION' && i.linkedItemIds?.includes(itemIdToDelete)
+      );
+
+      linkedSedationItems.forEach(sed => {
+          if (sed.linkedItemIds && sed.linkedItemIds.length === 1) {
+              // This sedation only applies to the item being deleted. Delete sedation too.
+              itemsToPersist = itemsToPersist.filter(i => i.id !== sed.id);
+              idsToRemove.push(sed.id);
+          } else if (sed.linkedItemIds && sed.linkedItemIds.length > 1) {
+              // This sedation applies to others too. Just unlink this one.
+              const updatedSed = { 
+                  ...sed, 
+                  linkedItemIds: sed.linkedItemIds.filter(id => id !== itemIdToDelete) 
+              };
+              // Update in our working list
+              itemsToPersist = itemsToPersist.map(i => i.id === sed.id ? updatedSed : i);
+          }
+      });
+  }
+
+  localStorage.setItem(KEY_ITEMS, JSON.stringify(itemsToPersist));
 
   let allPlans: TreatmentPlan[] = JSON.parse(localStorage.getItem(KEY_PLANS) || '[]');
   const planIndex = allPlans.findIndex(p => p.id === planId);
   
   if (planIndex !== -1) {
     const originalPlan = allPlans[planIndex];
-    if (originalPlan.phases && itemToDelete.phaseId) {
-        const phase = originalPlan.phases.find(p => p.id === itemToDelete.phaseId);
-        if (phase) {
-            phase.itemIds = phase.itemIds.filter(id => id !== itemIdToDelete);
-        }
-    }
+    
+    // Remove all deleted IDs from plan.itemIds
+    const newItemIds = originalPlan.itemIds.filter(id => !idsToRemove.includes(id));
+    
+    // Remove all deleted IDs from phases
+    const newPhases = originalPlan.phases?.map(p => ({
+        ...p,
+        itemIds: p.itemIds.filter(id => !idsToRemove.includes(id))
+    }));
+
     allPlans[planIndex] = {
       ...originalPlan,
-      itemIds: originalPlan.itemIds.filter(id => id !== itemIdToDelete),
+      itemIds: newItemIds,
+      phases: newPhases,
       updatedAt: new Date().toISOString(),
     };
     localStorage.setItem(KEY_PLANS, JSON.stringify(allPlans));

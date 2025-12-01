@@ -1,6 +1,7 @@
 
 
 
+
 import React, { useState, useMemo } from 'react';
 import { TEETH_UPPER, TEETH_LOWER, DiagramData, mapPlanToDiagram, getItemsOnTooth, getToothQuadrant, getItemsOnArch, getItemsOnQuadrant } from '../../services/clinicalLogic';
 import { TreatmentPlanItem } from '../../types';
@@ -161,7 +162,7 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
                   {/* Tooltip for Arch */}
                   {localHoveredArch === arch && (
                      <div className="absolute left-1/2 -translate-x-1/2 z-40 pointer-events-none animate-in zoom-in-95 duration-150 bottom-full mb-3">
-                       <TooltipContent items={getItemsOnArch(arch, items)} title={`${arch} ARCH`} />
+                       <TooltipContent items={getItemsOnArch(arch, items)} allItems={items} title={`${arch} ARCH`} />
                      </div>
                   )}
               </div>
@@ -182,7 +183,7 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
                {/* Quadrant Tooltip */}
                {hoveredQuadrant === quadLeft && !hoveredTooth && (
                  <div className="absolute left-1/2 -translate-x-1/2 z-40 pointer-events-none animate-in zoom-in-95 duration-150 -top-10 sm:-top-12 md:-top-16">
-                   <TooltipContent items={getItemsOnQuadrant(quadLeft, items)} title={`${quadLeft} QUADRANT`} />
+                   <TooltipContent items={getItemsOnQuadrant(quadLeft, items)} allItems={items} title={`${quadLeft} QUADRANT`} />
                  </div>
                )}
 
@@ -197,7 +198,7 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
                      {/* Tooltip for Tooth */}
                      {hoveredTooth === t && (
                         <div className="absolute left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in zoom-in-95 duration-150 bottom-full mb-2">
-                           <TooltipContent items={getItemsOnTooth(t, items)} title={`Tooth #${t}`} />
+                           <TooltipContent items={getItemsOnTooth(t, items)} allItems={items} title={`Tooth #${t}`} />
                         </div>
                      )}
                   </Tooth>
@@ -217,7 +218,7 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
                {/* Quadrant Tooltip */}
                {hoveredQuadrant === quadRight && !hoveredTooth && (
                  <div className="absolute left-1/2 -translate-x-1/2 z-40 pointer-events-none animate-in zoom-in-95 duration-150 -top-10 sm:-top-12 md:-top-16">
-                   <TooltipContent items={getItemsOnQuadrant(quadRight, items)} title={`${quadRight} QUADRANT`} />
+                   <TooltipContent items={getItemsOnQuadrant(quadRight, items)} allItems={items} title={`${quadRight} QUADRANT`} />
                  </div>
                )}
 
@@ -232,7 +233,7 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
                      {/* Tooltip for Tooth */}
                      {hoveredTooth === t && (
                         <div className="absolute left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in zoom-in-95 duration-150 bottom-full mb-2">
-                           <TooltipContent items={getItemsOnTooth(t, items)} title={`Tooth #${t}`} />
+                           <TooltipContent items={getItemsOnTooth(t, items)} allItems={items} title={`Tooth #${t}`} />
                         </div>
                      )}
                   </Tooth>
@@ -325,20 +326,30 @@ const Tooth = ({
   </div>
 );
 
-const TooltipContent = ({ items, title }: { items: TreatmentPlanItem[], title?: string }) => (
+const TooltipContent = ({ items, allItems, title }: { items: TreatmentPlanItem[], allItems: TreatmentPlanItem[], title?: string }) => (
      <div className="w-48 sm:w-64">
          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl p-3 relative">
              {title && <div className="font-bold text-gray-300 border-b border-gray-700 pb-1 mb-2 uppercase tracking-wider">{title}</div>}
              {items.length === 0 ? (
                 <div className="text-gray-400 italic">No specific procedures</div>
              ) : (
-                 <ul className="space-y-1.5">
-                     {items.map(i => (
-                         <li key={i.id} className="flex justify-between gap-2">
-                             <span>{i.procedureName}</span>
-                             {i.urgency === 'URGENT' && <span className="text-red-400 font-bold">!</span>}
-                         </li>
-                     ))}
+                 <ul className="space-y-2">
+                     {items.map(i => {
+                         const linkedSedation = allItems.find(s => s.itemType === 'SEDATION' && s.linkedItemIds?.includes(i.id));
+                         return (
+                             <li key={i.id} className="flex flex-col gap-0.5">
+                                 <div className="flex justify-between gap-2">
+                                     <span>{i.procedureName}</span>
+                                     {i.urgency === 'URGENT' && <span className="text-red-400 font-bold">!</span>}
+                                 </div>
+                                 {linkedSedation && (
+                                     <div className="text-[10px] text-purple-300 flex items-center gap-1 pl-2 border-l-2 border-purple-400/30">
+                                         + {linkedSedation.procedureName.replace('Sedation – ', '')} Sedation
+                                     </div>
+                                 )}
+                             </li>
+                         );
+                     })}
                  </ul>
              )}
              {/* Arrow */}

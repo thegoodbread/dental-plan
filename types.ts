@@ -1,3 +1,4 @@
+
 // Enums
 export type UserRole = 'DOCTOR' | 'TREATMENT_COORDINATOR' | 'ADMIN';
 
@@ -33,6 +34,8 @@ export type UrgencyLevel = 'URGENT' | 'SOON' | 'ELECTIVE';
 export type InsuranceMode = 'simple' | 'advanced';
 export type FeeScheduleType = 'standard' | 'membership';
 export type PhaseBucketKey = 'FOUNDATION' | 'RESTORATIVE' | 'IMPLANT' | 'ELECTIVE' | 'OTHER';
+
+export type ItemType = 'PROCEDURE' | 'SEDATION';
 
 
 // Entities
@@ -73,12 +76,17 @@ export interface TreatmentPhase {
 export interface TreatmentPlanItem {
   id: string;
   treatmentPlanId: string;
-  feeScheduleEntryId: string;
+  feeScheduleEntryId: string; // For sedation, this might be a placeholder ID or null if custom
   procedureCode: string;
   procedureName: string;
   unitType: FeeUnitType;
   category: FeeCategory;
   
+  // New Fields for Sedation Support
+  itemType: ItemType;
+  linkedItemIds?: string[]; // IDs of procedures this sedation applies to
+  sedationType?: string; 
+
   // Selection details
   selectedTeeth?: number[] | null;
   selectedQuadrants?: ('UR' | 'UL' | 'LL' | 'LR')[] | null;

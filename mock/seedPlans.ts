@@ -1,5 +1,5 @@
 
-import { TreatmentPlan, TreatmentPlanItem, ShareLink, FeeUnitType, UrgencyLevel, FeeCategory, FeeScheduleType } from '../types';
+import { TreatmentPlan, TreatmentPlanItem, ShareLink, FeeUnitType, UrgencyLevel, FeeCategory, FeeScheduleType, ItemType } from '../types';
 
 // Helper to create IDs
 const id = (prefix: string) => `${prefix}-${Math.random().toString(36).substr(2, 5)}`;
@@ -11,6 +11,7 @@ const ITEM_DEFAULTS = {
   coveragePercent: null,
   estimatedInsurance: null,
   estimatedPatientPortion: null,
+  itemType: 'PROCEDURE' as ItemType,
 };
 
 // --- PLAN A: Single-Tooth (Alex) ---

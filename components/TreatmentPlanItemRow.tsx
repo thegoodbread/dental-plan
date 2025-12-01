@@ -1,8 +1,10 @@
+
 import React, { useState } from 'react';
 import { TreatmentPlanItem, UrgencyLevel } from '../types';
-import { Trash2, Edit2, Check, X, AlertTriangle, Clock, Smile, Calculator } from 'lucide-react';
+import { Trash2, Edit2, Check, X, AlertTriangle, Clock, Smile, Calculator, Syringe, ChevronDown } from 'lucide-react';
 import { ToothSelectorModal } from './ToothSelectorModal';
 import { NumberPadModal } from './NumberPadModal';
+import { SEDATION_TYPES } from '../services/treatmentPlans';
 
 const NumpadButton = ({ onClick }: { onClick: () => void }) => (
   <button
@@ -19,9 +21,16 @@ interface TreatmentPlanItemRowProps {
   item: TreatmentPlanItem;
   onUpdate: (id: string, updates: Partial<TreatmentPlanItem>) => void;
   onDelete: (id: string) => void;
+  // New props for hierarchy
+  isSedation?: boolean;
+  linkedItemNames?: string[];
+  onAddSedation?: (parentItemId: string) => void;
 }
 
-export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item, onUpdate, onDelete }) => {
+export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ 
+    item, onUpdate, onDelete, 
+    isSedation = false, linkedItemNames = [], onAddSedation 
+}) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isToothSelectorOpen, setIsToothSelectorOpen] = useState(false);
@@ -33,8 +42,8 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
 
   const handleSave = () => {
     onUpdate(item.id, {
-      baseFee: Number(baseFee),
-      urgency
+        baseFee: Number(baseFee),
+        urgency: isSedation ? undefined : urgency
     });
     setIsEditing(false);
   };
@@ -47,10 +56,23 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
 
   const handleStartEditing = () => {
     // When editing starts, sync the local state with the current item props.
-    // This fixes the bug where the input would show a stale fee after changing pricing models.
     setBaseFee(item.baseFee);
     setUrgency(item.urgency || 'ELECTIVE');
     setIsEditing(true);
+  };
+
+  const handleImmediateSedationTypeChange = (newType: string) => {
+      const def = SEDATION_TYPES.find(t => t.label === newType);
+      if (def) {
+          onUpdate(item.id, {
+              sedationType: newType,
+              procedureName: `Sedation – ${newType}`,
+              baseFee: def.defaultFee
+              // netFee will be recalculated by service logic
+          });
+          // Also update local baseFee state to match if currently editing or for next edit
+          setBaseFee(def.defaultFee);
+      }
   };
 
   const toggleQuadrant = (q: 'UR'|'UL'|'LL'|'LR') => {
@@ -72,6 +94,19 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
   // --- RENDER HELPERS ---
 
   const renderSelectionInput = () => {
+    if (isSedation) {
+        return (
+            <div className="text-xs text-gray-400 italic">
+                {linkedItemNames.length > 0 ? (
+                    <>
+                        Applies to: <span className="text-gray-500">{linkedItemNames[0]}</span>
+                        {linkedItemNames.length > 1 && `, +${linkedItemNames.length - 1} more`}
+                    </>
+                ) : 'Linked to procedure'}
+            </div>
+        );
+    }
+
     if (item.unitType === 'PER_TOOTH') {
       const teethText = item.selectedTeeth?.length ? `Teeth: #${item.selectedTeeth.join(', #')}` : 'No teeth selected';
       if (isEditing) {
@@ -138,6 +173,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
   };
 
   const renderUrgencyBadge = (u: UrgencyLevel) => {
+    if (isSedation) return null; // No urgency for sedation
     switch (u) {
       case 'URGENT': return <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-100 uppercase"><AlertTriangle size={10} /> Urgent</span>;
       case 'SOON': return <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-100 uppercase"><Clock size={10} /> Soon</span>;
@@ -145,15 +181,46 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
     }
   };
 
+  const rowBackground = isEditing ? 'bg-blue-50/30' : isSedation ? 'bg-slate-50' : '';
+  const textClass = isSedation ? 'text-gray-600' : 'text-gray-900';
+
+  // Determine displayed sedation type
+  const displayedSedationType = item.sedationType || item.procedureName.replace('Sedation – ', '');
+
   return (
     <>
-      <tr className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 group transition-colors ${isEditing ? 'bg-blue-50/30' : ''}`}>
+      <tr className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 group transition-colors ${rowBackground}`}>
         {/* Procedure */}
-        <td className="px-4 py-3 align-top">
-          <div className="font-medium text-gray-900 text-sm">{item.procedureName}</div>
-          <div className="text-xs text-gray-500 font-mono mb-1">{item.procedureCode}</div>
+        <td className={`px-4 py-3 align-top ${isSedation ? 'pl-10 relative' : ''}`}>
+          {isSedation && (
+             <div className="absolute left-0 top-0 bottom-0 w-8 border-r border-gray-100 flex justify-center pt-4">
+                <div className="w-2 h-2 rounded-full bg-gray-200"></div>
+             </div>
+          )}
           
-          {isEditing ? (
+          {isSedation ? (
+             <div className="flex flex-col gap-1">
+                  <div className="relative inline-block w-full max-w-[240px]">
+                      <select 
+                         value={displayedSedationType} 
+                         onChange={e => handleImmediateSedationTypeChange(e.target.value)}
+                         className="appearance-none font-medium text-sm text-gray-700 bg-transparent border-none p-0 pr-6 focus:ring-0 cursor-pointer hover:text-blue-600 w-full truncate"
+                         onClick={(e) => e.stopPropagation()}
+                       >
+                         {SEDATION_TYPES.map(t => <option key={t.label} value={t.label}>Sedation – {t.label}</option>)}
+                       </select>
+                       <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+                   </div>
+                 <div className="text-xs text-gray-500 font-mono mb-1">{item.procedureCode}</div>
+             </div>
+          ) : (
+             <>
+                 <div className={`font-medium text-sm ${textClass}`}>{item.procedureName}</div>
+                 <div className="text-xs text-gray-500 font-mono mb-1">{item.procedureCode}</div>
+             </>
+          )}
+          
+          {isEditing && !isSedation ? (
             <select 
               value={urgency} 
               onChange={e => setUrgency(e.target.value as UrgencyLevel)}
@@ -164,7 +231,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
               <option value="URGENT">Urgent</option>
             </select>
           ) : (
-            <div className="mt-1">{renderUrgencyBadge(item.urgency || 'ELECTIVE')}</div>
+            !isSedation && <div className="mt-1">{renderUrgencyBadge(item.urgency || 'ELECTIVE')}</div>
           )}
         </td>
 
@@ -190,7 +257,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
                 <NumpadButton onClick={() => setIsNumpadOpen(true)} />
             </div>
           ) : (
-            <span className="text-gray-900">${item.baseFee.toFixed(2)}</span>
+            <span className={textClass}>${item.baseFee.toFixed(2)}</span>
           )}
         </td>
 
@@ -200,7 +267,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
         </td>
 
         {/* Net Fee */}
-        <td className="px-4 py-3 text-right text-sm font-bold text-gray-900 bg-gray-50/50 align-top pt-3">
+        <td className={`px-4 py-3 text-right text-sm font-bold align-top pt-3 ${isSedation ? 'text-gray-700 bg-slate-100/50' : 'text-gray-900 bg-gray-50/50'}`}>
           ${item.netFee.toFixed(2)}
         </td>
 
@@ -219,6 +286,9 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ item
             </div>
           ) : (
             <div className="flex justify-end gap-2">
+              {!isSedation && onAddSedation && (
+                 <button onClick={() => onAddSedation(item.id)} className="p-1 text-purple-500 hover:bg-purple-100 rounded" title="Add Sedation"><Syringe size={16}/></button>
+              )}
               <button onClick={handleStartEditing} className="p-1 text-blue-600 hover:bg-blue-100 rounded"><Edit2 size={16}/></button>
               <button onClick={() => setIsConfirmingDelete(true)} className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16}/></button>
             </div>

@@ -1,7 +1,13 @@
+
+
+
+
+
 import React, { useMemo, useState, useCallback } from 'react';
 import { TreatmentPlan, TreatmentPlanItem, TreatmentPhase, UrgencyLevel, FeeCategory } from '../../types';
 import { Plus, X, MoreHorizontal, Clock, DollarSign, GripVertical, Edit, Trash2 } from 'lucide-react';
 import { getProcedureIcon } from '../../utils/getProcedureIcon';
+import { SEDATION_TYPES } from '../../services/treatmentPlans';
 
 const generateId = () => `id-${Math.random().toString(36).substring(2, 10)}`;
 const PRESET_PHASE_TITLES = ["Monitor Phase", "Foundation & Diagnostics", "Restorative", "Implant & Surgical", "Elective / Cosmetic", "Additional Treatment"];
@@ -25,6 +31,12 @@ const getCategoryClass = (category: FeeCategory) => {
 };
 
 const estimateChairTime = (item: TreatmentPlanItem): number => {
+    if (item.itemType === 'SEDATION') {
+        const name = item.procedureName.toLowerCase();
+        if (name.includes('iv') || name.includes('oral')) return 60;
+        return 30;
+    }
+
     if (item.procedureName.toLowerCase().includes('crown') || item.procedureName.toLowerCase().includes('bridge')) return 90;
     if (item.category === 'IMPLANT') return 120;
     if (item.category === 'ENDODONTIC') return 90;
@@ -42,6 +54,7 @@ const formatMinutes = (totalMinutes: number): string => {
 };
 
 const renderLocation = (item: TreatmentPlanItem): string | null => {
+    if (item.itemType === 'SEDATION') return 'Sedation Add-on';
     if (item.selectedTeeth && item.selectedTeeth.length > 0) return `#${item.selectedTeeth.join(', #')}`;
     if (item.selectedQuadrants && item.selectedQuadrants.length > 0) return `${item.selectedQuadrants.join(', ')}`;
     if (item.selectedArches && item.selectedArches.length > 0) return `${item.selectedArches.join(', ')}`;
@@ -151,33 +164,61 @@ const ProcedureEditorModal: React.FC<{
     setEditedItem(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleSedationTypeChange = (newType: string) => {
+    const def = SEDATION_TYPES.find(t => t.label === newType);
+    setEditedItem(prev => ({
+        ...prev,
+        sedationType: newType,
+        procedureName: `Sedation – ${newType}`,
+        baseFee: def ? def.defaultFee : prev.baseFee,
+        grossFee: def ? def.defaultFee : prev.grossFee,
+        netFee: def ? (Math.max(0, def.defaultFee - (prev.discount || 0))) : prev.netFee,
+    }));
+  };
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white w-full max-w-md rounded-xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
         <header className="flex justify-between items-center p-4 border-b">
-          <h3 className="font-semibold text-lg text-gray-900">Edit Procedure</h3>
+          <h3 className="font-semibold text-lg text-gray-900">{item.itemType === 'SEDATION' ? 'Edit Sedation' : 'Edit Procedure'}</h3>
           <button onClick={onClose} className="p-1 rounded-full text-gray-400 hover:bg-gray-100"><X size={20}/></button>
         </header>
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-          <div>
-            <label className="text-xs font-semibold text-gray-500">Procedure Name</label>
-            <input value={editedItem.procedureName} onChange={e => handleChange('procedureName', e.target.value)} className="w-full mt-1 p-2 border border-gray-300 rounded-lg text-sm" />
-          </div>
-           <div>
-            <label className="text-xs font-semibold text-gray-500">Urgency</label>
-            <select value={editedItem.urgency ?? 'ELECTIVE'} onChange={e => handleChange('urgency', e.target.value as UrgencyLevel)} className="w-full mt-1 p-2 border border-gray-300 rounded-lg text-sm bg-white">
-                <option value="ELECTIVE">Elective</option>
-                <option value="SOON">Soon</option>
-                <option value="URGENT">Urgent</option>
-            </select>
-          </div>
+          {item.itemType === 'SEDATION' ? (
+              <div>
+                <label className="text-xs font-semibold text-gray-500">Sedation Type</label>
+                <select 
+                    value={editedItem.sedationType ?? ''} 
+                    onChange={e => handleSedationTypeChange(e.target.value)} 
+                    className="w-full mt-1 p-2 border border-gray-300 rounded-lg text-sm bg-white"
+                >
+                    {SEDATION_TYPES.map(t => <option key={t.label} value={t.label}>{t.label}</option>)}
+                </select>
+              </div>
+          ) : (
+             <>
+                <div>
+                    <label className="text-xs font-semibold text-gray-500">Procedure Name</label>
+                    <input value={editedItem.procedureName} onChange={e => handleChange('procedureName', e.target.value)} className="w-full mt-1 p-2 border border-gray-300 rounded-lg text-sm" />
+                </div>
+                <div>
+                    <label className="text-xs font-semibold text-gray-500">Urgency</label>
+                    <select value={editedItem.urgency ?? 'ELECTIVE'} onChange={e => handleChange('urgency', e.target.value as UrgencyLevel)} className="w-full mt-1 p-2 border border-gray-300 rounded-lg text-sm bg-white">
+                        <option value="ELECTIVE">Elective</option>
+                        <option value="SOON">Soon</option>
+                        <option value="URGENT">Urgent</option>
+                    </select>
+                </div>
+             </>
+          )}
+
           <div>
             <label className="text-xs font-semibold text-gray-500">Clinical Notes</label>
             <textarea className="w-full mt-1 p-2 border border-gray-300 rounded-lg text-sm min-h-[80px]" value={editedItem.notes ?? ''} onChange={e => handleChange('notes', e.target.value)} />
           </div>
         </div>
         <footer className="p-4 bg-gray-50 border-t flex justify-between items-center">
-            <button onClick={() => onDeleteItem(item.id)} className="text-xs text-red-600 hover:text-red-800 font-semibold px-3 py-2 rounded-lg hover:bg-red-50">Delete Procedure</button>
+            <button onClick={() => onDeleteItem(item.id)} className="text-xs text-red-600 hover:text-red-800 font-semibold px-3 py-2 rounded-lg hover:bg-red-50">{item.itemType === 'SEDATION' ? 'Remove Sedation' : 'Delete Procedure'}</button>
             <div className="flex gap-2">
                 <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
                 <button onClick={() => onSave(editedItem)} className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">Save Changes</button>
@@ -238,16 +279,40 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
     const draggedId = e.dataTransfer.getData('text/plain');
     if (!draggedId) { handleDragEnd(); return; }
 
+    // 1. Identify all items to move (Parent + Linked Sedation)
+    // Find sedation items that are linked to the dragged item
+    const linkedSedationItems = localItems.filter(i => 
+        i.itemType === 'SEDATION' && i.linkedItemIds?.includes(draggedId)
+    );
+    const idsToMove = [draggedId, ...linkedSedationItems.map(s => s.id)];
+
+    // 2. Update Plan Phases (Remove from old, add to new)
     setLocalPlan(prevPlan => {
-        const newPhases = [...(prevPlan.phases || [])];
-        const sourcePhase = newPhases.find(p => p.itemIds.includes(draggedId));
-        const targetPhase = newPhases.find(p => p.id === phaseId)!;
+        // Create shallow copy of phases to mutate safely
+        const newPhases = (prevPlan.phases || []).map(p => ({ ...p, itemIds: [...p.itemIds] }));
         
-        if (sourcePhase) sourcePhase.itemIds = sourcePhase.itemIds.filter(id => id !== draggedId);
-        targetPhase.itemIds.push(draggedId);
+        const targetPhase = newPhases.find(p => p.id === phaseId);
+        if (!targetPhase) return prevPlan;
+
+        // Remove moving IDs from ALL phases (handles cleanup of source)
+        newPhases.forEach(p => {
+             p.itemIds = p.itemIds.filter(id => !idsToMove.includes(id));
+        });
+
+        // Add moving IDs to target phase
+        targetPhase.itemIds.push(...idsToMove);
+        
         return { ...prevPlan, phases: newPhases };
     });
-    setLocalItems(prevItems => prevItems.map(item => item.id === draggedId ? { ...item, phaseId } : item));
+
+    // 3. Update Item properties
+    setLocalItems(prevItems => prevItems.map(item => {
+        if (idsToMove.includes(item.id)) {
+            return { ...item, phaseId };
+        }
+        return item;
+    }));
+    
     handleDragEnd();
   };
 
@@ -257,11 +322,23 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
   };
 
   const handleDeleteItem = (itemId: string) => {
-    setLocalItems(prev => prev.filter(i => i.id !== itemId));
+    // Basic deletion for UI state - full cascading is handled by the backend service on save
+    // But for local visual consistency, we should try to remove attached sedation too
+    const toDelete = localItems.find(i => i.id === itemId);
+    if (!toDelete) return;
+
+    let updatedItems = localItems.filter(i => i.id !== itemId);
+    
+    // Simple cascade for visualization
+    if (toDelete.itemType !== 'SEDATION') {
+        updatedItems = updatedItems.filter(i => !(i.itemType === 'SEDATION' && i.linkedItemIds?.length === 1 && i.linkedItemIds[0] === itemId));
+    }
+    
+    setLocalItems(updatedItems);
     setLocalPlan(prev => ({
         ...prev,
-        itemIds: prev.itemIds.filter(id => id !== itemId),
-        phases: prev.phases?.map(p => ({ ...p, itemIds: p.itemIds.filter(id => id !== itemId) }))
+        itemIds: prev.itemIds.filter(id => id !== itemId), // Note: doesn't clean up sedation IDs from plan array locally, but okay for visual
+        phases: prev.phases?.map(p => ({ ...p, itemIds: p.itemIds.filter(id => id !== itemId) })) // Doesn't clean sedation IDs from phase
     }));
     closeEditor();
   };
@@ -430,6 +507,9 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
 
                 if (phase) {
                   const phaseItems = itemsByPhase[phase.id] || [];
+                  const procedureItems = phaseItems.filter(i => i.itemType !== 'SEDATION');
+                  const sedationItems = phaseItems.filter(i => i.itemType === 'SEDATION');
+                  
                   const durationText = formatPhaseDuration(phase);
                   return (
                     <div key={phase.id} className={`flex flex-col min-h-0 border-r border-slate-200 ${isTopRow ? 'border-b' : ''} ${isTopRow ? 'bg-slate-100/30' : 'bg-white'}`} onDragOver={e => handlePhaseDragOver(e, phase.id)} onDrop={e => handleDrop(e, phase.id)}>
@@ -451,7 +531,7 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
                             <button onClick={(e) => { e.stopPropagation(); setOpenMenuPhaseId(phase.id === openMenuPhaseId ? null : phase.id); }} className={`p-1 rounded transition-colors ${openMenuPhaseId === phase.id ? 'bg-slate-200 text-gray-800 ring-2 ring-blue-400' : 'text-gray-400 hover:text-gray-600 hover:bg-slate-100'}`}><MoreHorizontal size={16}/></button>
                         </div>
                         <div className="flex justify-between items-center text-xs text-gray-500 mt-1">
-                          <span>{phaseItems.length} procedure{phaseItems.length !== 1 ? 's' : ''}</span>
+                          <span>{procedureItems.length} procedure{procedureItems.length !== 1 ? 's' : ''}</span>
                           {durationText && <span className="font-semibold">{durationText}</span>}
                         </div>
                         {openMenuPhaseId === phase.id && (
@@ -502,18 +582,36 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
                       )}
 
                       <div className={`flex-1 p-2 space-y-1.5 overflow-y-auto transition-colors duration-300 ${dragOverPhaseId === phase.id ? 'bg-blue-100/50' : ''}`}>
-                        {phaseItems.map(item => (
-                            <div key={item.id} draggable onClick={() => setSelectedItemId(item.id)} onDragStart={e => handleDragStart(e, item.id)} onDragEnd={handleDragEnd} className={`p-2 rounded-md border bg-white shadow-sm cursor-pointer hover:shadow-lg hover:border-slate-300 transition-all active:cursor-grabbing border-l-4 ${getCategoryClass(item.category)} ${draggingItemId === item.id ? 'opacity-30' : ''}`}>
-                                <div className="flex justify-between items-start">
-                                    <p className="text-xs font-semibold text-gray-800 leading-snug flex-1">{item.procedureName}</p>
-                                    <div className="font-bold text-gray-900 text-xs ml-2">${item.netFee?.toFixed(0)}</div>
-                                </div>
-                                <div className="mt-1.5 flex items-center justify-between text-[10px] text-gray-500 font-medium">
-                                    <span>{renderLocation(item) || item.procedureCode}</span>
-                                    <span className="font-semibold uppercase">{item.category}</span>
-                                </div>
-                            </div>
-                        ))}
+                        {procedureItems.map(item => {
+                            // Find attached sedation for this item (only if it links to this one first)
+                            const linkedSedation = sedationItems.filter(s => s.linkedItemIds && s.linkedItemIds[0] === item.id);
+                            
+                            return (
+                                <React.Fragment key={item.id}>
+                                    <div draggable onClick={() => setSelectedItemId(item.id)} onDragStart={e => handleDragStart(e, item.id)} onDragEnd={handleDragEnd} className={`p-2 rounded-md border bg-white shadow-sm cursor-pointer hover:shadow-lg hover:border-slate-300 transition-all active:cursor-grabbing border-l-4 ${getCategoryClass(item.category)} ${draggingItemId === item.id ? 'opacity-30' : ''}`}>
+                                        <div className="flex justify-between items-start">
+                                            <p className="text-xs font-semibold text-gray-800 leading-snug flex-1">{item.procedureName}</p>
+                                            <div className="font-bold text-gray-900 text-xs ml-2">${item.netFee?.toFixed(0)}</div>
+                                        </div>
+                                        <div className="mt-1.5 flex items-center justify-between text-[10px] text-gray-500 font-medium">
+                                            <span>{renderLocation(item) || item.procedureCode}</span>
+                                            <span className="font-semibold uppercase">{item.category}</span>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Nested Sedation Cards */}
+                                    {linkedSedation.map(sed => (
+                                         <div key={sed.id} onClick={() => setSelectedItemId(sed.id)} className={`ml-4 mr-1 p-2 rounded-md border bg-slate-50 border-gray-200 cursor-pointer hover:border-blue-300 relative before:content-[''] before:absolute before:left-[-12px] before:top-[-10px] before:w-[10px] before:h-[24px] before:border-l before:border-b before:border-gray-300 before:rounded-bl-md transition-opacity duration-300 ${draggingItemId === item.id ? 'opacity-30' : ''}`}>
+                                             <div className="flex justify-between items-start">
+                                                <p className="text-xs font-medium text-gray-600 leading-snug flex-1">{sed.procedureName}</p>
+                                                <div className="font-bold text-gray-500 text-xs ml-2">${sed.netFee?.toFixed(0)}</div>
+                                            </div>
+                                             <div className="text-[9px] text-gray-400 mt-0.5 italic">Sedation Add-on</div>
+                                         </div>
+                                    ))}
+                                </React.Fragment>
+                            );
+                        })}
                       </div>
                     </div>
                   );

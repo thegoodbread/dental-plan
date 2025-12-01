@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { TreatmentPlanItem, FeeCategory } from '../types';
 import * as Icons from '../components/icons/ProcedureIcons';
@@ -10,7 +9,7 @@ interface ProcedureIconInput {
   category?: string;
 }
 
-export const getProcedureIcon = (item: ProcedureIconInput): React.FC<React.SVGProps<SVGSVGElement>> => {
+export const getProcedureIcon = (item: ProcedureIconInput): React.FC<Icons.IconProps> => {
   const code = item.procedureCode.toUpperCase();
   const name = item.procedureName.toLowerCase();
   const category = item.category || 'OTHER';

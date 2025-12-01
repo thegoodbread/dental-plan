@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { TreatmentPlan, TreatmentPlanItem } from '../../types';
-import { Calendar, AlertTriangle, Shield, Smile, ChevronDown, Star } from 'lucide-react';
+import { Calendar, AlertTriangle, Shield, Smile, ChevronDown, Star, Syringe } from 'lucide-react';
 import { estimateVisits, getItemsOnTooth, getItemsOnQuadrant } from '../../services/clinicalLogic';
 import { getProcedureIcon } from '../../utils/getProcedureIcon';
-import { getFeeSchedule } from '../../services/treatmentPlans';
+import { getFeeSchedule, SEDATION_TYPES } from '../../services/treatmentPlans';
 
 interface ProcedureBreakdownSectionProps {
   plan: TreatmentPlan;
@@ -27,25 +27,39 @@ const PhaseGroup: React.FC<{
     const [isExpanded, setIsExpanded] = useState(false);
     const feeSchedule = useMemo(() => getFeeSchedule(), []);
 
-    // --- Financial & Clinical Calculations for the Phase ---
-    // FIX: Destructure the object returned by reduce and rename properties.
+    // Split items into procedures (roots) and sedations (children)
+    const procedures = useMemo(() => group.items.filter(i => i.itemType !== 'SEDATION'), [group.items]);
+    const sedations = useMemo(() => group.items.filter(i => i.itemType === 'SEDATION'), [group.items]);
+
+    // --- Financial & Clinical Calculations for the Phase (Includes Sedation) ---
     const { subtotal: phaseSubtotal, savings: totalPhaseSavings } = useMemo(() => {
         return group.items.reduce((acc, item) => {
             acc.subtotal += item.netFee;
             
             const isMembershipPlan = plan.feeScheduleType === 'membership';
             if (isMembershipPlan) {
-                const feeEntry = feeSchedule.find(f => f.id === item.feeScheduleEntryId);
-                if (feeEntry && feeEntry.membershipFee != null && feeEntry.membershipFee < feeEntry.baseFee) {
-                    const savingsPerUnit = feeEntry.baseFee - feeEntry.membershipFee;
-                    acc.savings += savingsPerUnit * item.units;
+                if (item.itemType === 'SEDATION') {
+                     // Calculate sedation savings: standard default - current membership fee
+                     const sedDef = SEDATION_TYPES.find(d => d.label === item.sedationType);
+                     if (sedDef) {
+                         const standardFee = sedDef.defaultFee * item.units;
+                         if (standardFee > item.netFee) {
+                             acc.savings += (standardFee - item.netFee);
+                         }
+                     }
+                } else {
+                    const feeEntry = feeSchedule.find(f => f.id === item.feeScheduleEntryId);
+                    if (feeEntry && feeEntry.membershipFee != null && feeEntry.membershipFee < feeEntry.baseFee) {
+                        const savingsPerUnit = feeEntry.baseFee - feeEntry.membershipFee;
+                        acc.savings += savingsPerUnit * item.units;
+                    }
                 }
             }
-            
             return acc;
         }, { subtotal: 0, savings: 0 });
     }, [group.items, plan.feeScheduleType, feeSchedule]);
     
+    // Visits (Sedation usually 0 visits)
     const phaseVisits = group.items.reduce((sum, item) => sum + estimateVisits(item), 0);
 
     const isHighlighted = (item: TreatmentPlanItem) => {
@@ -61,7 +75,7 @@ const PhaseGroup: React.FC<{
         return false;
     };
 
-    const isDimmed = (item: TreatmentPlanItem) => false; // Dimming disabled per design request
+    const isDimmed = (item: TreatmentPlanItem) => false; 
 
     const renderLocation = (item: TreatmentPlanItem) => {
         if (item.selectedTeeth && item.selectedTeeth.length > 0) return `Teeth: ${item.selectedTeeth.join(', ')}`;
@@ -86,6 +100,138 @@ const PhaseGroup: React.FC<{
         }
     };
 
+    // Helper to render a card (procedure or sedation)
+    const renderCard = (item: TreatmentPlanItem, isSedation: boolean, parentName?: string) => {
+        const ProcedureIcon = isSedation ? Syringe : getProcedureIcon(item);
+        const highlighted = isHighlighted(item);
+        const dimmed = isDimmed(item);
+        
+        const isMembershipPlan = plan.feeScheduleType === 'membership';
+        let itemSavings = 0;
+        let standardItemFee = item.netFee;
+
+        // Calculate specific item savings
+        if (isMembershipPlan) {
+            if (isSedation) {
+                const sedDef = SEDATION_TYPES.find(d => d.label === item.sedationType);
+                if (sedDef) {
+                    standardItemFee = sedDef.defaultFee * item.units;
+                    if (standardItemFee > item.netFee) {
+                        itemSavings = standardItemFee - item.netFee;
+                    }
+                }
+            } else {
+                const feeEntry = feeSchedule.find(f => f.id === item.feeScheduleEntryId);
+                if (feeEntry && feeEntry.membershipFee != null && feeEntry.membershipFee < feeEntry.baseFee) {
+                    const savingsPerUnit = feeEntry.baseFee - feeEntry.membershipFee;
+                    itemSavings = savingsPerUnit * item.units;
+                    standardItemFee = feeEntry.baseFee * item.units;
+                }
+            }
+        }
+
+        return (
+            <div 
+                key={item.id} 
+                className="relative"
+                onMouseEnter={() => onHoverItem(item.id)} 
+                onMouseLeave={() => onHoverItem(null)}
+            >
+                <div
+                    className={`
+                        bg-white border transition-all duration-300
+                        ${isExpanded ? 'rounded-t-xl' : 'rounded-xl'}
+                        ${highlighted
+                            ? 'border-gray-300 shadow-md ring-1 ring-gray-100'
+                            : dimmed
+                                ? 'border-gray-100 opacity-40 grayscale'
+                                : 'border-gray-200 shadow-[0_1px_3px_rgba(0,0,0,0.02)] hover:shadow-md hover:border-gray-300'
+                        }
+                        ${isSedation ? 'p-3 md:p-4 bg-slate-50/50' : 'p-4 md:p-5'}
+                    `}
+                >
+                    <div className="flex items-start gap-3 md:gap-4">
+                        <div className={`
+                            rounded-xl flex items-center justify-center shrink-0 border
+                            ${isSedation 
+                                ? 'w-8 h-8 md:w-9 md:h-9 bg-purple-50 text-purple-600 border-purple-100' 
+                                : `w-10 h-10 md:w-12 md:h-12 ${highlighted ? 'bg-gray-100 text-gray-700 border-gray-200' : 'bg-blue-50 text-blue-600 border-blue-100'}`
+                            }
+                        `}>
+                            <ProcedureIcon size={isSedation ? 16 : 20} className={isSedation ? '' : 'md:w-6 md:h-6'} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                                <div>
+                                    <div className={`font-bold text-gray-900 leading-tight ${isSedation ? 'text-sm' : 'text-base'}`}>
+                                        {item.procedureName}
+                                    </div>
+                                    {isSedation && parentName && (
+                                        <div className="text-[11px] text-gray-500 mt-0.5 font-medium">
+                                            Applies to: {parentName}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-2 mt-1 md:mt-0">
+                                    {itemSavings > 0 && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                                            <Star size={10} /> MEMBER PRICE
+                                        </span>
+                                    )}
+                                    {!isSedation && (
+                                        <>
+                                            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden sm:block">{item.category}</div>
+                                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getUrgencyClass(item.urgency)}`}>
+                                                {getUrgencyIcon(item.urgency)} {item.urgency || 'Elective'}
+                                            </span>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            {!isSedation && (
+                                <div className="text-sm text-gray-500 mt-2 font-medium flex flex-wrap items-center gap-3">
+                                    <span className="bg-gray-100 px-2 py-0.5 rounded text-xs text-gray-600">{renderLocation(item)}</span>
+                                    <span className="flex items-center gap-1 text-gray-400 text-xs"><Calendar size={12} /> {estimateVisits(item)} visit(s)</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Expandable Financial Row */}
+                <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-40' : 'max-h-0'}`}>
+                    {itemSavings > 0 ? (
+                        <div className="px-5 py-3 text-xs text-gray-500 bg-slate-50/80 rounded-b-xl border-x border-b border-gray-200 border-t border-slate-200 space-y-2">
+                            <div className="flex justify-between items-center">
+                                <span>Standard Fee</span>
+                                <span className="font-medium text-gray-500 line-through">${standardItemFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-green-500">
+                                <span className="font-medium">Member Savings</span>
+                                <span className="font-bold">-${itemSavings.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="border-t border-slate-200 !my-1"></div>
+                            <div className="flex justify-between items-center">
+                                <span className="font-bold text-gray-700">Your Price</span>
+                                <span className="font-bold text-gray-900 text-sm">${item.netFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="px-5 py-3 text-xs text-gray-500 bg-slate-50/80 rounded-b-xl border-x border-b border-gray-200 border-t border-slate-200 flex justify-between items-center">
+                            <span className="font-medium">
+                                {item.units > 1 ? `${item.units} × ` : ''}Standard Fee
+                            </span>
+                            <span className="font-bold text-gray-700">
+                                ${item.netFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            </span>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div className="relative">
             {/* Phase Header */}
@@ -96,97 +242,42 @@ const PhaseGroup: React.FC<{
                 <h3 className="font-bold text-xl text-gray-900">{group.title}</h3>
             </div>
 
-            {/* Cards with Expandable Pricing */}
-            <div className="grid gap-3 xl:gap-4">
-                {group.items.map(item => {
-                    const ProcedureIcon = getProcedureIcon(item);
-                    const highlighted = isHighlighted(item);
-                    const dimmed = isDimmed(item);
-
-                    const isMembershipPlan = plan.feeScheduleType === 'membership';
-                    const feeEntry = feeSchedule.find(f => f.id === item.feeScheduleEntryId);
-                    let itemSavings = 0;
-                    let standardItemFee = item.netFee;
-
-                    if (isMembershipPlan && feeEntry && feeEntry.membershipFee != null && feeEntry.membershipFee < feeEntry.baseFee) {
-                        const savingsPerUnit = feeEntry.baseFee - feeEntry.membershipFee;
-                        itemSavings = savingsPerUnit * item.units;
-                        standardItemFee = feeEntry.baseFee * item.units;
-                    }
-
+            {/* Cards Grid with Hierarchy */}
+            <div className="flex flex-col gap-4">
+                {procedures.map(item => {
+                    // Find sedation linked to this procedure
+                    const linkedSedations = sedations.filter(s => s.linkedItemIds && s.linkedItemIds[0] === item.id);
 
                     return (
-                        <div key={item.id} onMouseEnter={() => onHoverItem(item.id)} onMouseLeave={() => onHoverItem(null)}>
-                            <div
-                                className={`
-                                    bg-white p-4 md:p-5 border transition-all duration-300
-                                    ${isExpanded ? 'rounded-t-xl' : 'rounded-xl'}
-                                    ${highlighted
-                                        ? 'border-gray-300 shadow-md' // POLISH: Softer hover highlight
-                                        : dimmed
-                                            ? 'border-gray-100 opacity-40 grayscale'
-                                            : 'border-gray-200 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-md hover:border-gray-300'
-                                    }
-                                `}
-                            >
-                                <div className="flex items-start gap-4">
-                                    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shrink-0 border mt-1 ${highlighted ? 'bg-gray-100 text-gray-700 border-gray-200' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
-                                        <ProcedureIcon width={20} height={20} className="md:w-6 md:h-6" />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-                                            <div className="font-bold text-gray-900 text-base leading-tight">{item.procedureName}</div>
-                                            <div className="flex items-center gap-2 mt-1 md:mt-0">
-                                                {itemSavings > 0 && (
-                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
-                                                        <Star size={10} /> MEMBER PRICE
-                                                    </span>
-                                                )}
-                                                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{item.category}</div>
-                                                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getUrgencyClass(item.urgency)}`}>
-                                                    {getUrgencyIcon(item.urgency)} {item.urgency || 'Elective'}
-                                                </span>
-                                            </div>
+                        <div key={item.id} className="flex flex-col gap-2">
+                            {/* Primary Procedure */}
+                            {renderCard(item, false)}
+
+                            {/* Nested Sedation Items */}
+                            {linkedSedations.length > 0 && (
+                                <div className="flex flex-col gap-2 pl-6 md:pl-8 relative">
+                                    {/* Vertical Connector Line */}
+                                    <div className="absolute left-3 md:left-4 top-[-8px] bottom-6 w-px bg-gray-300/40"></div>
+                                    
+                                    {linkedSedations.map(sed => (
+                                        <div key={sed.id} className="relative">
+                                            {/* Horizontal Connector */}
+                                            <div className="absolute left-[-12px] md:left-[-16px] top-[24px] w-[12px] md:w-[16px] border-b border-gray-300/40 h-px"></div>
+                                            {renderCard(sed, true, item.procedureName)}
                                         </div>
-                                        <div className="text-sm text-gray-500 mt-2 font-medium flex flex-wrap items-center gap-3">
-                                            <span className="bg-gray-100 px-2 py-0.5 rounded text-xs text-gray-600">{renderLocation(item)}</span>
-                                            <span className="flex items-center gap-1 text-gray-400 text-xs"><Calendar size={12} /> {estimateVisits(item)} visit(s)</span>
-                                        </div>
-                                    </div>
+                                    ))}
                                 </div>
-                            </div>
-                            {/* Expandable Financial Row */}
-                            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-40' : 'max-h-0'}`}>
-                                {itemSavings > 0 ? (
-                                    <div className="px-5 py-3 text-xs text-gray-500 bg-slate-50/80 rounded-b-xl border-x border-b border-gray-200 border-t border-slate-200 space-y-2">
-                                        <div className="flex justify-between items-center">
-                                            <span>Standard Fee</span>
-                                            <span className="font-medium text-gray-500 line-through">${standardItemFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-green-500">
-                                            <span className="font-medium">Member Savings</span>
-                                            <span className="font-bold">-${itemSavings.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                                        </div>
-                                        <div className="border-t border-slate-200 !my-1"></div>
-                                        <div className="flex justify-between items-center">
-                                            <span className="font-bold text-gray-700">Your Price</span>
-                                            <span className="font-bold text-gray-900 text-sm">${item.netFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="px-5 py-3 text-xs text-gray-500 bg-slate-50/80 rounded-b-xl border-x border-b border-gray-200 border-t border-slate-200 flex justify-between items-center">
-                                        <span className="font-medium">
-                                            {item.units} × ${item.baseFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                        </span>
-                                        <span className="font-bold text-gray-700">
-                                            Total ${item.netFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
+                            )}
                         </div>
                     );
                 })}
+                
+                {/* Fallback for orphaned sedations (though theoretically forbidden) */}
+                {sedations.filter(s => !s.linkedItemIds || s.linkedItemIds.length === 0 || !procedures.some(p => p.id === s.linkedItemIds![0])).map(sed => (
+                     <div key={sed.id} className="opacity-75">
+                         {renderCard(sed, true, 'Unknown Procedure')}
+                     </div>
+                ))}
             </div>
 
             {/* Expanded Phase Summary */}

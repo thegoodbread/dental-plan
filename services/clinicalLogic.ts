@@ -1,3 +1,4 @@
+
 import { TreatmentPlanItem, UrgencyLevel, FeeCategory } from '../types';
 
 // --- CONSTANTS ---
@@ -49,6 +50,7 @@ export const getItemsOnTooth = (tooth: number, items: TreatmentPlanItem[]): Trea
   // const toothArch = getToothArch(tooth); // Separated logic
 
   return items.filter(i => {
+    if (i.itemType === 'SEDATION') return false; // Sedation doesn't show on tooth hover
     if (i.unitType === 'PER_TOOTH' && i.selectedTeeth?.includes(tooth)) return true;
     if (i.unitType === 'PER_QUADRANT' && toothQuad && i.selectedQuadrants?.includes(toothQuad)) return true;
     
@@ -85,6 +87,7 @@ export const getItemsOnTooth = (tooth: number, items: TreatmentPlanItem[]): Trea
  */
 export const getItemsOnQuadrant = (quad: string, items: TreatmentPlanItem[]): TreatmentPlanItem[] => {
   return items.filter(i => 
+    i.itemType !== 'SEDATION' &&
     i.unitType === 'PER_QUADRANT' && i.selectedQuadrants?.includes(quad as any)
   ).sort((a, b) => urgencyWeight(b.urgency) - urgencyWeight(a.urgency));
 };
@@ -94,8 +97,9 @@ export const getItemsOnQuadrant = (quad: string, items: TreatmentPlanItem[]): Tr
  */
 export const getItemsOnArch = (arch: 'UPPER' | 'LOWER', items: TreatmentPlanItem[]): TreatmentPlanItem[] => {
   return items.filter(i => 
-    (i.unitType === 'PER_ARCH' && i.selectedArches?.includes(arch)) ||
-    (i.unitType === 'PER_MOUTH')
+    i.itemType !== 'SEDATION' &&
+    ((i.unitType === 'PER_ARCH' && i.selectedArches?.includes(arch)) ||
+    (i.unitType === 'PER_MOUTH'))
   ).sort((a, b) => {
     const wA = urgencyWeight(a.urgency);
     const wB = urgencyWeight(b.urgency);
@@ -107,6 +111,7 @@ export const getItemsOnArch = (arch: 'UPPER' | 'LOWER', items: TreatmentPlanItem
 // --- VISIT ESTIMATION ---
 export const estimateVisits = (item: TreatmentPlanItem): number => {
   if (item.estimatedVisits) return item.estimatedVisits;
+  if (item.itemType === 'SEDATION') return 0; // Sedation happens during other visits
 
   // Fallback heuristics based on category
   switch (item.category) {
@@ -131,6 +136,8 @@ export const estimateDuration = (item: Partial<TreatmentPlanItem>): { value: num
   if (item.estimatedDurationValue && item.estimatedDurationUnit) {
     return { value: item.estimatedDurationValue, unit: item.estimatedDurationUnit };
   }
+  
+  if (item.itemType === 'SEDATION') return { value: 0, unit: 'days' };
 
   // Fallback heuristics based on category
   switch (item.category) {
@@ -145,6 +152,26 @@ export const estimateDuration = (item: Partial<TreatmentPlanItem>): { value: num
     case 'COSMETIC': return { value: 3, unit: 'weeks' };
     default: return { value: 1, unit: 'days' };
   }
+};
+
+// New Helper for Chair Time (minutes)
+export const estimateChairTime = (item: TreatmentPlanItem): number => {
+    // Explicit sedation check
+    if (item.itemType === 'SEDATION') {
+        const name = item.procedureName.toLowerCase();
+        if (name.includes('iv')) return 60;
+        if (name.includes('oral')) return 60;
+        if (name.includes('nitrous')) return 30;
+        return 45;
+    }
+
+    if (item.procedureName.toLowerCase().includes('crown') || item.procedureName.toLowerCase().includes('bridge')) return 90;
+    if (item.category === 'IMPLANT') return 120;
+    if (item.category === 'ENDODONTIC') return 90;
+    if (item.category === 'RESTORATIVE') return 60;
+    if (item.category === 'PERIO') return 50;
+    if (item.category === 'PROSTHETIC') return 60;
+    return 30;
 };
 
 
@@ -176,6 +203,9 @@ export const mapPlanToDiagram = (items: TreatmentPlanItem[]): DiagramData => {
   };
 
   items.forEach(item => {
+    // Sedation items don't affect the diagram directly
+    if (item.itemType === 'SEDATION') return;
+
     const urgency = item.urgency || 'ELECTIVE';
 
     // 1. PER TOOTH: Only colors the specific teeth chips
@@ -222,8 +252,9 @@ export const mapPlanToDiagram = (items: TreatmentPlanItem[]): DiagramData => {
 // --- EXPLANATION GENERATION ---
 
 export const generateClinicalExplanation = (items: TreatmentPlanItem[]) => {
-  const hasUrgent = items.some(i => i.urgency === 'URGENT');
-  const hasSoon = items.some(i => i.urgency === 'SOON');
+  const procedureItems = items.filter(i => i.itemType !== 'SEDATION');
+  const hasUrgent = procedureItems.some(i => i.urgency === 'URGENT');
+  const hasSoon = procedureItems.some(i => i.urgency === 'SOON');
   
   let intro = "";
   let benefits = [];
@@ -263,10 +294,11 @@ export const generateClinicalExplanation = (items: TreatmentPlanItem[]) => {
 };
 
 export const calculateClinicalMetrics = (items: TreatmentPlanItem[]) => {
-  const visitCount = items.reduce((sum, item) => sum + estimateVisits(item), 0);
+  const procedureItems = items.filter(i => i.itemType !== 'SEDATION');
+  const visitCount = procedureItems.reduce((sum, item) => sum + estimateVisits(item), 0);
   const uniqueTeeth = new Set<number>();
   
-  items.forEach(i => {
+  procedureItems.forEach(i => {
     if (i.selectedTeeth) i.selectedTeeth.forEach(t => uniqueTeeth.add(t));
     if (i.selectedQuadrants) i.selectedQuadrants.forEach(q => QUADRANT_MAP[q].forEach(t => uniqueTeeth.add(t)));
     if (i.selectedArches) i.selectedArches.forEach(a => (a === 'UPPER' ? TEETH_UPPER : TEETH_LOWER).forEach(t => uniqueTeeth.add(t)));
@@ -275,6 +307,6 @@ export const calculateClinicalMetrics = (items: TreatmentPlanItem[]) => {
   return {
     visitCount,
     teethCount: uniqueTeeth.size,
-    procedureCount: items.length
+    procedureCount: procedureItems.length
   };
 };

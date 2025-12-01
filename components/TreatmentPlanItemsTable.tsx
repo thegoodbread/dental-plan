@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, UrgencyLevel } from '../types';
 import { TreatmentPlanItemRow } from './TreatmentPlanItemRow';
 import { ProcedurePickerModal } from './procedures/ProcedurePickerModal';
-import { Plus, Search, Edit2, Trash2, Smile, Clock, AlertTriangle, Calculator, Check, X } from 'lucide-react';
+import { SedationManagerModal } from './SedationManagerModal';
+import { Plus, Search, Edit2, Trash2, Smile, Clock, AlertTriangle, Calculator, Check, X, ChevronDown } from 'lucide-react';
 import { ToothSelectorModal } from './ToothSelectorModal';
 import { NumberPadModal } from './NumberPadModal';
+import { createSedationItem, loadTreatmentPlanWithItems, SEDATION_TYPES } from '../services/treatmentPlans';
 
 const NumpadButton = ({ onClick }: { onClick: () => void }) => (
   <button
@@ -29,10 +31,50 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
   plan, items, onAddItem, onUpdateItem, onDeleteItem
 }) => {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [sedationModalOpen, setSedationModalOpen] = useState(false);
+  const [preselectedSedationParent, setPreselectedSedationParent] = useState<string | null>(null);
+
   const discount = plan.clinicDiscount || 0;
   const insurance = plan.estimatedInsurance || 0;
   const isMembership = plan.feeScheduleType === 'membership';
   const standardTotal = plan.totalFee + (plan.membershipSavings || 0);
+
+  // Grouping Logic for Clinical View
+  const rootItems = items.filter(i => i.itemType !== 'SEDATION');
+  const sedationItems = items.filter(i => i.itemType === 'SEDATION');
+
+  const handleAddSedationClick = (parentItemId: string) => {
+    setPreselectedSedationParent(parentItemId);
+    setSedationModalOpen(true);
+  };
+
+  const handleSedationConfirm = (data: { sedationType: string, appliesToItemIds: string[], fee: number }) => {
+     if (!preselectedSedationParent) return;
+     // Find phase of the parent
+     const parent = items.find(i => i.id === preselectedSedationParent);
+     if (!parent || !parent.phaseId) {
+         alert("Cannot add sedation: Procedure must be assigned to a phase first.");
+         return;
+     }
+
+     createSedationItem(plan.id, {
+         ...data,
+         phaseId: parent.phaseId
+     });
+     
+     // Trigger refresh by sending empty update to the parent item.
+     // This ensures the service layer re-fetches the plan and items, revealing the new sedation item.
+     onUpdateItem(preselectedSedationParent, {}); 
+  };
+  
+  // Helper to get phase items for sedation modal
+  const getPhaseItemsForModal = () => {
+      if (!preselectedSedationParent) return [];
+      const parent = items.find(i => i.id === preselectedSedationParent);
+      if (!parent || !parent.phaseId) return [];
+      // Return all procedures in that phase
+      return items.filter(i => i.phaseId === parent.phaseId && i.itemType !== 'SEDATION');
+  };
 
   return (
     <div className="bg-white md:rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full relative rounded-lg">
@@ -70,14 +112,41 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
               </tr>
             )}
             
-            {items.map(item => (
-              <TreatmentPlanItemRow
-                key={item.id}
-                item={item}
-                onUpdate={onUpdateItem}
-                onDelete={onDeleteItem}
-              />
-            ))}
+            {rootItems.map(item => {
+               // Find linked sedation items to render immediately after
+               // We only render sedation under the FIRST linked item found to avoid duplicates
+               const linkedSedation = sedationItems.filter(s => 
+                   s.linkedItemIds && s.linkedItemIds[0] === item.id
+               );
+
+               return (
+                <React.Fragment key={item.id}>
+                    <TreatmentPlanItemRow
+                        item={item}
+                        onUpdate={onUpdateItem}
+                        onDelete={onDeleteItem}
+                        onAddSedation={handleAddSedationClick}
+                    />
+                    {linkedSedation.map(sed => {
+                        // Find names of all linked procedures
+                        const linkedNames = (sed.linkedItemIds || [])
+                            .map(id => items.find(i => i.id === id)?.procedureName)
+                            .filter((n): n is string => !!n);
+
+                        return (
+                            <TreatmentPlanItemRow
+                                key={sed.id}
+                                item={sed}
+                                onUpdate={onUpdateItem}
+                                onDelete={onDeleteItem}
+                                isSedation={true}
+                                linkedItemNames={linkedNames}
+                            />
+                        );
+                    })}
+                </React.Fragment>
+               );
+            })}
           </tbody>
         </table>
       </div>
@@ -166,11 +235,20 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Modals */}
       <ProcedurePickerModal 
         isOpen={isPickerOpen} 
         onClose={() => setIsPickerOpen(false)} 
         onSelect={onAddItem}
+      />
+      
+      <SedationManagerModal
+        isOpen={sedationModalOpen}
+        onClose={() => setSedationModalOpen(false)}
+        onConfirm={handleSedationConfirm}
+        phaseItems={getPhaseItemsForModal()}
+        preselectedItemId={preselectedSedationParent}
+        feeScheduleType={plan.feeScheduleType}
       />
     </div>
   );
@@ -189,7 +267,10 @@ const MobileItemCard: React.FC<{
   const [isToothSelectorOpen, setIsToothSelectorOpen] = useState(false);
   const [isNumpadOpen, setIsNumpadOpen] = useState(false);
 
+  const isSedation = item.itemType === 'SEDATION';
+
   const getLocation = () => {
+    if (isSedation) return 'Sedation Add-on';
     if (item.selectedTeeth?.length) return `Tooth: ${item.selectedTeeth.join(', ')}`;
     if (item.selectedQuadrants?.length) return `Quad: ${item.selectedQuadrants.join(', ')}`;
     if (item.selectedArches?.length) return `Arch: ${item.selectedArches.join(', ')}`;
@@ -197,7 +278,10 @@ const MobileItemCard: React.FC<{
   };
 
   const handleSaveAndClose = () => {
-    onUpdate(item.id, { baseFee: Number(baseFee), urgency });
+    onUpdate(item.id, { 
+      baseFee: Number(baseFee), 
+      urgency: isSedation ? undefined : urgency 
+    });
     setIsEditing(false);
   };
   
@@ -224,6 +308,20 @@ const MobileItemCard: React.FC<{
     onUpdate(item.id, { selectedArches: updated });
   };
 
+  const handleImmediateSedationTypeChange = (newType: string) => {
+      const def = SEDATION_TYPES.find(t => t.label === newType);
+      if (def) {
+          onUpdate(item.id, {
+              sedationType: newType,
+              procedureName: `Sedation – ${newType}`,
+              baseFee: def.defaultFee
+          });
+          setBaseFee(def.defaultFee);
+      }
+  };
+
+  const displayedSedationType = item.sedationType || item.procedureName.replace('Sedation – ', '');
+
   const UrgencyBadge = ({ u }: { u: UrgencyLevel }) => {
     const styles: Record<UrgencyLevel, string> = {
       URGENT: "bg-red-50 text-red-600 border-red-100",
@@ -244,16 +342,30 @@ const MobileItemCard: React.FC<{
 
   return (
     <>
-      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+      <div className={`bg-white border border-gray-200 rounded-lg p-4 shadow-sm ${isSedation ? 'border-l-4 border-l-slate-400 bg-slate-50' : ''}`}>
         <div className="flex justify-between items-start mb-2">
-          <div>
-            <h4 className="font-bold text-gray-900 text-sm leading-tight">{item.procedureName}</h4>
+          <div className="w-full mr-4">
+            {isSedation ? (
+               <div className="relative inline-block w-full">
+                  <select 
+                     value={displayedSedationType} 
+                     onChange={e => handleImmediateSedationTypeChange(e.target.value)}
+                     className="appearance-none font-bold text-gray-900 text-sm leading-tight bg-transparent border-none p-0 pr-6 focus:ring-0 cursor-pointer w-full"
+                     onClick={(e) => e.stopPropagation()}
+                   >
+                     {SEDATION_TYPES.map(t => <option key={t.label} value={t.label}>Sedation – {t.label}</option>)}
+                   </select>
+                   <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" size={14} />
+               </div>
+            ) : (
+                <h4 className="font-bold text-gray-900 text-sm leading-tight">{item.procedureName}</h4>
+            )}
             <div className="text-xs text-gray-500 mt-1 flex items-center gap-2">
               <code className="bg-gray-100 px-1 rounded">{item.procedureCode}</code>
               <span>{item.category}</span>
             </div>
           </div>
-          <div className="text-right">
+          <div className="text-right shrink-0">
              <div className="font-bold text-gray-900">${item.netFee.toFixed(0)}</div>
              {item.units > 1 && <div className="text-xs text-gray-400">Qty: {item.units}</div>}
           </div>
@@ -261,23 +373,25 @@ const MobileItemCard: React.FC<{
         
         {isEditing ? (
           <div className="space-y-4 pt-3 mt-3 border-t border-gray-100">
-            {/* Urgency Editor */}
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-gray-700">Urgency</label>
-              <select
-                value={urgency}
-                onChange={e => setUrgency(e.target.value as UrgencyLevel)}
-                className="w-auto p-1.5 border border-gray-300 rounded text-sm text-gray-900 bg-white shadow-sm outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="ELECTIVE">Elective</option>
-                <option value="SOON">Soon</option>
-                <option value="URGENT">Urgent</option>
-              </select>
-            </div>
+            {/* Urgency Editor - Hide for Sedation */}
+            {!isSedation && (
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-700">Urgency</label>
+                <select
+                  value={urgency}
+                  onChange={e => setUrgency(e.target.value as UrgencyLevel)}
+                  className="w-auto p-1.5 border border-gray-300 rounded text-sm text-gray-900 bg-white shadow-sm outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="ELECTIVE">Elective</option>
+                  <option value="SOON">Soon</option>
+                  <option value="URGENT">Urgent</option>
+                </select>
+              </div>
+            )}
             
             {/* Fee Editor */}
             <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-gray-700">Cost per unit</label>
+                <label className="text-sm font-medium text-gray-700">Cost {isSedation ? '(Override)' : 'per unit'}</label>
                 <div className="flex items-center gap-1.5 w-48">
                     <div className="relative grow">
                         <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">$</span>
@@ -293,8 +407,8 @@ const MobileItemCard: React.FC<{
                 </div>
             </div>
 
-            {/* Area Editor */}
-            {(item.unitType === 'PER_TOOTH' || item.unitType === 'PER_QUADRANT' || item.unitType === 'PER_ARCH') && (
+            {/* Area Editor - Hide for Sedation */}
+            {!isSedation && (item.unitType === 'PER_TOOTH' || item.unitType === 'PER_QUADRANT' || item.unitType === 'PER_ARCH') && (
               <div>
                 {item.unitType === 'PER_TOOTH' && (
                   <button
@@ -360,8 +474,8 @@ const MobileItemCard: React.FC<{
         ) : (
           <div className="flex items-center justify-between text-sm text-gray-600 border-t border-gray-100 pt-3 mt-2">
             <div className="flex items-center gap-2">
-              <UrgencyBadge u={item.urgency || 'ELECTIVE'} />
-              <div className="font-medium">{getLocation()}</div>
+              {!isSedation && <UrgencyBadge u={item.urgency || 'ELECTIVE'} />}
+              <div className="font-medium text-xs md:text-sm">{getLocation()}</div>
             </div>
             {isConfirmingDelete ? (
               <div className="flex items-center gap-2 animate-in fade-in">
