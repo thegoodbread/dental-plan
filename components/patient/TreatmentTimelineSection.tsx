@@ -8,18 +8,20 @@ interface TreatmentTimelineSectionProps {
 }
 
 const renderPhaseMetric = (phase: TreatmentPhase) => {
-  if (phase.isMonitorPhase && (!phase.itemIds || phase.itemIds.length === 0)) {
-      return "Monitoring Period";
-  }
+  // Display the aggregated or estimated duration.
+  // For "Monitor" phases, this duration is set manually.
   if (phase.estimatedDurationValue && phase.estimatedDurationUnit) {
       const { estimatedDurationValue: value, estimatedDurationUnit: unit } = phase;
       let unitText = unit.charAt(0).toUpperCase() + unit.slice(1);
       if (value === 1) unitText = unitText.slice(0, -1); // De-pluralize
       return `Est. ${value} ${unitText}`;
   }
+  
+  // Fallback to visits if no duration is available.
   if (phase.estimatedVisits) {
       return `Est. ${phase.estimatedVisits} visits`;
   }
+  
   return null;
 };
 
@@ -61,7 +63,7 @@ export const TreatmentTimelineSection: React.FC<TreatmentTimelineSectionProps> =
   } else if (numPhases === 6) {
     phaseRows = [phases.slice(0, 3), phases.slice(3, 6)]; // 3+3 layout
   } else { // 7 or 8 phases
-    phaseRows = [phases.slice(0, 4), phases.slice(4)]; // 4+3 or 4+4 layout
+    phaseRows = [phases.slice(0, 4), phases.slice(4)]; // 4+4 or 4+4 layout
   }
 
   let phaseCounter = 0;

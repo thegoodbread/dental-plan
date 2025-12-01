@@ -2,6 +2,7 @@ import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react'
 import { TreatmentPlan, TreatmentPlanItem, TreatmentPhase, UrgencyLevel, PhaseBucketKey } from '../../types';
 import { ArrowRight, GripVertical, Plus, Trash2, Calculator } from 'lucide-react';
 import { NumberPadModal } from '../NumberPadModal';
+import { getProcedureIcon } from '../../utils/getProcedureIcon';
 
 const PHASE_PRESETS = ["Foundation & Diagnostics", "Restorative", "Implant & Surgical", "Elective / Cosmetic", "Prosthetics", "Orthodontics", "Monitoring", "Follow-up"];
 
@@ -165,6 +166,13 @@ const getUrgencyColor = (urgency?: UrgencyLevel) => {
 
 const generateId = () => `id-${Math.random().toString(36).substring(2, 10)}`;
 
+const renderLocation = (item: TreatmentPlanItem): string | null => {
+    if (item.selectedTeeth && item.selectedTeeth.length > 0) return `Teeth: #${item.selectedTeeth.join(', #')}`;
+    if (item.selectedQuadrants && item.selectedQuadrants.length > 0) return `Quads: ${item.selectedQuadrants.join(', ')}`;
+    if (item.selectedArches && item.selectedArches.length > 0) return `Arch: ${item.selectedArches.join(', ')}`;
+    return null;
+};
+
 // --- Main Board Component ---
 interface TreatmentPlanBoardModalProps {
   plan: TreatmentPlan;
@@ -279,6 +287,20 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
   };
 
   const handleUpdatePhase = (phaseId: string, updates: Partial<TreatmentPhase>) => {
+    const currentPhase = localPlan.phases?.find(p => p.id === phaseId);
+    if (!currentPhase) return;
+
+    // If monitor phase is being turned off, clear its duration.
+    if (updates.isMonitorPhase === false) {
+        updates.estimatedDurationValue = null;
+        updates.estimatedDurationUnit = null;
+    }
+    // If it's being turned on, and there's no duration, set a default.
+    else if (updates.isMonitorPhase === true && !currentPhase.estimatedDurationValue) {
+        updates.estimatedDurationValue = 2; // Default to 2
+        updates.estimatedDurationUnit = 'months'; // Default to months
+    }
+    
     setLocalPlan(prev => ({ ...prev, phases: prev.phases?.map(p => p.id === phaseId ? { ...p, ...updates } : p) }));
   };
 
@@ -362,7 +384,40 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
                     </div>
                     <div className="text-xs text-gray-500 mt-1">{itemsByPhase[phase.id]?.length || 0} procedure{itemsByPhase[phase.id]?.length !== 1 ? 's' : ''}</div>
                     {getAggregatedPhaseDuration(itemsByPhase[phase.id] || []) && <div className="text-xs text-gray-600 mt-1 font-medium">{getAggregatedPhaseDuration(itemsByPhase[phase.id] || [])}</div>}
-                    <div className="mt-2 text-xs"><label className="flex items-center justify-center gap-1.5 text-gray-500"><input type="checkbox" checked={!!phase.isMonitorPhase} onChange={e => handleUpdatePhase(phase.id, { isMonitorPhase: e.target.checked })} className="rounded text-blue-600 focus:ring-blue-500" /> Monitor Phase</label></div>
+                    <div className="mt-2 text-xs">
+                        <label className="flex items-center justify-center gap-2 cursor-pointer text-sm font-medium text-blue-600">
+                            <input
+                                type="checkbox"
+                                checked={!!phase.isMonitorPhase}
+                                onChange={e => handleUpdatePhase(phase.id, { isMonitorPhase: e.target.checked })}
+                                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                            />
+                            Monitor Phase
+                        </label>
+                        {phase.isMonitorPhase && (
+                            <div className="mt-2 pt-2 border-t border-slate-200">
+                                <label className="text-xs font-medium text-gray-600 mb-1 block text-center">Monitoring Duration</label>
+                                <div className="flex gap-1.5">
+                                    <input 
+                                        type="number" 
+                                        value={phase.estimatedDurationValue ?? ''} 
+                                        onChange={e => handleUpdatePhase(phase.id, { estimatedDurationValue: e.target.value ? parseInt(e.target.value, 10) : null })}
+                                        className="w-full bg-gray-100 border border-gray-200 text-gray-900 rounded-lg px-2 py-1 text-sm text-center" 
+                                        placeholder="Time"
+                                    />
+                                    <select 
+                                        value={phase.estimatedDurationUnit ?? 'months'} 
+                                        onChange={e => handleUpdatePhase(phase.id, { estimatedDurationUnit: e.target.value as any })} 
+                                        className="bg-gray-100 border border-gray-200 text-gray-900 rounded-lg px-1 py-1 text-sm"
+                                    >
+                                        <option value="days">Days</option>
+                                        <option value="weeks">Weeks</option>
+                                        <option value="months">Months</option>
+                                    </select>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                     {index < phases.length - 1 && <div className="absolute -right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"><ArrowRight size={16} /></div>}
                   </div>
                 </div>
@@ -372,22 +427,35 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
             {phases.map(phase => (
               <div key={phase.id} className={`flex-1 min-w-[280px] rounded-2xl border p-3 flex flex-col transition-colors bg-slate-50 shadow-sm ${dragOverPhaseId === phase.id && !dragOverItemId ? 'border-blue-300 bg-blue-50/50' : 'border-slate-200'}`} onDragOver={e => handlePhaseDragOver(e, phase.id)} onDrop={e => handleDrop(e, phase.id)}>
                 <div className="flex flex-col gap-2 overflow-y-auto pr-1 -mr-2 flex-1 relative">
-                  {(itemsByPhase[phase.id] || []).map(item => (
-                    <div key={item.id} className="relative z-10" onDragOver={e => handleItemDragOver(e, phase.id, item.id)} onDrop={e => handleDrop(e, phase.id, item.id)}>
-                      <div ref={el => { if (el) cardRefs.current.set(item.id, el); else cardRefs.current.delete(item.id); }} draggable onClick={() => setSelectedItemId(item.id)} onDragStart={e => handleDragStart(e, item.id)} onDragEnd={handleDragEnd} className={`rounded-xl border shadow-sm cursor-pointer transition-all duration-150 flex overflow-hidden ${draggingItemId === item.id ? 'opacity-40' : ''} ${dragOverItemId === item.id ? 'ring-2 ring-blue-400 bg-white' : 'hover:shadow-md border-gray-200 bg-white'} ${selectedItemId === item.id ? 'ring-2 ring-blue-500 border-blue-400 bg-white' : ''}`}>
-                        <div className={`w-1.5 shrink-0 ${getUrgencyColor(item.urgency)}`} />
-                        <div className="p-2 flex-1">
-                          <div className="flex items-start gap-2">
-                            <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 cursor-grab mt-0.5 shrink-0" aria-hidden="true"><GripVertical size={12} /></div>
-                            <div className="flex-1">
-                              <span className="font-medium text-xs leading-tight text-gray-800">{item.procedureName}</span>
-                              <div className="flex justify-between items-end mt-2"><div className="font-bold text-base text-gray-900">${item.netFee?.toFixed(0) ?? '—'}</div></div>
+                  {(itemsByPhase[phase.id] || []).map(item => {
+                    const ProcedureIcon = getProcedureIcon(item);
+                    const locationText = renderLocation(item);
+                    return (
+                      <div key={item.id} className="relative z-10" onDragOver={e => handleItemDragOver(e, phase.id, item.id)} onDrop={e => handleDrop(e, phase.id, item.id)}>
+                        <div ref={el => { if (el) cardRefs.current.set(item.id, el); else cardRefs.current.delete(item.id); }} draggable onClick={() => setSelectedItemId(item.id)} onDragStart={e => handleDragStart(e, item.id)} onDragEnd={handleDragEnd} className={`rounded-xl border shadow-sm cursor-pointer transition-all duration-150 flex overflow-hidden ${draggingItemId === item.id ? 'opacity-40' : ''} ${dragOverItemId === item.id ? 'ring-2 ring-blue-400 bg-white' : 'hover:shadow-md border-gray-200 bg-white'} ${selectedItemId === item.id ? 'ring-2 ring-blue-500 border-blue-400 bg-white' : ''}`}>
+                          <div className={`w-1.5 shrink-0 ${getUrgencyColor(item.urgency)}`} />
+                          <div className="p-2 flex-1">
+                            <div className="flex items-start gap-2">
+                              <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 cursor-grab mt-0.5 shrink-0" aria-hidden="true"><GripVertical size={12} /></div>
+                              <div className="flex-1">
+                                <span className="font-medium text-xs leading-tight text-gray-800">{item.procedureName}</span>
+                                {locationText && (
+                                  <div className="text-[11px] text-gray-500 mt-1 font-medium">{locationText}</div>
+                                )}
+                                <div className="flex justify-between items-end mt-2">
+                                  <div className="font-bold text-base text-gray-900">${item.netFee?.toFixed(0) ?? '—'}</div>
+                                  <div className="w-6 h-6 rounded-lg flex items-center justify-center text-gray-500 bg-gray-100">
+                                      {/* FIX: Changed size prop to width and height for SVG component */}
+                                      <ProcedureIcon width={14} height={14} />
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ))}

@@ -889,6 +889,11 @@ const aggregatePhaseDurations = (plan: TreatmentPlan, items: TreatmentPlanItem[]
 
     const itemMap = new Map(items.map(i => [i.id, i]));
     const updatedPhases = plan.phases.map(phase => {
+        // If it's a monitor phase, its duration is managed manually and should not be aggregated.
+        if (phase.isMonitorPhase) {
+            return phase;
+        }
+
         const phaseItems = phase.itemIds.map(id => itemMap.get(id)).filter(Boolean) as TreatmentPlanItem[];
         if (phaseItems.length === 0) {
             return { ...phase, estimatedDurationValue: null, estimatedDurationUnit: null };
