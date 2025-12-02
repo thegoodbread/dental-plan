@@ -6,7 +6,7 @@ import { RiskCategory, RiskLibraryItem, RiskSeverity } from '../../domain/dental
 
 interface RiskLibraryPanelProps {
   onAssignRisk: (item: RiskLibraryItem) => void;
-  assignedRiskIds: string[];
+  assignedRiskIds: string[]; // List of IDs currently active in the note
 }
 
 const CATEGORIES: { id: RiskCategory | 'ALL', label: string }[] = [

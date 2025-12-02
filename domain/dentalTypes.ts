@@ -92,13 +92,48 @@ export interface RiskLibraryItem {
   activeByDefault: boolean;
 }
 
+// FINAL PRODUCTION MODEL
 export interface AssignedRisk {
   id: string;
+
+  // Linkage
+  tenantId: string;
+  patientId: string;
+  treatmentPlanId: string;
+  treatmentItemId?: string;
+  phaseId?: string;
+  clinicalNoteId?: string;
+
+  // Library Reference
   riskLibraryItemId: string;
-  riskTitle: string;   // Denormalized for display
-  riskBody: string;    // Denormalized snapshot
-  severity: RiskSeverity;
-  assignedAt: string;
+  riskLibraryVersion: number;
+
+  // Snapshot (immutable)
+  titleSnapshot: string;
+  bodySnapshot: string;
+  severitySnapshot: RiskSeverity;
+  categorySnapshot: string;
+  cdtCodesSnapshot?: string[];
+
+  // Consent metadata
+  consentMethod: 'VERBAL' | 'WRITTEN' | 'ELECTRONIC_SIGNATURE' | 'UNKNOWN';
+  consentCapturedAt?: string;
+  consentCapturedByUserId?: string;
+  consentNote?: string;
+
+  // UI + ordering
+  isActive: boolean;
+  sortOrder: number;
+  isExpanded?: boolean;
+
+  // Audit
+  addedAt: string;
+  addedByUserId: string;
+  lastUpdatedAt: string;
+  lastUpdatedByUserId?: string;
+
+  removedAt?: string;
+  removedByUserId?: string;
 }
 
 // Legacy support for existing components

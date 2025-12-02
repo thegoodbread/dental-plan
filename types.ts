@@ -1,5 +1,7 @@
 
 // Enums
+import { AssignedRisk } from './domain/dentalTypes';
+
 export type UserRole = 'DOCTOR' | 'TREATMENT_COORDINATOR' | 'ADMIN';
 
 export type TreatmentPlanStatus = 'DRAFT' | 'PRESENTED' | 'ACCEPTED' | 'DECLINED' | 'ON_HOLD';
@@ -157,6 +159,8 @@ export interface TreatmentPlan {
   itemIds: string[]; // List of IDs for persistence order
   items?: TreatmentPlanItem[]; // Hydrated
   phases?: TreatmentPhase[];
+  
+  assignedRisks?: AssignedRisk[]; // New Risk Engine Integration
 }
 
 export interface ShareLink {

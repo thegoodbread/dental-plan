@@ -3,12 +3,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useChairside } from '../../context/ChairsideContext';
 import { GoogleGenAI } from "@google/genai";
 import { 
-  ArrowLeft, Save, RefreshCw, CheckCircle2,
-  PanelRightClose, PanelRightOpen, ShieldCheck, Trash2, Info, FileText, AlertTriangle, Search
+  ArrowLeft, Save, PanelRightClose, PanelRightOpen, ShieldCheck, AlertTriangle, Wand2
 } from 'lucide-react';
 import { ToothNumber, ToothRecord, SoapSection, AssignedRisk, RiskLibraryItem, SoapSectionType } from '../../domain/dentalTypes';
 import { SoapSectionBlock } from './SoapSectionBlock';
 import { RiskLibraryPanel } from './RiskLibraryPanel';
+import { AssignedRiskRow } from './AssignedRiskRow';
 
 interface NotesComposerProps {
   activeToothNumber: ToothNumber | null;
@@ -21,7 +21,7 @@ const SECTION_ORDER: SoapSectionType[] = [
   'OBJECTIVE',
   'ASSESSMENT',
   'TREATMENT_PERFORMED',
-  // Risks inserted here in render
+  // RISKS inserted here in render
   'PLAN'
 ];
 
@@ -32,6 +32,8 @@ const SECTION_LABELS: Record<SoapSectionType, string> = {
   'TREATMENT_PERFORMED': 'Treatment Performed',
   'PLAN': 'Plan / Next Steps'
 };
+
+const generateId = () => Math.random().toString(36).substr(2, 9);
 
 export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber }) => {
   const { setCurrentView, addTimelineEvent } = useChairside();
@@ -47,8 +49,9 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
   // Ref for auto-scrolling to risks
   const riskSectionRef = useRef<HTMLDivElement>(null);
 
-  // Initialize SOAP Template
+  // Initialize SOAP Template & Risks
   useEffect(() => {
+    // Load SOAP
     if (soapSections.length === 0) {
         const initialSections: SoapSection[] = SECTION_ORDER.map(type => ({
             id: `s-${type}`,
@@ -59,7 +62,21 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
         }));
         setSoapSections(initialSections);
     }
+
+    // Load Risks from LocalStorage (Mock Persistence)
+    const storedRisks = localStorage.getItem('dental_assigned_risks');
+    if (storedRisks) {
+        try {
+            setAssignedRisks(JSON.parse(storedRisks));
+        } catch (e) {
+            console.error("Failed to load risks", e);
+        }
+    }
   }, []);
+
+  const persistRisks = (risks: AssignedRisk[]) => {
+      localStorage.setItem('dental_assigned_risks', JSON.stringify(risks));
+  };
 
   // -- HANDLERS --
 
@@ -69,19 +86,49 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
       setTimeout(() => setIsSaving(false), 600);
   };
 
+  // 1. ADDING A RISK (Production Spec)
   const handleAssignRisk = (riskItem: RiskLibraryItem) => {
-      // Prevent duplicates
-      if (assignedRisks.some(r => r.riskLibraryItemId === riskItem.id)) return;
+      // Check if already active to prevent duplicates
+      if (assignedRisks.some(r => r.riskLibraryItemId === riskItem.id && r.isActive)) return;
+
+      const activeCount = assignedRisks.filter(r => r.isActive).length;
 
       const newAssignment: AssignedRisk = {
-          id: `ar-${Date.now()}`,
+          id: `ar-${generateId()}`,
+          
+          // Linkage
+          tenantId: 'demo-tenant',
+          patientId: 'demo-patient', // In real app, from context
+          treatmentPlanId: 'current-plan', // In real app, from context
+          
+          // Library Reference
           riskLibraryItemId: riskItem.id,
-          riskTitle: riskItem.title,
-          riskBody: riskItem.body,
-          severity: riskItem.severity,
-          assignedAt: new Date().toISOString()
+          riskLibraryVersion: 1,
+
+          // Snapshot (Immutable)
+          titleSnapshot: riskItem.title,
+          bodySnapshot: riskItem.body,
+          severitySnapshot: riskItem.severity,
+          categorySnapshot: riskItem.category,
+          cdtCodesSnapshot: riskItem.procedureCodes || [],
+
+          // Consent Defaults
+          consentMethod: 'VERBAL', // Default for chairside
+          
+          // UI + Ordering
+          isActive: true,
+          sortOrder: activeCount, // Append to end
+          isExpanded: false,
+
+          // Audit
+          addedAt: new Date().toISOString(),
+          addedByUserId: 'user-current', // Mock
+          lastUpdatedAt: new Date().toISOString(),
       };
-      setAssignedRisks(prev => [...prev, newAssignment]);
+
+      const updatedRisks = [...assignedRisks, newAssignment];
+      setAssignedRisks(updatedRisks);
+      persistRisks(updatedRisks);
       
       // Auto-scroll to risk section to show feedback
       if (riskSectionRef.current) {
@@ -89,15 +136,57 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
       }
   };
 
+  // 3. REMOVING A RISK (Soft Delete)
   const handleRemoveRisk = (id: string) => {
-      setAssignedRisks(prev => prev.filter(r => r.id !== id));
+      const updatedRisks = assignedRisks.map(r => {
+          if (r.id === id) {
+              return {
+                  ...r,
+                  isActive: false,
+                  removedAt: new Date().toISOString(),
+                  removedByUserId: 'user-current',
+                  lastUpdatedAt: new Date().toISOString()
+              };
+          }
+          return r;
+      });
+      setAssignedRisks(updatedRisks);
+      persistRisks(updatedRisks);
   };
+
+  // 5. EXPAND/COLLAPSE
+  const handleToggleRiskExpand = (id: string) => {
+      setAssignedRisks(prev => {
+          const updated = prev.map(r => 
+              r.id === id ? { ...r, isExpanded: !r.isExpanded } : r
+          );
+          // Optional: persist expanding state if desired, but usually ephemeral is fine
+          // persistRisks(updated); 
+          return updated;
+      });
+  };
+
+  // 4. SORTING (Simple move logic placeholder)
+  // Even if using a library later, the state update logic remains similar
+  const handleReorder = (newOrder: AssignedRisk[]) => {
+      const updated = newOrder.map((risk, index) => ({
+        ...risk,
+        sortOrder: index,
+        lastUpdatedAt: new Date().toISOString()
+      }));
+      setAssignedRisks(updated);
+      persistRisks(updated);
+  };
+
+  // Derived state for display
+  const activeRisks = assignedRisks
+      .filter(r => r.isActive)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
 
   // -- AI HELPERS --
 
   const generateSoapDraft = async (sectionType: string) => {
       setAiLoading(true);
-      
       const promptMap: Record<string, string> = {
           'SUBJECTIVE': "Summarize a typical chief complaint for a restorative visit.",
           'OBJECTIVE': "List standard objective findings for a carious lesion on a posterior tooth.",
@@ -112,16 +201,13 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
             model: 'gemini-2.5-flash',
             contents: `You are a dental assistant. ${promptMap[sectionType] || "Draft a clinical note section."} Keep it concise, professional, and clinical.`,
           });
-          
           const text = response.text || "";
-          
           setSoapSections(prev => prev.map(s => {
               if (s.type === sectionType) {
                   return { ...s, content: s.content ? s.content + '\n' + text : text };
               }
               return s;
           }));
-
       } catch (e) {
           console.error("AI Error", e);
           alert("AI Service unavailable.");
@@ -131,6 +217,13 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
   };
 
   const handleFinalize = () => {
+      // Create a copy of what needs to be saved
+      const finalNote = {
+          sections: soapSections,
+          risks: activeRisks
+      };
+      console.log("Finalizing Note:", finalNote);
+
       addTimelineEvent({
         type: 'NOTE',
         title: 'Clinical Note Finalized',
@@ -138,17 +231,6 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
         provider: 'Dr. Smith'
       });
       setCurrentView('DASHBOARD');
-  };
-
-  // Helper to get severity color for the list
-  const getSeverityBadgeClass = (s: string) => {
-      switch(s) {
-          case 'COMMON': return 'bg-blue-100 text-blue-700 border-blue-200';
-          case 'UNCOMMON': return 'bg-amber-100 text-amber-700 border-amber-200';
-          case 'RARE': return 'bg-orange-100 text-orange-700 border-orange-200';
-          case 'VERY_RARE': return 'bg-red-100 text-red-700 border-red-200';
-          default: return 'bg-slate-100 text-slate-600 border-slate-200';
-      }
   };
 
   return (
@@ -200,83 +282,8 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
             
             {/* Render Sections in Order */}
             {soapSections.map(section => {
-                // If we are at the PLAN section, inject the Risks card right BEFORE it
-                if (section.type === 'PLAN') {
-                    return (
-                        <React.Fragment key="risk-insertion">
-                            {/* INFORMED CONSENT & RISKS CARD */}
-                            <div ref={riskSectionRef} className="bg-white rounded-md border border-slate-300 shadow-sm overflow-hidden">
-                                <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-                                    <div className="flex items-center gap-2">
-                                        <ShieldCheck size={16} className="text-slate-500" />
-                                        <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Informed Consent & Risks</h3>
-                                    </div>
-                                    <span className="text-[10px] font-medium text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200">
-                                        {assignedRisks.length} Assigned
-                                    </span>
-                                </div>
-                                
-                                {assignedRisks.length === 0 ? (
-                                    <div className="p-8 flex flex-col items-center justify-center text-center">
-                                        <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center mb-3 border border-slate-100">
-                                            <AlertTriangle size={18} className="text-slate-300" />
-                                        </div>
-                                        <p className="text-sm font-medium text-slate-900">No risks assigned yet.</p>
-                                        <p className="text-xs text-slate-500 max-w-[240px] mt-1">
-                                            Use the library panel on the right to select relevant informed-consent risks.
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <div className="divide-y divide-slate-100">
-                                        {assignedRisks.map(risk => (
-                                            <div key={risk.id} className="group flex items-start gap-3 p-3 hover:bg-slate-50 transition-colors">
-                                                <div className={`mt-0.5 shrink-0 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${getSeverityBadgeClass(risk.severity)}`}>
-                                                    {risk.severity.charAt(0)}
-                                                </div>
-                                                <div className="flex-1 min-w-0 cursor-pointer" onClick={(e) => {
-                                                    // Toggle expand logic could go here, currently strictly list
-                                                    const target = e.currentTarget.nextElementSibling as HTMLElement;
-                                                    if(target) target.classList.toggle('hidden');
-                                                }}>
-                                                    <div className="flex items-baseline gap-2">
-                                                        <span className="text-sm font-semibold text-slate-900">{risk.riskTitle}</span>
-                                                    </div>
-                                                    <p className="text-xs text-slate-500 truncate mt-0.5">{risk.riskBody}</p>
-                                                    {/* Expanded View (Hidden by default, shown on click logic implemented via details/summary or simple state if needed, here implies simple list) */}
-                                                </div>
-                                                <button 
-                                                    onClick={() => handleRemoveRisk(risk.id)}
-                                                    className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                                                    title="Remove Risk"
-                                                >
-                                                    <Trash2 size={14} />
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                                
-                                {assignedRisks.length > 0 && (
-                                    <div className="bg-slate-50/50 p-2 text-[10px] text-slate-400 text-center border-t border-slate-100">
-                                        Documented: Patient verbalized understanding of risks.
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* THEN RENDER THE PLAN SECTION */}
-                            <SoapSectionBlock 
-                                key={section.id} 
-                                section={section} 
-                                onSave={handleUpdateSoap}
-                                onDictate={() => alert("Dictation")}
-                                onAiDraft={() => generateSoapDraft(section.type)}
-                            />
-                        </React.Fragment>
-                    );
-                }
-
-                // Render other sections normally
-                return (
+                // RENDER NORMAL SECTIONS
+                const sectionBlock = (
                     <SoapSectionBlock 
                         key={section.id} 
                         section={section} 
@@ -285,15 +292,68 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
                         onAiDraft={() => generateSoapDraft(section.type)}
                     />
                 );
+
+                // Inject RISKS after Treatment Performed
+                if (section.type === 'TREATMENT_PERFORMED') {
+                    return (
+                        <React.Fragment key={section.id}>
+                            {sectionBlock}
+                            
+                            {/* --- ASSIGNED RISKS CONTAINER --- */}
+                            <div ref={riskSectionRef} className="pt-2">
+                                <div className="flex items-center gap-3 mb-2 px-1">
+                                    <div className="h-px bg-slate-300 flex-1"></div>
+                                    <div className="flex items-center gap-2 text-slate-500">
+                                        <ShieldCheck size={14} />
+                                        <span className="text-[10px] font-bold uppercase tracking-widest">Informed Consent & Risks</span>
+                                    </div>
+                                    <div className="h-px bg-slate-300 flex-1"></div>
+                                </div>
+
+                                <div className="bg-slate-50 rounded-lg border border-slate-200 p-2 shadow-inner min-h-[100px]">
+                                    {activeRisks.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+                                            <AlertTriangle size={20} className="mb-2 opacity-50" />
+                                            <p className="text-xs font-medium">No risks assigned.</p>
+                                            <p className="text-[10px] text-slate-400 mt-1">Select from the library panel to document consent.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-1">
+                                            {activeRisks.map(risk => (
+                                                <AssignedRiskRow 
+                                                    key={risk.id}
+                                                    risk={risk}
+                                                    onToggleExpand={handleToggleRiskExpand}
+                                                    onRemove={handleRemoveRisk}
+                                                />
+                                            ))}
+                                        </div>
+                                    )}
+                                    
+                                    {activeRisks.length > 0 && (
+                                        <div className="mt-3 text-center">
+                                            <p className="text-[10px] text-slate-400 font-medium bg-white inline-block px-3 py-1 rounded-full border border-slate-100 shadow-sm">
+                                                Documented: Patient verbalized understanding of risks.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            {/* ------------------------------- */}
+                        </React.Fragment>
+                    );
+                }
+
+                return sectionBlock;
             })}
           </div>
         </div>
 
-        {/* RIGHT: RISK LIBRARY PANEL (Fixed Width, Independent Scroll) */}
+        {/* RIGHT: RISK LIBRARY PANEL */}
         {rightPanelOpen && (
           <div className="w-[400px] shrink-0 bg-white border-l border-slate-300 shadow-xl z-20 flex flex-col h-full">
              <RiskLibraryPanel 
-                assignedRiskIds={assignedRisks.map(r => r.riskLibraryItemId)}
+                assignedRiskIds={activeRisks.map(r => r.riskLibraryItemId)}
                 onAssignRisk={handleAssignRisk}
              />
           </div>
