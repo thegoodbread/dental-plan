@@ -136,10 +136,13 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
 
     if (activeToothNumber) {
       if (activeToothRecord) {
-          // Build summary from record
-          const conditions = activeToothRecord.conditions.map(c => c.label).join(", ");
+          // Build summary from record, guarding against undefined arrays
+          const conditions = (activeToothRecord.conditions ?? [])
+            .map(c => c.label)
+            .join(", ");
+          
           // Naive filter for now, checking for procedures that might be relevant findings
-          const procedures = activeToothRecord.procedures
+          const procedures = (activeToothRecord.procedures ?? [])
               .filter(p => p.status === 'completed' || p.status === 'planned') 
               .map(p => p.name).join(", ");
           
