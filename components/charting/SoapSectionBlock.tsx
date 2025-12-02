@@ -1,20 +1,24 @@
 
 import React, { useState, useEffect } from 'react';
-import { Edit2, Mic, Check, X, Wand2, FileText, ChevronDown, ChevronRight } from 'lucide-react';
+import { Edit2, Mic, Check, X, Wand2, ChevronRight, Stethoscope } from 'lucide-react';
 import { SoapSection } from '../../domain/dentalTypes';
 
 interface SoapSectionBlockProps {
   section: SoapSection;
+  contextLabel?: string;
   onSave: (id: string, newContent: string) => void;
   onDictate?: () => void;
   onAiDraft?: () => void;
+  onInsertChartFindings?: () => void;
 }
 
 export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
   section,
+  contextLabel,
   onSave,
   onDictate,
-  onAiDraft
+  onAiDraft,
+  onInsertChartFindings
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [draftContent, setDraftContent] = useState(section.content);
@@ -79,7 +83,14 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
             <div className={`text-slate-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>
                 <ChevronRight size={14} />
             </div>
-            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">{section.title}</h3>
+            <div className="flex flex-col md:flex-row md:items-center md:gap-2">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">{section.title}</h3>
+                {contextLabel && (
+                    <span className="hidden md:inline text-[9px] text-slate-400 font-medium border-l border-slate-300 pl-2">
+                        Applies to: {contextLabel}
+                    </span>
+                )}
+            </div>
         </div>
         
         {/* Actions (visible on hover or active) */}
@@ -104,18 +115,29 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
       {/* Content Area - Collapsible */}
       {isExpanded && (
           <div className="bg-white">
+            {contextLabel && (
+                <div className="md:hidden px-4 py-1 bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 font-medium">
+                    Applies to: {contextLabel}
+                </div>
+            )}
+            
             {isEditing ? (
               <div className="p-3 animate-in fade-in duration-150">
                 {/* Editor Toolbar */}
-                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Tools</span>
+                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-100 overflow-x-auto">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase whitespace-nowrap">Tools</span>
                     {onAiDraft && (
-                        <button onClick={onAiDraft} className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded border border-purple-200 transition-colors">
+                        <button onClick={onAiDraft} className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded border border-purple-200 transition-colors whitespace-nowrap">
                             <Wand2 size={10} /> AI Draft
                         </button>
                     )}
+                    {onInsertChartFindings && (
+                        <button onClick={onInsertChartFindings} className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 rounded border border-teal-200 transition-colors whitespace-nowrap">
+                            <Stethoscope size={10} /> Insert Findings
+                        </button>
+                    )}
                     {onDictate && (
-                        <button onClick={onDictate} className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-slate-700 bg-white hover:bg-slate-50 rounded border border-slate-200 transition-colors">
+                        <button onClick={onDictate} className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-slate-700 bg-white hover:bg-slate-50 rounded border border-slate-200 transition-colors whitespace-nowrap">
                             <Mic size={10} /> Dictate
                         </button>
                     )}

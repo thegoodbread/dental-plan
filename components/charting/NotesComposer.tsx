@@ -46,11 +46,6 @@ const generateSoapDraftFromServer = async (sectionType: string, promptMap: Recor
   // TODO: In production, replace this direct GoogleGenAI call with a backend API call.
   // For now, keep the existing behavior for local/demo use.
 
-  // Example production pattern:
-  // const res = await fetch('/api/soap-draft', { method: 'POST', body: JSON.stringify({ sectionType }) });
-  // const data = await res.json();
-  // return data.text;
-
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
@@ -61,6 +56,7 @@ const generateSoapDraftFromServer = async (sectionType: string, promptMap: Recor
 
 export const NotesComposer: React.FC<NotesComposerProps> = ({ 
   activeToothNumber,
+  activeToothRecord,
   activeTreatmentItemId,
   activePhaseId
 }) => {
@@ -135,6 +131,46 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
       setTimeout(() => setIsSaving(false), 600);
   };
 
+  const handleInsertChartFindings = () => {
+    let textToInsert = "";
+
+    if (activeToothNumber) {
+      if (activeToothRecord) {
+          // Build summary from record
+          const conditions = activeToothRecord.conditions.map(c => c.label).join(", ");
+          // Naive filter for now, checking for procedures that might be relevant findings
+          const procedures = activeToothRecord.procedures
+              .filter(p => p.status === 'completed' || p.status === 'planned') 
+              .map(p => p.name).join(", ");
+          
+          const findings = [];
+          if (conditions) findings.push(conditions);
+          if (procedures) findings.push(`Tx: ${procedures}`);
+          
+          if (findings.length > 0) {
+              textToInsert = `Tooth #${activeToothNumber}: ${findings.join("; ")}.`;
+          } else {
+               // Record exists but empty
+               textToInsert = `Tooth #${activeToothNumber}: [describe objective findings here].`;
+          }
+      } else {
+        // No record found for tooth
+        textToInsert = `Tooth #${activeToothNumber}: [describe objective findings here].`;
+      }
+    } else {
+      // No tooth context
+      textToInsert = "[Describe objective findings for this visit here].";
+    }
+
+    setSoapSections(prev => prev.map(s => {
+      if (s.type === 'OBJECTIVE') {
+        const newContent = s.content ? `${s.content}\n${textToInsert}` : textToInsert;
+        return { ...s, content: newContent, lastEditedAt: new Date().toISOString() };
+      }
+      return s;
+    }));
+  };
+
   // 1. ADDING A RISK (Production Spec)
   const handleAssignRisk = (riskItem: RiskLibraryItem) => {
       // Check if already active to prevent duplicates
@@ -151,8 +187,6 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
           treatmentPlanId: currentTreatmentPlanId,
           clinicalNoteId: currentNoteId,
           
-          // TODO: Wire these to the actual active TreatmentPlanItem and phase
-          // once the notes view is directly tied to a specific plan item/phase.
           treatmentItemId: activeTreatmentItemId ?? undefined,
           phaseId: activePhaseId != null ? String(activePhaseId) : undefined,
           
@@ -329,28 +363,33 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
       setCurrentView('DASHBOARD');
   };
 
+  const contextLabel = activeToothNumber ? `Tooth #${activeToothNumber}` : 'This visit';
+
   return (
     <div className="flex flex-col h-full bg-slate-100 font-sans text-slate-900 overflow-hidden">
       
       {/* 1. COMPACT HEADER */}
-      <div className="h-14 bg-white border-b border-slate-300 flex items-center justify-between px-4 shadow-sm z-30 shrink-0">
+      <div className="bg-white border-b border-slate-300 flex items-center justify-between px-4 py-2.5 shadow-sm z-30 shrink-0">
         <div className="flex items-center gap-4">
           <button onClick={() => setCurrentView('DASHBOARD')} className="p-1.5 -ml-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors">
             <ArrowLeft size={18} />
           </button>
-          <div className="flex items-center gap-3 border-l border-slate-200 pl-4 h-8">
-            <div>
-                <h1 className="text-sm font-bold text-slate-900 leading-none">Clinical Note</h1>
-                <div className="flex items-center gap-2 mt-0.5">
-                    {activeToothNumber && (
-                        <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-px rounded border border-slate-200">
-                            Tooth #{activeToothNumber}
-                        </span>
-                    )}
-                    <span className="text-[10px] text-slate-400">
-                        {isSaving ? 'Saving...' : 'Saved'}
+          <div className="flex flex-col border-l border-slate-200 pl-4 h-9 justify-center">
+            <h1 className="text-sm font-bold text-slate-900 leading-none">Clinical Note</h1>
+            <div className="flex items-center gap-2 mt-1">
+                {activeToothNumber && (
+                    <span className="text-[10px] font-medium text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
+                        Context: Tooth #{activeToothNumber}
                     </span>
-                </div>
+                )}
+                {activeTreatmentItemId && (
+                     <span className="text-[10px] font-medium text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
+                        Linked Plan Item
+                    </span>
+                )}
+                <span className="text-[10px] text-slate-400 ml-1">
+                    {isSaving ? 'Saving...' : 'Saved'}
+                </span>
             </div>
           </div>
         </div>
@@ -378,14 +417,18 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
             
             {/* Render Sections in Order */}
             {soapSections.map(section => {
+                const isObjective = section.type === 'OBJECTIVE';
+
                 // RENDER NORMAL SECTIONS
                 const sectionBlock = (
                     <SoapSectionBlock 
                         key={section.id} 
-                        section={section} 
+                        section={section}
+                        contextLabel={contextLabel}
                         onSave={handleUpdateSoap}
                         onDictate={() => alert("Dictation")}
                         onAiDraft={() => generateSoapDraft(section.type)}
+                        onInsertChartFindings={isObjective ? handleInsertChartFindings : undefined}
                     />
                 );
 
