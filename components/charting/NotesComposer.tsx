@@ -5,6 +5,9 @@ import { GoogleGenAI } from "@google/genai";
 import { 
   ArrowLeft, Save, PanelRightClose, PanelRightOpen, ShieldCheck, AlertTriangle, Wand2
 } from 'lucide-react';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+
 import { ToothNumber, ToothRecord, SoapSection, AssignedRisk, RiskLibraryItem, SoapSectionType } from '../../domain/dentalTypes';
 import { SoapSectionBlock } from './SoapSectionBlock';
 import { RiskLibraryPanel } from './RiskLibraryPanel';
@@ -14,6 +17,9 @@ interface NotesComposerProps {
   activeToothNumber: ToothNumber | null;
   activeToothRecord: ToothRecord | null;
   onToothClick: (tooth: ToothNumber) => void;
+  // Optional linkage to specific treatment plan context
+  activeTreatmentItemId?: string | null;
+  activePhaseId?: string | number | null;
 }
 
 const SECTION_ORDER: SoapSectionType[] = [
@@ -35,7 +41,29 @@ const SECTION_LABELS: Record<SoapSectionType, string> = {
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
-export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber }) => {
+// IMPORTANT: Do not ship this direct AI call in a production frontend.
+const generateSoapDraftFromServer = async (sectionType: string, promptMap: Record<string, string>): Promise<string> => {
+  // TODO: In production, replace this direct GoogleGenAI call with a backend API call.
+  // For now, keep the existing behavior for local/demo use.
+
+  // Example production pattern:
+  // const res = await fetch('/api/soap-draft', { method: 'POST', body: JSON.stringify({ sectionType }) });
+  // const data = await res.json();
+  // return data.text;
+
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: `You are a dental assistant. ${promptMap[sectionType] || "Draft a clinical note section."} Keep it concise, professional, and clinical.`,
+  });
+  return response.text || "";
+};
+
+export const NotesComposer: React.FC<NotesComposerProps> = ({ 
+  activeToothNumber,
+  activeTreatmentItemId,
+  activePhaseId
+}) => {
   const { 
       setCurrentView, 
       addTimelineEvent,
@@ -56,6 +84,12 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
   
   // Ref for auto-scrolling to risks
   const riskSectionRef = useRef<HTMLDivElement>(null);
+
+  // DnD Sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor)
+  );
 
   // Helper for Scoped Persistence
   const buildRiskStorageKey = () => `dental_assigned_risks:${currentPatientId}:${currentNoteId}`;
@@ -116,6 +150,11 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
           patientId: currentPatientId,
           treatmentPlanId: currentTreatmentPlanId,
           clinicalNoteId: currentNoteId,
+          
+          // TODO: Wire these to the actual active TreatmentPlanItem and phase
+          // once the notes view is directly tied to a specific plan item/phase.
+          treatmentItemId: activeTreatmentItemId ?? undefined,
+          phaseId: activePhaseId != null ? String(activePhaseId) : undefined,
           
           // Library Reference
           riskLibraryItemId: riskItem.id,
@@ -199,14 +238,39 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
   };
 
   // 4. SORTING (SortOrder updates)
-  const handleReorder = (newOrder: AssignedRisk[]) => {
-      const updated = newOrder.map((risk, index) => ({
+  const handleReorder = (newActiveOrder: AssignedRisk[]) => {
+      // 1. Update sort order for the active risks we just dragged
+      const updatedActive = newActiveOrder.map((risk, index) => ({
         ...risk,
         sortOrder: index,
         lastUpdatedAt: new Date().toISOString()
       }));
-      setAssignedRisks(updated);
-      persistRisks(updated);
+
+      // 2. Retrieve inactive risks from the full list so we don't lose them
+      const inactiveRisks = assignedRisks.filter(r => !r.isActive);
+
+      // 3. Merge active + inactive
+      const finalList = [...updatedActive, ...inactiveRisks];
+
+      // 4. Update state and persist
+      setAssignedRisks(finalList);
+      persistRisks(finalList);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    // If dropped outside a valid target, or nothing changed, do nothing
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = activeRisks.findIndex((r) => r.id === active.id);
+    const newIndex = activeRisks.findIndex((r) => r.id === over.id);
+
+    // Safety check: if indices are not found, do nothing
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const newOrder = arrayMove(activeRisks, oldIndex, newIndex);
+    handleReorder(newOrder);
   };
 
   // Derived state for display
@@ -227,12 +291,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
       };
 
       try {
-          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-          const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: `You are a dental assistant. ${promptMap[sectionType] || "Draft a clinical note section."} Keep it concise, professional, and clinical.`,
-          });
-          const text = response.text || "";
+          const text = await generateSoapDraftFromServer(sectionType, promptMap);
           setSoapSections(prev => prev.map(s => {
               if (s.type === sectionType) {
                   return { ...s, content: s.content ? s.content + '\n' + text : text };
@@ -349,17 +408,21 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
                                             <p className="text-[10px] text-slate-400 mt-1">Select from the library panel to document consent.</p>
                                         </div>
                                     ) : (
-                                        <div className="space-y-1">
-                                            {activeRisks.map(risk => (
-                                                <AssignedRiskRow 
-                                                    key={risk.id}
-                                                    risk={risk}
-                                                    onToggleExpand={handleToggleRiskExpand}
-                                                    onRemove={handleRemoveRisk}
-                                                    onUpdateConsent={handleUpdateConsent}
-                                                />
-                                            ))}
-                                        </div>
+                                        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                                            <SortableContext items={activeRisks.map(r => r.id)} strategy={verticalListSortingStrategy}>
+                                                <div className="space-y-1">
+                                                    {activeRisks.map(risk => (
+                                                        <AssignedRiskRow 
+                                                            key={risk.id}
+                                                            risk={risk}
+                                                            onToggleExpand={handleToggleRiskExpand}
+                                                            onRemove={handleRemoveRisk}
+                                                            onUpdateConsent={handleUpdateConsent}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </SortableContext>
+                                        </DndContext>
                                     )}
                                     
                                     {activeRisks.length > 0 && (

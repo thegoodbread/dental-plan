@@ -1,6 +1,8 @@
 
 import React from 'react';
 import { Trash2, GripVertical, ChevronDown, Check, User } from 'lucide-react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { AssignedRisk, RiskSeverity } from '../../domain/dentalTypes';
 
 interface AssignedRiskRowProps {
@@ -8,8 +10,6 @@ interface AssignedRiskRowProps {
   onToggleExpand: (id: string) => void;
   onRemove: (id: string) => void;
   onUpdateConsent: (id: string, updates: Partial<AssignedRisk>) => void;
-  // In a real dnd implementation, these would be passed from the dnd-kit context
-  dragHandleProps?: any; 
 }
 
 const getSeverityBadgeClass = (s: RiskSeverity) => {
@@ -26,9 +26,24 @@ export const AssignedRiskRow: React.FC<AssignedRiskRowProps> = ({
   risk, 
   onToggleExpand, 
   onRemove,
-  onUpdateConsent,
-  dragHandleProps
+  onUpdateConsent
 }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: risk.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 'auto',
+    opacity: isDragging ? 0.5 : 1,
+    position: 'relative' as 'relative',
+  };
   
   const handleConsentCapture = (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -48,10 +63,13 @@ export const AssignedRiskRow: React.FC<AssignedRiskRowProps> = ({
 
   return (
     <div 
+      ref={setNodeRef}
+      style={style}
       className={`
         group relative bg-white border border-slate-200 rounded-md shadow-sm mb-2 transition-all duration-300
         hover:border-slate-300 hover:shadow-md
         animate-in fade-in slide-in-from-right-2
+        ${isDragging ? 'shadow-xl ring-2 ring-blue-400' : ''}
       `}
     >
       <div 
@@ -60,9 +78,10 @@ export const AssignedRiskRow: React.FC<AssignedRiskRowProps> = ({
       >
         {/* Drag Handle */}
         <div 
-          className="mr-3 mt-0.5 text-slate-300 cursor-grab hover:text-slate-500 active:cursor-grabbing"
+          className="mr-3 mt-0.5 text-slate-300 cursor-grab hover:text-slate-500 active:cursor-grabbing outline-none touch-none"
           onClick={(e) => e.stopPropagation()} // Prevent expand when grabbing
-          {...dragHandleProps}
+          {...attributes}
+          {...listeners}
         >
           <GripVertical size={16} />
         </div>

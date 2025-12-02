@@ -26,6 +26,13 @@ interface ChairsideContextType {
 
 const ChairsideContext = createContext<ChairsideContextType | undefined>(undefined);
 
+// Helper for collision-resistant IDs (temporary until backend wired)
+const buildNoteIdForToday = () => {
+  const datePart = new Date().toISOString().split('T')[0];
+  const randomPart = Math.random().toString(36).substring(2, 8);
+  return `note-${datePart}-${randomPart}`;
+};
+
 export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentView, setCurrentView] = useState<ChairsideViewMode>('DASHBOARD');
   const [activeComposer, setActiveComposer] = useState<QuickActionType | null>(null);
@@ -35,8 +42,10 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [currentTenantId] = useState('tenant-demo-1');
   const [currentPatientId] = useState('patient-demo-1');
   const [currentTreatmentPlanId] = useState('plan-demo-A');
-  // Generate a note ID that is stable for the session but unique per day/visit in reality
-  const [currentNoteId] = useState('note-' + new Date().toISOString().split('T')[0]); 
+  
+  // TODO: When wiring to a real backend, replace this with the actual note ID from the server/router.
+  const [currentNoteId] = useState(buildNoteIdForToday); 
+  
   const [currentUserId] = useState('user-dr-smith');
 
   const [timeline, setTimeline] = useState<TimelineEvent[]>([
