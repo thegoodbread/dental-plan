@@ -239,6 +239,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
 
   // 4. SORTING (SortOrder updates)
   const handleReorder = (newActiveOrder: AssignedRisk[]) => {
+    setAssignedRisks((prev) => {
       // 1. Update sort order for the active risks we just dragged
       const updatedActive = newActiveOrder.map((risk, index) => ({
         ...risk,
@@ -246,15 +247,20 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
         lastUpdatedAt: new Date().toISOString()
       }));
 
-      // 2. Retrieve inactive risks from the full list so we don't lose them
-      const inactiveRisks = assignedRisks.filter(r => !r.isActive);
+      // 2. Identify IDs involved in the reorder to separate them from inactive ones
+      const activeIds = new Set(updatedActive.map((r) => r.id));
 
-      // 3. Merge active + inactive
-      const finalList = [...updatedActive, ...inactiveRisks];
+      // 3. Keep inactive/soft-deleted risks exactly as they were in the latest state
+      const others = prev.filter((r) => !activeIds.has(r.id));
 
-      // 4. Update state and persist
-      setAssignedRisks(finalList);
+      // 4. Merge active + inactive
+      const finalList = [...updatedActive, ...others];
+
+      // 5. Persist
       persistRisks(finalList);
+
+      return finalList;
+    });
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
