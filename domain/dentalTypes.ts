@@ -137,6 +137,23 @@ export interface AssignedRisk {
   removedByUserId?: string;
 }
 
+// NOTE TEMPLATE MODEL
+export interface ProcedureTemplate {
+  cdtCode: string;
+  label: string;
+  category: string; // Matches ProcedureCategory or general string
+  toothContext: 'single_tooth' | 'multi_teeth' | 'quadrant' | 'arch' | 'full_mouth' | 'not_applicable';
+  
+  subjectiveTemplate: string;
+  objectiveTemplate: string;
+  assessmentTemplate: string;
+  treatmentPerformedTemplate: string;
+  planTemplate: string;
+  
+  suggestedRiskLabels: string[];
+  complianceChecklist: string[];
+}
+
 // Legacy support for existing components
 export interface ClinicalNote {
   id: string;
