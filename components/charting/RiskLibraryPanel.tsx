@@ -2,11 +2,13 @@
 import React, { useState } from 'react';
 import { Search, Plus, Filter, ShieldAlert, Check } from 'lucide-react';
 import { RISK_LIBRARY } from '../../domain/riskLibrary';
-import { RiskCategory, RiskLibraryItem, RiskSeverity } from '../../domain/dentalTypes';
+import { RiskCategory, RiskLibraryItem, RiskSeverity, recordRiskEvent } from '../../domain/dentalTypes';
+import { useChairside } from '../../context/ChairsideContext';
 
 interface RiskLibraryPanelProps {
   onAssignRisk: (item: RiskLibraryItem) => void;
   assignedRiskIds: string[]; // List of IDs currently active in the note
+  tenantId?: string | null; // Optional: Enforce tenant isolation if provided
 }
 
 const CATEGORIES: { id: RiskCategory | 'ALL', label: string }[] = [
@@ -21,17 +23,56 @@ const CATEGORIES: { id: RiskCategory | 'ALL', label: string }[] = [
 
 export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({ 
   onAssignRisk,
-  assignedRiskIds
+  assignedRiskIds,
+  tenantId
 }) => {
+  const { 
+    currentTenantId, 
+    currentPatientId, 
+    currentTreatmentPlanId, 
+    currentNoteId, 
+    currentUserId 
+  } = useChairside();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState<RiskCategory | 'ALL'>('ALL');
 
+  // Governance & Search Filtering
   const filteredRisks = RISK_LIBRARY.filter(risk => {
+    // 1. Governance Checks
+    if (!risk.isApprovedForProduction) return false;
+    if (risk.deprecatedAt) return false;
+    
+    // 2. Tenant Isolation
+    // Show global items (tenantId is null) OR items matching current tenant.
+    const effectiveTenantId = tenantId || currentTenantId; 
+    if (risk.tenantId && risk.tenantId !== effectiveTenantId) return false;
+
+    // 3. User Filter Criteria
     const matchesSearch = risk.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           risk.body.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = activeCategory === 'ALL' || risk.category === activeCategory;
+    
     return matchesSearch && matchesCategory;
   });
+
+  const handleAddRisk = (risk: RiskLibraryItem) => {
+    onAssignRisk(risk);
+    
+    // Audit Log
+    recordRiskEvent({
+      id: Math.random().toString(36).substring(2, 9),
+      tenantId: currentTenantId,
+      patientId: currentPatientId,
+      clinicalNoteId: currentNoteId,
+      treatmentPlanId: currentTreatmentPlanId,
+      riskLibraryItemId: risk.id,
+      eventType: 'RISK_ASSIGNED',
+      occurredAt: new Date().toISOString(),
+      userId: currentUserId,
+      details: 'Risk assigned from RiskLibraryPanel'
+    });
+  };
 
   const getSeverityBadgeClass = (severity: RiskSeverity) => {
       switch(severity) {
@@ -110,7 +151,7 @@ export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({
                             </span>
                         ) : (
                             <button 
-                                onClick={() => onAssignRisk(risk)}
+                                onClick={() => handleAddRisk(risk)}
                                 className="opacity-0 group-hover:opacity-100 transition-opacity bg-blue-600 text-white hover:bg-blue-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm flex items-center gap-1 active:scale-95"
                             >
                                 <Plus size={10} /> Add
@@ -129,14 +170,14 @@ export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({
          {filteredRisks.length === 0 && (
              <div className="flex flex-col items-center justify-center py-12 text-slate-400">
                  <Filter size={24} className="mb-2 opacity-20" />
-                 <p className="text-xs font-medium">No risks found.</p>
+                 <p className="text-xs font-medium">No approved risks found.</p>
              </div>
          )}
          
          {/* Universal Consent Safeguard Footer */}
          <div className="pt-4 mt-2 border-t border-slate-200">
             <p className="text-[10px] text-slate-400 italic text-center leading-relaxed">
-              The risks listed above include common and clinically relevant possibilities, but they are not exhaustive. Other rare or unforeseen complications may occur. Your dentist will explain any additional concerns specific to your case.
+              The risks listed above include common and clinically relevant possibilities, but they are not exhaustive. Only approved library items are shown.
             </p>
          </div>
       </div>

@@ -83,6 +83,7 @@ export type RiskSeverity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'VERY_RARE';
 export type RiskCategory = 'DIRECT_RESTORATION' | 'INDIRECT_RESTORATION' | 'ENDO' | 'EXTRACTION' | 'IMPLANT' | 'SEDATION' | 'ANESTHESIA' | 'OTHER';
 
 // GOVERNANCE-READY RISK ITEM
+// Do not store PHI here; this is a global library item definition.
 export interface RiskLibraryItem {
   id: string;
 
@@ -162,6 +163,36 @@ export interface AssignedRisk {
   removedByUserId?: string;
 }
 
+// --- AUDIT & EVENT LOGGING ---
+
+export type RiskEventType =
+  | 'RISK_ASSIGNED'
+  | 'RISK_REMOVED'
+  | 'CONSENT_CAPTURED';
+
+export interface RiskEvent {
+  id: string;
+  tenantId: string;
+  patientId: string;
+  clinicalNoteId?: string;
+  treatmentPlanId?: string;
+  assignedRiskId?: string;
+  riskLibraryItemId?: string;
+  eventType: RiskEventType;
+  details?: string;          // freeform JSON-ish string or human note
+  occurredAt: string;        // ISO datetime
+  userId: string;            // who performed the action
+}
+
+/**
+ * Audit Log Helper
+ * In a real application, this would send the event to a secure backend endpoint.
+ */
+export const recordRiskEvent = (event: RiskEvent) => {
+  // TODO: send to backend audit log endpoint.
+  console.log('[AUDIT LOG]', event.eventType, event);
+};
+
 // NOTE TEMPLATE MODEL
 export interface ProcedureTemplate {
   cdtCode: string;
@@ -198,6 +229,7 @@ const RISKY_PHRASES: string[] = [
   "complication-free",
   "100% success",
   "permanent solution",
+  "permanent fix"
 ];
 
 export function validateTemplateForRisk(template: ProcedureTemplate): string[] {
@@ -210,6 +242,23 @@ export function validateTemplateForRisk(template: ProcedureTemplate): string[] {
   ];
 
   const text = fieldsToCheck.join(" ").toLowerCase();
+  const violations: string[] = [];
+
+  for (const phrase of RISKY_PHRASES) {
+    if (text.includes(phrase.toLowerCase())) {
+      violations.push(phrase);
+    }
+  }
+
+  return violations;
+}
+
+/**
+ * Validates a risk library item for dangerous or non-compliant language.
+ * Use this before setting isApprovedForProduction = true.
+ */
+export function validateRiskItemForLanguage(item: RiskLibraryItem): string[] {
+  const text = `${item.title} ${item.body}`.toLowerCase();
   const violations: string[] = [];
 
   for (const phrase of RISKY_PHRASES) {
