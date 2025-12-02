@@ -132,6 +132,13 @@ export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({
                  <p className="text-xs font-medium">No risks found.</p>
              </div>
          )}
+         
+         {/* Universal Consent Safeguard Footer */}
+         <div className="pt-4 mt-2 border-t border-slate-200">
+            <p className="text-[10px] text-slate-400 italic text-center leading-relaxed">
+              The risks listed above include common and clinically relevant possibilities, but they are not exhaustive. Other rare or unforeseen complications may occur. Your dentist will explain any additional concerns specific to your case.
+            </p>
+         </div>
       </div>
     </div>
   );

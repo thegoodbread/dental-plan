@@ -50,9 +50,14 @@ export const RiskConsentSection: React.FC<RiskConsentSectionProps> = () => {
         
         <div className="mt-8 bg-gray-50 p-4 rounded-xl flex gap-4 text-sm text-gray-600 border border-gray-100">
             <Info className="shrink-0 text-blue-500 mt-0.5" size={20} />
-            <p>
-                Please review these items carefully. By proceeding with treatment, you acknowledge that these risks have been explained to you and you have had the opportunity to ask questions.
-            </p>
+            <div>
+                <p>
+                    Please review these items carefully. By proceeding with treatment, you acknowledge that these risks have been explained to you and you have had the opportunity to ask questions.
+                </p>
+                <p className="text-xs text-gray-400 mt-2 italic">
+                    The risks listed above include common and clinically relevant possibilities, but they are not exhaustive. Other rare or unforeseen complications may occur. Your dentist will explain any additional concerns specific to your case.
+                </p>
+            </div>
         </div>
       </div>
     </section>

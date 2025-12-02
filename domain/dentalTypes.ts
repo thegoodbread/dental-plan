@@ -82,15 +82,40 @@ export interface SoapSection {
 export type RiskSeverity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'VERY_RARE';
 export type RiskCategory = 'DIRECT_RESTORATION' | 'INDIRECT_RESTORATION' | 'ENDO' | 'EXTRACTION' | 'IMPLANT' | 'SEDATION' | 'ANESTHESIA' | 'OTHER';
 
+// GOVERNANCE-READY RISK ITEM
 export interface RiskLibraryItem {
   id: string;
-  version: number;
+
+  // Category + Severity
   category: RiskCategory;
   severity: RiskSeverity;
-  title: string;       // Short label for the doctor
-  body: string;        // Full legal text for the patient
-  procedureCodes?: string[];
+
+  // Versioning
+  version: number;             // increment whenever body or meaning changes
+
+  // Content
+  title: string;               // Short, clinic-facing
+  body: string;                // Patient-facing legal-text
+  procedureCodes?: string[];   // Optional CDT linking
   activeByDefault: boolean;
+
+  // Governance / Compliance Metadata
+  createdBy: string;           // userId or "system_seed"
+  createdAt: string;           // ISO date
+  jurisdictionNote?: string;   // "US general", "CA-specific", etc.
+
+  reviewedByClinicianId?: string; // dentist reviewing
+  reviewedByLegalId?: string;     // legal/compliance reviewer
+  reviewedAt?: string;            // ISO date
+
+  isApprovedForProduction: boolean; // must be true to show in live clinics
+
+  // Audit lifecycle (soft delete)
+  deprecatedAt?: string;       // when this item version gets retired
+  replacedById?: string;       // points to the new version id
+  
+  // Multi-tenancy
+  tenantId?: string | null;    // null = Global, string = Clinic Override
 }
 
 // FINAL PRODUCTION MODEL
