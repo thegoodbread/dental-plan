@@ -5,6 +5,8 @@ import { Layout } from './components/Layout';
 import { TreatmentPlansPage } from './pages/TreatmentPlansPage';
 import { TreatmentPlanDetailPage } from './pages/TreatmentPlanDetailPage';
 import { PatientPlanPage } from './pages/PatientPlanPage';
+import { PatientListPage } from './pages/PatientListPage';
+import { ChairsideChartingPage } from './pages/ChairsideChartingPage';
 
 const AppContent: React.FC = () => {
   // Check for ?token=XYZ immediately on load
@@ -21,7 +23,8 @@ const AppContent: React.FC = () => {
         <Route path="/" element={<TreatmentPlansPage />} />
         <Route path="/plan/:id" element={<TreatmentPlanDetailPage />} />
         <Route path="/p/:token" element={<PatientPlanPage />} />
-        <Route path="/patients" element={<div className="p-8 text-gray-500">Patient management not implemented in this demo.</div>} />
+        <Route path="/patients" element={<PatientListPage />} />
+        <Route path="/charting/:id" element={<ChairsideChartingPage />} />
         <Route path="/settings" element={<div className="p-8 text-gray-500">Settings not implemented in this demo.</div>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

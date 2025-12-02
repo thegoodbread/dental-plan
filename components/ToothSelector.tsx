@@ -8,7 +8,7 @@ interface ToothSelectorProps {
 }
 
 const ALL_UPPER = Array.from({ length: 16 }, (_, i) => i + 1);       // 1–16
-const ALL_LOWER = Array.from({ length: 16 }, (_, i) => 32 - i);      // 32–17
+const ALL_LOWER = Array.from({ length: 16 }, (_, i) => 17 + i);      // 17-32 (Sequential Left->Right)
 
 export const ToothSelector: React.FC<ToothSelectorProps> = ({
   selectedTeeth,
