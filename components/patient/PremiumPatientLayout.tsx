@@ -1,5 +1,4 @@
 
-
 import React, { useState, useRef, useEffect } from 'react';
 import { TreatmentPlan, TreatmentPlanItem } from '../../types';
 import { DollarSign } from 'lucide-react';
@@ -14,6 +13,7 @@ import { WhyItMattersSection } from './WhyItMattersSection';
 import { SummaryMetricsSection } from './SummaryMetricsSection';
 import { PaymentEstimatorSection } from './PaymentEstimatorSection';
 import { PatientCTASection } from './PatientCTASection';
+import { RiskConsentSection } from './RiskConsentSection';
 
 interface PremiumPatientLayoutProps {
   plan: TreatmentPlan;
@@ -59,10 +59,6 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
     setHoveredTooth(tooth);
     if (tooth) {
       setHoveredQuadrant(null); // Tooth takes precedence
-      // We do not clear hoveredItemId to allow "locking" if we wanted, 
-      // but for this interaction model, we usually want diagram exploration 
-      // to override item list selection or vice-versa. 
-      // The prompt requests: "Do NOT set hoveredItemId here."
     }
   };
 
@@ -79,8 +75,6 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
   // 3. Item Hover (Reverse)
   const handleItemHover = (itemId: string | null) => {
     setHoveredItemId(itemId);
-    // Do not change tooth/quadrant state, but the visual logic in diagram 
-    // will prioritize this if tooth is null
   };
 
   // --- CLINICAL LOGIC INTEGRATION ---
@@ -125,6 +119,8 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
         phaseCount={phaseCount}
         procedureCount={items.length}
       />
+      
+      <RiskConsentSection />
 
       <PaymentEstimatorSection 
         plan={plan}

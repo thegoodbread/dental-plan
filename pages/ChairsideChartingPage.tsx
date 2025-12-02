@@ -44,7 +44,7 @@ const ChartingLayout = () => {
       <NotesComposer 
         activeToothNumber={activeToothNumber}
         activeToothRecord={activeToothRecord}
-        onToothClick={(tooth) => setActiveToothNumber(tooth)}
+        onToothClick={(tooth) => setActiveToothNumber(prev => prev === tooth ? null : tooth)}
       />
     );
   }

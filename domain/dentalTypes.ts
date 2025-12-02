@@ -9,29 +9,30 @@ export type ToothNumber =
 
 export type VisitType = "exam" | "restorative" | "endo" | "surgery" | "emergency" | "hygiene" | "other";
 
+// --- EXISTING TYPES ---
 export interface Condition {
   id: string;
   toothNumber: ToothNumber;
-  label: string;            // e.g. "Fractured cusp", "Caries into dentin"
-  createdAt: string;        // ISO date
+  label: string;
+  createdAt: string;
   source: "charting" | "radiograph" | "note" | "import";
 }
 
 export interface Procedure {
   id: string;
   toothNumber: ToothNumber;
-  code: string;             // e.g. CDT code
-  name: string;             // "Crown - PFM", "Composite MOD"
+  code: string;
+  name: string;
   status: "planned" | "completed";
-  phase?: number | null;    // for sequencing (1,2,3...)
-  visitId?: string | null;  // when it was or will be done
+  phase?: number | null;
+  visitId?: string | null;
   createdAt: string;
 }
 
 export interface RadiographRef {
   id: string;
   type: "BWX" | "PA" | "PANO" | "CBCT" | "Other";
-  label: string;            // "R-BWX", "PA #14"
+  label: string;
   toothNumbers: ToothNumber[];
 }
 
@@ -46,7 +47,7 @@ export interface ToothNote {
 export interface ToothRecord {
   toothNumber: ToothNumber;
   conditions: Condition[];
-  procedures: Procedure[];          // both planned & completed (use status)
+  procedures: Procedure[];
   notes: ToothNote[];
   radiographs: RadiographRef[];
 }
@@ -62,17 +63,52 @@ export interface VisitRecord {
 export interface PatientChart {
   patientId: string;
   patientName: string;
-  teeth: ToothRecord[];     // one entry per tooth 1–32
+  teeth: ToothRecord[];
   visits: VisitRecord[];
 }
 
-// Clinical note structure
+// --- NEW SOAP & RISK MODELS ---
+
+export type SoapSectionType = 'SUBJECTIVE' | 'OBJECTIVE' | 'ASSESSMENT' | 'PLAN' | 'TREATMENT_PERFORMED';
+
+export interface SoapSection {
+  id: string;
+  type: SoapSectionType;
+  title: string;
+  content: string;
+  lastEditedAt: string;
+}
+
+export type RiskSeverity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'VERY_RARE';
+export type RiskCategory = 'DIRECT_RESTORATION' | 'INDIRECT_RESTORATION' | 'ENDO' | 'EXTRACTION' | 'IMPLANT' | 'SEDATION' | 'ANESTHESIA' | 'OTHER';
+
+export interface RiskLibraryItem {
+  id: string;
+  category: RiskCategory;
+  severity: RiskSeverity;
+  title: string;       // Short label for the doctor
+  body: string;        // Full legal text for the patient
+  procedureCodes?: string[];
+  activeByDefault: boolean;
+}
+
+export interface AssignedRisk {
+  id: string;
+  riskLibraryItemId: string;
+  riskTitle: string;   // Denormalized for display
+  riskBody: string;    // Denormalized snapshot
+  severity: RiskSeverity;
+  assignedAt: string;
+}
+
+// Legacy support for existing components
 export interface ClinicalNote {
   id: string;
   patientId: string;
   visitId: string;
   visitType: VisitType;
   dateTime: string;
+  // Legacy fields mapped to sections
   chiefComplaint: string;
   objectiveFindings: {
     oralExam: string;
@@ -90,8 +126,6 @@ export interface ClinicalNote {
   consentRefusal: "accepted" | "declined" | "deferred" | null;
   nextVisitPlan: string;
   status: "draft" | "signed";
-  signedBy?: string;
-  signedAt?: string;
 }
 
 // --- Mock Data ---
@@ -133,7 +167,6 @@ export const mockPatientChart: PatientChart = {
         }
       ]
     },
-    // It’s fine if not all 32 teeth are listed; other teeth can be empty:
     {
       toothNumber: "30",
       conditions: [],
