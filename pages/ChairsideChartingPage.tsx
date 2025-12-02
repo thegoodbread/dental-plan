@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChairsideProvider, useChairside } from '../context/ChairsideContext';
 import { QuickActions } from '../components/charting/QuickActions';
 import { Timeline } from '../components/charting/Timeline';
@@ -8,13 +8,46 @@ import { PerioChart } from '../components/charting/PerioChart';
 import { NotesComposer } from '../components/charting/NotesComposer';
 import { RadiographViewer } from '../components/charting/RadiographViewer';
 import { useParams } from 'react-router-dom';
+import { PatientChart, ToothRecord, ToothNumber, mockPatientChart } from '../domain/dentalTypes';
 
 const ChartingLayout = () => {
   const { currentView } = useChairside();
+  
+  // --- DOMAIN STATE ---
+  const [patientChart, setPatientChart] = useState<PatientChart | null>(null);
+  const [activeToothNumber, setActiveToothNumber] = useState<ToothNumber | null>(null);
+  const [activeToothRecord, setActiveToothRecord] = useState<ToothRecord | null>(null);
+
+  useEffect(() => {
+    // For now, just load the mock chart.
+    setPatientChart(mockPatientChart);
+    // Optionally set a default active tooth like "14" if it exists in the mock.
+    const defaultTooth: ToothNumber = "14";
+    setActiveToothNumber(defaultTooth);
+    const record = mockPatientChart.teeth.find(t => t.toothNumber === defaultTooth) || null;
+    setActiveToothRecord(record);
+  }, []);
+
+  useEffect(() => {
+    if (!patientChart || !activeToothNumber) {
+      setActiveToothRecord(null);
+      return;
+    }
+    const record = patientChart.teeth.find(t => t.toothNumber === activeToothNumber) || null;
+    setActiveToothRecord(record);
+  }, [patientChart, activeToothNumber]);
 
   // Full Screen Overlays
   if (currentView === 'PERIO') return <PerioChart />;
-  if (currentView === 'NOTES') return <NotesComposer />;
+  if (currentView === 'NOTES') {
+    return (
+      <NotesComposer 
+        activeToothNumber={activeToothNumber}
+        activeToothRecord={activeToothRecord}
+        onToothClick={(tooth) => setActiveToothNumber(tooth)}
+      />
+    );
+  }
   if (currentView === 'XRAY') return <RadiographViewer />;
 
   // iPad Optimized 3-Column Layout
