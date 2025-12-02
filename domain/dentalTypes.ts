@@ -84,6 +84,7 @@ export type RiskCategory = 'DIRECT_RESTORATION' | 'INDIRECT_RESTORATION' | 'ENDO
 
 export interface RiskLibraryItem {
   id: string;
+  version: number;
   category: RiskCategory;
   severity: RiskSeverity;
   title: string;       // Short label for the doctor

@@ -15,6 +15,13 @@ interface ChairsideContextType {
 
   timeline: TimelineEvent[];
   addTimelineEvent: (event: Omit<TimelineEvent, 'id' | 'timestamp'>) => void;
+
+  // Context Identifiers
+  currentTenantId: string;
+  currentPatientId: string;
+  currentTreatmentPlanId: string;
+  currentNoteId: string;
+  currentUserId: string;
 }
 
 const ChairsideContext = createContext<ChairsideContextType | undefined>(undefined);
@@ -24,6 +31,14 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [activeComposer, setActiveComposer] = useState<QuickActionType | null>(null);
   const [selectedTeeth, setSelectedTeeth] = useState<number[]>([]);
   
+  // Mock Context Values (In a real app, these would come from auth/routing)
+  const [currentTenantId] = useState('tenant-demo-1');
+  const [currentPatientId] = useState('patient-demo-1');
+  const [currentTreatmentPlanId] = useState('plan-demo-A');
+  // Generate a note ID that is stable for the session but unique per day/visit in reality
+  const [currentNoteId] = useState('note-' + new Date().toISOString().split('T')[0]); 
+  const [currentUserId] = useState('user-dr-smith');
+
   const [timeline, setTimeline] = useState<TimelineEvent[]>([
     { id: '1', type: 'CHECK_IN', title: 'Patient Checked In', timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString() },
     { id: '2', type: 'RADIOGRAPH', title: '4 BWX Taken', timestamp: new Date(Date.now() - 1000 * 60 * 10).toISOString(), details: 'Standard series' },
@@ -56,7 +71,12 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       toggleTooth,
       clearTeeth,
       timeline,
-      addTimelineEvent
+      addTimelineEvent,
+      currentTenantId,
+      currentPatientId,
+      currentTreatmentPlanId,
+      currentNoteId,
+      currentUserId
     }}>
       {children}
     </ChairsideContext.Provider>

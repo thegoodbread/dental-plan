@@ -5,6 +5,7 @@ export const RISK_LIBRARY: RiskLibraryItem[] = [
   // --- DIRECT RESTORATION ---
   {
     id: "rest_pain_common",
+    version: 1,
     category: "DIRECT_RESTORATION",
     severity: "COMMON",
     activeByDefault: true,
@@ -13,6 +14,7 @@ export const RISK_LIBRARY: RiskLibraryItem[] = [
   },
   {
     id: "rest_occlusion",
+    version: 1,
     category: "DIRECT_RESTORATION",
     severity: "UNCOMMON",
     activeByDefault: true,
@@ -21,6 +23,7 @@ export const RISK_LIBRARY: RiskLibraryItem[] = [
   },
   {
     id: "rest_endo",
+    version: 1,
     category: "DIRECT_RESTORATION",
     severity: "RARE",
     activeByDefault: false,
@@ -31,6 +34,7 @@ export const RISK_LIBRARY: RiskLibraryItem[] = [
   // --- INDIRECT RESTORATION (Crowns) ---
   {
     id: "crown_temp",
+    version: 1,
     category: "INDIRECT_RESTORATION",
     severity: "COMMON",
     activeByDefault: true,
@@ -39,6 +43,7 @@ export const RISK_LIBRARY: RiskLibraryItem[] = [
   },
   {
     id: "crown_nerve",
+    version: 1,
     category: "INDIRECT_RESTORATION",
     severity: "UNCOMMON",
     activeByDefault: true,
@@ -49,6 +54,7 @@ export const RISK_LIBRARY: RiskLibraryItem[] = [
   // --- EXTRACTION ---
   {
     id: "ext_dry_socket",
+    version: 1,
     category: "EXTRACTION",
     severity: "UNCOMMON",
     activeByDefault: true,
@@ -57,6 +63,7 @@ export const RISK_LIBRARY: RiskLibraryItem[] = [
   },
   {
     id: "ext_nerve",
+    version: 1,
     category: "EXTRACTION",
     severity: "RARE",
     activeByDefault: true,
@@ -65,6 +72,7 @@ export const RISK_LIBRARY: RiskLibraryItem[] = [
   },
   {
     id: "ext_sinus",
+    version: 1,
     category: "EXTRACTION",
     severity: "RARE",
     activeByDefault: false,
@@ -75,6 +83,7 @@ export const RISK_LIBRARY: RiskLibraryItem[] = [
   // --- IMPLANT ---
   {
     id: "imp_fail",
+    version: 1,
     category: "IMPLANT",
     severity: "UNCOMMON",
     activeByDefault: true,
@@ -83,6 +92,7 @@ export const RISK_LIBRARY: RiskLibraryItem[] = [
   },
   {
     id: "imp_maint",
+    version: 1,
     category: "IMPLANT",
     severity: "COMMON",
     activeByDefault: true,
@@ -93,6 +103,7 @@ export const RISK_LIBRARY: RiskLibraryItem[] = [
   // --- ENDO ---
   {
     id: "endo_fail",
+    version: 1,
     category: "ENDO",
     severity: "UNCOMMON",
     activeByDefault: true,
@@ -101,6 +112,7 @@ export const RISK_LIBRARY: RiskLibraryItem[] = [
   },
   {
     id: "endo_fracture",
+    version: 1,
     category: "ENDO",
     severity: "COMMON",
     activeByDefault: true,
@@ -111,6 +123,7 @@ export const RISK_LIBRARY: RiskLibraryItem[] = [
   // --- ANESTHESIA ---
   {
     id: "anes_paresthesia",
+    version: 1,
     category: "ANESTHESIA",
     severity: "VERY_RARE",
     activeByDefault: false,

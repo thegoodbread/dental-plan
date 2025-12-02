@@ -1,12 +1,13 @@
 
 import React from 'react';
-import { Trash2, GripVertical, ChevronDown } from 'lucide-react';
+import { Trash2, GripVertical, ChevronDown, Check, User } from 'lucide-react';
 import { AssignedRisk, RiskSeverity } from '../../domain/dentalTypes';
 
 interface AssignedRiskRowProps {
   risk: AssignedRisk;
   onToggleExpand: (id: string) => void;
   onRemove: (id: string) => void;
+  onUpdateConsent: (id: string, updates: Partial<AssignedRisk>) => void;
   // In a real dnd implementation, these would be passed from the dnd-kit context
   dragHandleProps?: any; 
 }
@@ -25,8 +26,26 @@ export const AssignedRiskRow: React.FC<AssignedRiskRowProps> = ({
   risk, 
   onToggleExpand, 
   onRemove,
+  onUpdateConsent,
   dragHandleProps
 }) => {
+  
+  const handleConsentCapture = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onUpdateConsent(risk.id, {
+          consentCapturedAt: new Date().toISOString(),
+          // User ID handled by parent logic usually, but here we trigger the update
+      });
+  };
+
+  const handleNoteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      onUpdateConsent(risk.id, { consentNote: e.target.value });
+  };
+
+  const handleMethodChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      onUpdateConsent(risk.id, { consentMethod: e.target.value as any });
+  };
+
   return (
     <div 
       className={`
@@ -67,12 +86,45 @@ export const AssignedRiskRow: React.FC<AssignedRiskRowProps> = ({
             
             {/* Metadata Footer (visible only when expanded) */}
             {risk.isExpanded && (
-                <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
-                    <div>
-                        Added: {new Date(risk.addedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} • ID: {risk.riskLibraryItemId.split('_')[0]}
+                <div className="mt-3 pt-2 border-t border-slate-100 text-[10px] text-slate-400 cursor-default" onClick={e => e.stopPropagation()}>
+                    <div className="flex justify-between items-center mb-2">
+                        <span>Added: {new Date(risk.addedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        <span className="font-mono bg-slate-50 px-1 rounded border border-slate-100">v{risk.riskLibraryVersion}</span>
                     </div>
-                    <div className="font-mono">
-                        v{risk.riskLibraryVersion}
+
+                    {/* Consent Controls */}
+                    <div className="bg-slate-50 p-2 rounded border border-slate-200 flex flex-wrap gap-2 items-center">
+                        <select 
+                            value={risk.consentMethod} 
+                            onChange={handleMethodChange}
+                            className="bg-white border border-slate-300 text-slate-700 text-[10px] rounded px-2 py-1 outline-none focus:border-blue-500"
+                        >
+                            <option value="VERBAL">Verbal Consent</option>
+                            <option value="WRITTEN">Written Consent</option>
+                            <option value="ELECTRONIC_SIGNATURE">E-Signature</option>
+                        </select>
+
+                        <input 
+                            type="text" 
+                            placeholder="Add consent note..." 
+                            value={risk.consentNote || ''}
+                            onChange={handleNoteChange}
+                            className="flex-1 bg-white border border-slate-300 text-slate-700 text-[10px] rounded px-2 py-1 outline-none focus:border-blue-500 placeholder:text-slate-400"
+                        />
+
+                        {risk.consentCapturedAt ? (
+                            <div className="flex items-center gap-1 text-green-600 font-bold bg-green-50 px-2 py-1 rounded border border-green-100">
+                                <Check size={10} />
+                                <span>Captured {new Date(risk.consentCapturedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                            </div>
+                        ) : (
+                            <button 
+                                onClick={handleConsentCapture}
+                                className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold px-3 py-1 rounded shadow-sm transition-colors flex items-center gap-1"
+                            >
+                                <User size={10} /> Capture
+                            </button>
+                        )}
                     </div>
                 </div>
             )}

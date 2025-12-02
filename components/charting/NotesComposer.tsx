@@ -36,7 +36,15 @@ const SECTION_LABELS: Record<SoapSectionType, string> = {
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber }) => {
-  const { setCurrentView, addTimelineEvent } = useChairside();
+  const { 
+      setCurrentView, 
+      addTimelineEvent,
+      currentTenantId,
+      currentPatientId,
+      currentTreatmentPlanId,
+      currentNoteId,
+      currentUserId 
+  } = useChairside();
   
   // -- STATE --
   const [soapSections, setSoapSections] = useState<SoapSection[]>([]);
@@ -48,6 +56,9 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
   
   // Ref for auto-scrolling to risks
   const riskSectionRef = useRef<HTMLDivElement>(null);
+
+  // Helper for Scoped Persistence
+  const buildRiskStorageKey = () => `dental_assigned_risks:${currentPatientId}:${currentNoteId}`;
 
   // Initialize SOAP Template & Risks
   useEffect(() => {
@@ -63,19 +74,23 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
         setSoapSections(initialSections);
     }
 
-    // Load Risks from LocalStorage (Mock Persistence)
-    const storedRisks = localStorage.getItem('dental_assigned_risks');
+    // Load Risks from Scoped Storage
+    const key = buildRiskStorageKey();
+    const storedRisks = localStorage.getItem(key);
     if (storedRisks) {
         try {
             setAssignedRisks(JSON.parse(storedRisks));
         } catch (e) {
             console.error("Failed to load risks", e);
         }
+    } else {
+        setAssignedRisks([]);
     }
-  }, []);
+  }, [currentPatientId, currentNoteId]);
 
   const persistRisks = (risks: AssignedRisk[]) => {
-      localStorage.setItem('dental_assigned_risks', JSON.stringify(risks));
+      const key = buildRiskStorageKey();
+      localStorage.setItem(key, JSON.stringify(risks));
   };
 
   // -- HANDLERS --
@@ -96,14 +111,15 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
       const newAssignment: AssignedRisk = {
           id: `ar-${generateId()}`,
           
-          // Linkage
-          tenantId: 'demo-tenant',
-          patientId: 'demo-patient', // In real app, from context
-          treatmentPlanId: 'current-plan', // In real app, from context
+          // Linkage - Using real context
+          tenantId: currentTenantId,
+          patientId: currentPatientId,
+          treatmentPlanId: currentTreatmentPlanId,
+          clinicalNoteId: currentNoteId,
           
           // Library Reference
           riskLibraryItemId: riskItem.id,
-          riskLibraryVersion: 1,
+          riskLibraryVersion: riskItem.version || 1,
 
           // Snapshot (Immutable)
           titleSnapshot: riskItem.title,
@@ -113,7 +129,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
           cdtCodesSnapshot: riskItem.procedureCodes || [],
 
           // Consent Defaults
-          consentMethod: 'VERBAL', // Default for chairside
+          consentMethod: 'VERBAL',
           
           // UI + Ordering
           isActive: true,
@@ -122,7 +138,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
 
           // Audit
           addedAt: new Date().toISOString(),
-          addedByUserId: 'user-current', // Mock
+          addedByUserId: currentUserId,
           lastUpdatedAt: new Date().toISOString(),
       };
 
@@ -144,7 +160,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
                   ...r,
                   isActive: false,
                   removedAt: new Date().toISOString(),
-                  removedByUserId: 'user-current',
+                  removedByUserId: currentUserId,
                   lastUpdatedAt: new Date().toISOString()
               };
           }
@@ -154,20 +170,35 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
       persistRisks(updatedRisks);
   };
 
-  // 5. EXPAND/COLLAPSE
+  // 5. EXPAND/COLLAPSE - Now Persisted
   const handleToggleRiskExpand = (id: string) => {
-      setAssignedRisks(prev => {
-          const updated = prev.map(r => 
-              r.id === id ? { ...r, isExpanded: !r.isExpanded } : r
-          );
-          // Optional: persist expanding state if desired, but usually ephemeral is fine
-          // persistRisks(updated); 
-          return updated;
-      });
+      const updatedRisks = assignedRisks.map(r => 
+          r.id === id ? { ...r, isExpanded: !r.isExpanded, lastUpdatedAt: new Date().toISOString() } : r
+      );
+      setAssignedRisks(updatedRisks);
+      persistRisks(updatedRisks);
   };
 
-  // 4. SORTING (Simple move logic placeholder)
-  // Even if using a library later, the state update logic remains similar
+  // 6. UPDATE CONSENT (Metadata)
+  const handleUpdateConsent = (id: string, updates: Partial<AssignedRisk>) => {
+      const updatedRisks = assignedRisks.map(r => {
+          if (r.id === id) {
+              return {
+                  ...r,
+                  ...updates,
+                  // If we are capturing, ensure we stamp the user
+                  consentCapturedByUserId: updates.consentCapturedAt ? currentUserId : r.consentCapturedByUserId,
+                  lastUpdatedAt: new Date().toISOString(),
+                  lastUpdatedByUserId: currentUserId
+              };
+          }
+          return r;
+      });
+      setAssignedRisks(updatedRisks);
+      persistRisks(updatedRisks);
+  };
+
+  // 4. SORTING (SortOrder updates)
   const handleReorder = (newOrder: AssignedRisk[]) => {
       const updated = newOrder.map((risk, index) => ({
         ...risk,
@@ -325,6 +356,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({ activeToothNumber 
                                                     risk={risk}
                                                     onToggleExpand={handleToggleRiskExpand}
                                                     onRemove={handleRemoveRisk}
+                                                    onUpdateConsent={handleUpdateConsent}
                                                 />
                                             ))}
                                         </div>
