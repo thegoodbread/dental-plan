@@ -17,38 +17,38 @@ const ToothDiagram = ({ selectedTeeth }: { selectedTeeth: number[] }) => {
     const index = t - 1; // 0-15
     const percent = index / 15; // 0 to 1
     // Simple quadratic curve approximation
-    const x = 20 + (percent * 300);
-    // Y curve: starts low (70), goes high (20), goes low (70)
-    // Parabola: y = a(x-h)^2 + k
-    // Center x=170, k=20. passes through (20,70)
-    // 70 = a(20-170)^2 + 20 => 50 = a(-150)^2 => 50 = 22500a => a = 0.0022
-    const y = 0.0022 * Math.pow(x - 170, 2) + 20;
+    const x = 40 + (percent * 260); // Inset slightly for labels
+    // Y curve
+    const y = 0.0022 * Math.pow(x - 170, 2) + 30;
     return { x, y };
   };
 
   // Lower Arch (17-32): Convex Down (y=140 to 90)
   // Standard Dentist View: 32 is Left, 17 is Right.
-  // So we map 17->Right, 32->Left.
   const getLowerPos = (t: number) => {
     // t is 17..32.
     // We want 32 at x=20, 17 at x=320.
     const index = 32 - t; // 32->0, 17->15
     const percent = index / 15;
-    const x = 20 + (percent * 300);
-    // Y curve: starts high (90), goes low (140), goes high (90)
-    // Vertex at (170, 140).
-    // 90 = a(20-170)^2 + 140 => -50 = 22500a => a = -0.0022
-    const y = -0.0022 * Math.pow(x - 170, 2) + 140;
+    const x = 40 + (percent * 260);
+    // Y curve
+    const y = -0.0022 * Math.pow(x - 170, 2) + 130;
     return { x, y };
   };
 
   return (
-    <div className="w-[340px] h-[160px] mx-auto relative select-none pointer-events-none">
-      <svg width="340" height="160" viewBox="0 0 340 160">
+    <div className="w-full max-w-[550px] aspect-[2.2/1] mx-auto relative select-none pointer-events-none">
+      <svg viewBox="0 0 340 160" className="w-full h-full drop-shadow-sm">
+        {/* Quadrant Labels inside Diagram */}
+        <text x="20" y="35" className="text-[10px] fill-slate-300 font-bold uppercase tracking-widest">UR</text>
+        <text x="305" y="35" className="text-[10px] fill-slate-300 font-bold uppercase tracking-widest">UL</text>
+        <text x="20" y="135" className="text-[10px] fill-slate-300 font-bold uppercase tracking-widest">LR</text>
+        <text x="305" y="135" className="text-[10px] fill-slate-300 font-bold uppercase tracking-widest">LL</text>
+
         {/* Upper Gum Line (Visual Guide) */}
-        <path d="M 20 70 Q 170 -20 320 70" fill="none" stroke="#e2e8f0" strokeWidth="2" strokeLinecap="round" />
+        <path d="M 40 70 Q 170 -10 300 70" fill="none" stroke="#e2e8f0" strokeWidth="2" strokeLinecap="round" />
         {/* Lower Gum Line (Visual Guide) */}
-        <path d="M 20 90 Q 170 180 320 90" fill="none" stroke="#e2e8f0" strokeWidth="2" strokeLinecap="round" />
+        <path d="M 40 90 Q 170 170 300 90" fill="none" stroke="#e2e8f0" strokeWidth="2" strokeLinecap="round" />
 
         {/* Upper Teeth 1-16 */}
         {Array.from({ length: 16 }).map((_, i) => {
@@ -58,39 +58,40 @@ const ToothDiagram = ({ selectedTeeth }: { selectedTeeth: number[] }) => {
           return (
             <g key={t}>
               <circle 
-                cx={x} cy={y} r={isSelected ? 8 : 6} 
+                cx={x} cy={y} r={isSelected ? 9 : 7} 
                 fill={isSelected ? '#2563eb' : 'white'} 
                 stroke={isSelected ? '#2563eb' : '#94a3b8'} 
                 strokeWidth="2"
                 className="transition-all duration-200 ease-out"
               />
               {isSelected && (
-                 <circle cx={x} cy={y} r={12} fill="#3b82f6" opacity="0.2" className="animate-pulse" />
+                 <circle cx={x} cy={y} r={14} fill="#3b82f6" opacity="0.2" className="animate-pulse" />
               )}
-              {/* Optional Numbers for Context */}
-              <text x={x} y={y - 12} textAnchor="middle" fontSize="8" fill="#94a3b8" fontWeight="bold">{t}</text>
+              <text x={x} y={y - 14} textAnchor="middle" fontSize="8" fill="#94a3b8" fontWeight="bold">{t}</text>
             </g>
           );
         })}
 
         {/* Lower Teeth 17-32 */}
         {Array.from({ length: 16 }).map((_, i) => {
-          const t = 17 + i;
+          const t = 17 + i; // 17, 18 ... 32
+          // Diagram logic: 17 is on Right (Screen Right), 32 is on Left (Screen Left)
+          // getLowerPos handles 32->Left, 17->Right logic internally
           const { x, y } = getLowerPos(t);
           const isSelected = selectedTeeth.includes(t);
           return (
             <g key={t}>
               <circle 
-                cx={x} cy={y} r={isSelected ? 8 : 6} 
+                cx={x} cy={y} r={isSelected ? 9 : 7} 
                 fill={isSelected ? '#2563eb' : 'white'} 
                 stroke={isSelected ? '#2563eb' : '#94a3b8'} 
                 strokeWidth="2" 
                 className="transition-all duration-200 ease-out"
               />
               {isSelected && (
-                 <circle cx={x} cy={y} r={12} fill="#3b82f6" opacity="0.2" className="animate-pulse" />
+                 <circle cx={x} cy={y} r={14} fill="#3b82f6" opacity="0.2" className="animate-pulse" />
               )}
-              <text x={x} y={y + 18} textAnchor="middle" fontSize="8" fill="#94a3b8" fontWeight="bold">{t}</text>
+              <text x={x} y={y + 20} textAnchor="middle" fontSize="8" fill="#94a3b8" fontWeight="bold">{t}</text>
             </g>
           );
         })}
@@ -140,15 +141,19 @@ export const ProcedureComposer = () => {
     <button
       onClick={onClick}
       className={`
-        w-14 h-14 rounded-xl text-xl font-bold transition-all flex items-center justify-center border
+        w-16 h-16 md:w-20 md:h-20 rounded-2xl text-2xl font-bold transition-all flex items-center justify-center border-2
         ${selected 
-        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200 scale-105 z-10' 
-        : 'bg-white border-slate-200 text-slate-600 active:bg-slate-50'}
+        ? 'bg-blue-600 border-blue-600 text-white shadow-xl shadow-blue-200/50 scale-105 z-10' 
+        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 active:bg-slate-50'}
       `}
     >
       {t}
     </button>
   );
+
+  // Dental sequence helper: 1-16 (Upper), 17-32 (Lower - sequential)
+  const UPPER_TEETH = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+  const LOWER_TEETH = [17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]; 
 
   return (
     <div className="mb-8 relative z-30">
@@ -268,60 +273,75 @@ export const ProcedureComposer = () => {
 
       {/* Tooth Selection Modal */}
       {isTeethModalOpen && createPortal(
-        <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setIsTeethModalOpen(false)}>
-           <div className="bg-slate-50 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 border border-slate-200" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setIsTeethModalOpen(false)}>
+           <div className="bg-slate-50 w-[90vw] md:w-[85vw] h-[90vh] max-w-5xl rounded-[2rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border border-slate-200" onClick={e => e.stopPropagation()}>
               
               {/* Modal Header */}
-              <div className="bg-white px-6 py-4 border-b border-slate-200 flex justify-between items-center shrink-0 shadow-sm z-10">
-                 <button onClick={() => setIsTeethModalOpen(false)} className="text-slate-500 font-bold hover:text-slate-800">Cancel</button>
-                 <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Select Teeth</h3>
-                 <button onClick={() => setIsTeethModalOpen(false)} className="text-blue-600 font-bold hover:text-blue-700">Done</button>
+              <div className="bg-white px-6 py-4 border-b border-slate-200 flex justify-between items-center shrink-0 shadow-sm z-20 relative">
+                 <button onClick={() => setIsTeethModalOpen(false)} className="text-slate-500 font-bold hover:text-slate-800 text-lg">Cancel</button>
+                 <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Select Teeth</h3>
+                 <button onClick={() => setIsTeethModalOpen(false)} className="text-blue-600 font-bold hover:text-blue-700 text-lg">Done</button>
               </div>
               
-              <div className="flex-1 overflow-y-auto p-6">
-                 {/* Visual Diagram - Fixed at Top */}
-                 <div className="mb-8 flex justify-center">
+              <div className="flex-1 flex flex-col overflow-hidden relative bg-slate-50">
+                 
+                 {/* Visual Diagram - Fixed Area */}
+                 <div className="shrink-0 h-[38%] min-h-[200px] bg-white border-b border-slate-200 flex items-center justify-center p-4 shadow-sm z-10">
                     <ToothDiagram selectedTeeth={selectedTeeth} />
                  </div>
 
-                 {/* Grid Section */}
-                 <div className="space-y-8">
-                    {/* Upper Arch */}
-                    <div>
-                       <div className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Upper Arch</div>
-                       <div className="flex flex-col gap-3 items-center">
-                          {/* Row 1: 1-8 */}
-                          <div className="flex gap-2 justify-center flex-wrap">
-                             {[1,2,3,4,5,6,7,8].map(t => (
-                                <ToothButton key={t} t={t} selected={selectedTeeth.includes(t)} onClick={() => toggleTooth(t)} />
-                             ))}
-                          </div>
-                          {/* Row 2: 9-16 */}
-                          <div className="flex gap-2 justify-center flex-wrap">
-                             {[9,10,11,12,13,14,15,16].map(t => (
-                                <ToothButton key={t} t={t} selected={selectedTeeth.includes(t)} onClick={() => toggleTooth(t)} />
-                             ))}
-                          </div>
-                       </div>
-                    </div>
+                 {/* Grid Section - Flex container for vertical centering */}
+                 <div className="flex-1 overflow-y-auto p-2 flex flex-col justify-center">
+                    <div className="max-w-5xl mx-auto w-full space-y-2">
+                        {/* Upper Arch */}
+                        <div className="space-y-1">
+                            <div className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Upper Arch</div>
+                            <div className="flex flex-col gap-2 items-center">
+                                {/* Row 1: 1-8 */}
+                                <div className="flex items-center gap-4">
+                                    <span className="text-2xl font-black text-slate-300 w-8 text-right">UR</span>
+                                    <div className="flex gap-2 justify-center flex-wrap">
+                                        {UPPER_TEETH.slice(0, 8).map(t => (
+                                            <ToothButton key={t} t={t} selected={selectedTeeth.includes(t)} onClick={() => toggleTooth(t)} />
+                                        ))}
+                                    </div>
+                                </div>
+                                {/* Row 2: 9-16 */}
+                                <div className="flex items-center gap-4">
+                                    <span className="text-2xl font-black text-slate-300 w-8 text-right">UL</span>
+                                    <div className="flex gap-2 justify-center flex-wrap">
+                                        {UPPER_TEETH.slice(8, 16).map(t => (
+                                            <ToothButton key={t} t={t} selected={selectedTeeth.includes(t)} onClick={() => toggleTooth(t)} />
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
 
-                    {/* Lower Arch */}
-                    <div>
-                       <div className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Lower Arch</div>
-                       <div className="flex flex-col gap-3 items-center">
-                          {/* Row 3: 17-24 */}
-                          <div className="flex gap-2 justify-center flex-wrap">
-                             {[17,18,19,20,21,22,23,24].map(t => (
-                                <ToothButton key={t} t={t} selected={selectedTeeth.includes(t)} onClick={() => toggleTooth(t)} />
-                             ))}
-                          </div>
-                          {/* Row 4: 25-32 */}
-                          <div className="flex gap-2 justify-center flex-wrap">
-                             {[25,26,27,28,29,30,31,32].map(t => (
-                                <ToothButton key={t} t={t} selected={selectedTeeth.includes(t)} onClick={() => toggleTooth(t)} />
-                             ))}
-                          </div>
-                       </div>
+                        {/* Lower Arch */}
+                        <div className="space-y-1 mt-2">
+                            <div className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Lower Arch</div>
+                            <div className="flex flex-col gap-2 items-center">
+                                {/* Row 3: 17-24 */}
+                                <div className="flex items-center gap-4">
+                                    <span className="text-2xl font-black text-slate-300 w-8 text-right">LL</span>
+                                    <div className="flex gap-2 justify-center flex-wrap">
+                                        {LOWER_TEETH.slice(0, 8).map(t => (
+                                            <ToothButton key={t} t={t} selected={selectedTeeth.includes(t)} onClick={() => toggleTooth(t)} />
+                                        ))}
+                                    </div>
+                                </div>
+                                {/* Row 4: 25-32 */}
+                                <div className="flex items-center gap-4">
+                                    <span className="text-2xl font-black text-slate-300 w-8 text-right">LR</span>
+                                    <div className="flex gap-2 justify-center flex-wrap">
+                                        {LOWER_TEETH.slice(8, 16).map(t => (
+                                            <ToothButton key={t} t={t} selected={selectedTeeth.includes(t)} onClick={() => toggleTooth(t)} />
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                  </div>
               </div>
