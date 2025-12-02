@@ -152,6 +152,48 @@ export interface ProcedureTemplate {
   
   suggestedRiskLabels: string[];
   complianceChecklist: string[];
+
+  // Governance / Compliance Meta
+  version: number;                    // semantic version for this template
+  createdBy: string;                  // e.g. "system_seed", "dr_smith"
+  jurisdictionNote?: string;          // e.g. "Drafted for US; state-level review required."
+  reviewedByClinicianId?: string;     // user id of reviewing dentist
+  reviewedByLegalId?: string;         // user id of legal/compliance reviewer
+  reviewedAt?: string;                // ISO datetime string
+  isApprovedForProduction: boolean;   // must be true before used in live clinics
+}
+
+// --- RISK VALIDATOR ---
+const RISKY_PHRASES: string[] = [
+  "guarantee",
+  "guaranteed",
+  "will definitely",
+  "no risk",
+  "zero risk",
+  "complication-free",
+  "100% success",
+  "permanent solution",
+];
+
+export function validateTemplateForRisk(template: ProcedureTemplate): string[] {
+  const fieldsToCheck = [
+    template.subjectiveTemplate,
+    template.objectiveTemplate,
+    template.assessmentTemplate,
+    template.treatmentPerformedTemplate,
+    template.planTemplate,
+  ];
+
+  const text = fieldsToCheck.join(" ").toLowerCase();
+  const violations: string[] = [];
+
+  for (const phrase of RISKY_PHRASES) {
+    if (text.includes(phrase.toLowerCase())) {
+      violations.push(phrase);
+    }
+  }
+
+  return violations;
 }
 
 // Legacy support for existing components

@@ -9,9 +9,9 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
     category: "exam",
     toothContext: "full_mouth",
     subjectiveTemplate: "Patient presents for routine recall examination. Reports [chief_complaint] or no specific concerns. Medical history reviewed and [updated/no_changes].",
-    objectiveTemplate: "Extraoral exam WNL. Intraoral exam: [soft_tissue_findings]. Perio status: [stable/localized_gingivitis]. Restorations: [intact/defective]. Hygiene: [good/fair/poor].",
+    objectiveTemplate: "Extraoral exam: [findings/WNL]. Intraoral exam: [soft_tissue_findings]. Perio status: [stable/localized_gingivitis]. Restorations: [intact/defective]. Hygiene: [good/fair/poor].",
     assessmentTemplate: "Periodic oral evaluation completed. Caries risk: [low/mod/high]. Periodontal diagnosis: [diagnosis].",
-    treatmentPerformedTemplate: "Clinical examination performed. Oral cancer screening (visual/tactile) negative. Reviewed radiographs [type_if_taken].",
+    treatmentPerformedTemplate: "Clinical examination performed. Oral cancer screening (visual/tactile) completed. Reviewed radiographs [type_if_taken].",
     planTemplate: "Findings reviewed with patient. Continue recall schedule at [interval] months. Next visit: [prophy/restorative].",
     suggestedRiskLabels: [],
     complianceChecklist: [
@@ -19,7 +19,11 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
       "Oral cancer screening documented",
       "Perio status assessed",
       "Caries risk assessed"
-    ]
+    ],
+    version: 1,
+    createdBy: "system_seed",
+    jurisdictionNote: "Drafted for US general use; clinic must review for state-specific requirements.",
+    isApprovedForProduction: false
   },
   {
     cdtCode: "D0150",
@@ -28,16 +32,20 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
     toothContext: "full_mouth",
     subjectiveTemplate: "Patient presents for new patient comprehensive examination. CC: [chief_complaint]. History of [medical/dental_history_highlights].",
     objectiveTemplate: "Vitals: BP [bp], Pulse [pulse]. EO/IO exam: [findings]. TMJ: [findings]. Perio charting completed. Hard tissue exam completed. Radiographic findings: [findings].",
-    assessmentTemplate: "Comprehensive evaluation. Perio Dx: [AAP_stage_grade]. Caries risk: [risk]. Restorative needs: [summary].",
-    treatmentPerformedTemplate: "Comprehensive clinical exam performed. FMX/Pano taken and reviewed. Oral cancer screening performed. Intraoral photos taken.",
-    planTemplate: "Treatment plan presented to patient: [plan_summary]. Sequence and financials discussed. Patient agrees to proceed with [phase_1].",
+    assessmentTemplate: "Comprehensive evaluation completed. Perio Dx: [AAP_stage_grade]. Caries risk: [risk]. Restorative needs: [summary].",
+    treatmentPerformedTemplate: "Comprehensive clinical exam performed. FMX/Pano taken and reviewed for pathology. Oral cancer screening performed. Intraoral photos taken.",
+    planTemplate: "Treatment plan options presented to patient: [plan_summary]. Sequence and financial estimates discussed. Patient elected to proceed with [phase_1].",
     suggestedRiskLabels: [],
     complianceChecklist: [
       "Full perio chart",
       "Full restorative chart",
       "Oral cancer screening",
       "Treatment plan presented"
-    ]
+    ],
+    version: 1,
+    createdBy: "system_seed",
+    jurisdictionNote: "Drafted for US general use; clinic must review for state-specific requirements.",
+    isApprovedForProduction: false
   },
   {
     cdtCode: "D0140",
@@ -47,7 +55,7 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
     subjectiveTemplate: "Patient presents with specific complaint: [symptoms] in area of [tooth_number/area]. Duration: [duration]. Pain level: [1-10].",
     objectiveTemplate: "Visual exam of [area]. Percussion: [pos/neg]. Palpation: [pos/neg]. Cold test: [response]. Radiographic findings: [findings].",
     assessmentTemplate: "Limited evaluation. Diagnosis: [diagnosis] (e.g. symptomatic irreversible pulpitis, fractured tooth, pericoronitis).",
-    treatmentPerformedTemplate: "Limited exam performed. PA radiograph taken. Diagnosis and treatment options discussed.",
+    treatmentPerformedTemplate: "Limited exam performed. PA radiograph taken of affected area. Diagnosis and treatment options discussed.",
     planTemplate: "Recommended treatment: [treatment]. Patient elected to [proceed_today/schedule]. Rx given: [medication_if_any].",
     suggestedRiskLabels: [],
     complianceChecklist: [
@@ -55,7 +63,11 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
       "Diagnostic tests recorded",
       "Radiograph of area",
       "Diagnosis established"
-    ]
+    ],
+    version: 1,
+    createdBy: "system_seed",
+    jurisdictionNote: "Drafted for US general use; clinic must review for state-specific requirements.",
+    isApprovedForProduction: false
   },
 
   // --- HYGIENE ---
@@ -77,7 +89,11 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
       "Calculus removal verified",
       "OHI provided",
       "Tissue response noted"
-    ]
+    ],
+    version: 1,
+    createdBy: "system_seed",
+    jurisdictionNote: "Drafted for US general use; clinic must review for state-specific requirements.",
+    isApprovedForProduction: false
   },
   {
     cdtCode: "D1120",
@@ -85,16 +101,20 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
     category: "hygiene_scaling",
     toothContext: "full_mouth",
     subjectiveTemplate: "Child presents for routine cleaning. Parent reports [concerns].",
-    objectiveTemplate: "Eruption pattern normal for age. Plaque: [amount]. Hygiene: [status].",
+    objectiveTemplate: "Eruption pattern consistent with age. Plaque: [amount]. Hygiene: [status].",
     assessmentTemplate: "Child prophylaxis. Caries risk: [risk].",
     treatmentPerformedTemplate: "Scale and polish performed. Flossed. OHI given to patient and parent. Fluoride treatment provided.",
-    planTemplate: "Recall in 6 months. Encouraged parent to assist with brushing.",
+    planTemplate: "Recall in 6 months. Encouraged parent to assist with brushing techniques.",
     suggestedRiskLabels: [],
     complianceChecklist: [
       "Eruption check",
       "OHI to parent",
       "Fluoride consent"
-    ]
+    ],
+    version: 1,
+    createdBy: "system_seed",
+    jurisdictionNote: "Drafted for US general use; clinic must review for state-specific requirements.",
+    isApprovedForProduction: false
   },
   {
     cdtCode: "D4341",
@@ -116,7 +136,11 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
       "Quadrants specified",
       "Perio diagnosis confirmed",
       "Post-op instructions"
-    ]
+    ],
+    version: 1,
+    createdBy: "system_seed",
+    jurisdictionNote: "Drafted for US general use; clinic must review for state-specific requirements.",
+    isApprovedForProduction: false
   },
 
   // --- DIRECT RESTORATIONS ---
@@ -129,7 +153,7 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
     objectiveTemplate: "Tooth #[tooth_number]: Caries/Defect on [surface].",
     assessmentTemplate: "Caries #[tooth_number] [surface].",
     treatmentPerformedTemplate: "Anesthesia [agent] [volume]. Isolation [rubber_dam/iso-dry]. Caries removed. Bond [agent]. Composite shade [shade] placed/cured. Occlusion checked/adjusted. Polished.",
-    planTemplate: "Reviewed post-op instructions (numbness, sensitivity).",
+    planTemplate: "Reviewed post-op instructions regarding numbness and possible sensitivity.",
     suggestedRiskLabels: [
       "Post-op sensitivity",
       "High bite / adjustment",
@@ -140,7 +164,11 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
       "Isolation method",
       "Composite shade",
       "Occlusion verified"
-    ]
+    ],
+    version: 1,
+    createdBy: "system_seed",
+    jurisdictionNote: "Drafted for US general use; clinic must review for state-specific requirements.",
+    isApprovedForProduction: false
   },
   {
     cdtCode: "D2392",
@@ -151,7 +179,7 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
     objectiveTemplate: "Tooth #[tooth_number]: Caries detected on [surfaces].",
     assessmentTemplate: "Caries #[tooth_number] [surfaces].",
     treatmentPerformedTemplate: "Local anesthesia [agent] [volume]. Isolation [method]. Caries removed. Sectional matrix placed. Etch/Bond. Composite shade [shade] placed incrementally. Cured. Contoured and polished. Contacts verified.",
-    planTemplate: "Advised patient of possible sensitivity. Check bite if high.",
+    planTemplate: "Advised patient of possible sensitivity. Instructed to call if bite feels high after anesthesia wears off.",
     suggestedRiskLabels: [
       "Post-op sensitivity",
       "High bite / adjustment",
@@ -162,7 +190,11 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
       "Matrix system used",
       "Interproximal contact verified",
       "Occlusion checked"
-    ]
+    ],
+    version: 1,
+    createdBy: "system_seed",
+    jurisdictionNote: "Drafted for US general use; clinic must review for state-specific requirements.",
+    isApprovedForProduction: false
   },
   {
     cdtCode: "D2393",
@@ -173,7 +205,7 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
     objectiveTemplate: "Large caries/defect #[tooth_number] involving [surfaces].",
     assessmentTemplate: "Extensive caries #[tooth_number] [surfaces] suitable for direct restoration.",
     treatmentPerformedTemplate: "Anesthesia [agent]. Isolation. Caries removal. Liner [type] placed if deep. Matrix band. Bond. Composite [shade]. Cured. Shaped/Polished. Occlusion adjusted.",
-    planTemplate: "Discussed size of filling and potential need for crown in future if fracture occurs. Post-op instructions given.",
+    planTemplate: "Discussed that due to size of restoration, tooth has increased risk for fracture or need for future endodontic treatment. Post-op instructions given.",
     suggestedRiskLabels: [
       "Post-op sensitivity",
       "High bite / adjustment",
@@ -185,7 +217,11 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
       "Liner/Base if used",
       "Contact/Contour verified",
       "Crown prognosis discussed"
-    ]
+    ],
+    version: 1,
+    createdBy: "system_seed",
+    jurisdictionNote: "Drafted for US general use; clinic must review for state-specific requirements.",
+    isApprovedForProduction: false
   },
 
   // --- INDIRECT RESTORATIONS ---
@@ -198,7 +234,7 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
     objectiveTemplate: "Tooth #[tooth_number] has [large_filling/fracture/decay] compromising structural integrity.",
     assessmentTemplate: "Tooth #[tooth_number] requires full coverage restoration (crown).",
     treatmentPerformedTemplate: "Local anesthesia [agent]. Isolation. Tooth prepared for ceramic crown. Margin [shoulder/chamfer]. Impression/Scan taken. Temp crown fabricated/cemented w/ [temp_cement]. Shade [shade] selected.",
-    planTemplate: "Temp crown instructions given (avoid sticky foods). Return in [2-3] weeks for delivery.",
+    planTemplate: "Temp crown instructions given (avoid sticky foods). Discussed that due to extensive preparation/decay, tooth has increased risk for future endodontic treatment. Return in [2-3] weeks for delivery.",
     suggestedRiskLabels: [
       "Temperature sensitivity (temp crown)",
       "Nerve irritation / Need for Endo",
@@ -209,7 +245,11 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
       "Shade selection",
       "Temp cement used",
       "Clearance verified"
-    ]
+    ],
+    version: 1,
+    createdBy: "system_seed",
+    jurisdictionNote: "Drafted for US general use; clinic must review for state-specific requirements.",
+    isApprovedForProduction: false
   },
   {
     cdtCode: "D2950",
@@ -220,7 +260,7 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
     objectiveTemplate: "Insufficient tooth structure remaining after caries removal to retain crown.",
     assessmentTemplate: "Need for core buildup to provide retention/resistance form.",
     treatmentPerformedTemplate: "Isolation. Caries removal completed. Band placement. Bonding agent. Core material [composite/amalgam] placed and cured/set. Prepped for crown.",
-    planTemplate: "Proceeded with crown preparation.",
+    planTemplate: "Proceeded with crown preparation as planned.",
     suggestedRiskLabels: [
       "Need for root canal (deep decay)",
       "Tooth fracture"
@@ -229,7 +269,11 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
       "Caries removal confirmed",
       "Retention established",
       "Material specified"
-    ]
+    ],
+    version: 1,
+    createdBy: "system_seed",
+    jurisdictionNote: "Drafted for US general use; clinic must review for state-specific requirements.",
+    isApprovedForProduction: false
   },
 
   // --- ENDODONTICS ---
@@ -241,7 +285,7 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
     subjectiveTemplate: "Patient presents with pain/swelling #[tooth_number]. Duration [days].",
     objectiveTemplate: "#[tooth_number]: Percussion [+], Palpation [+], Cold [lingering/neg]. PARL present.",
     assessmentTemplate: "Irreversible pulpitis / Necrotic pulp with [apical_periodontitis].",
-    treatmentPerformedTemplate: "Anesthesia. Rubber dam isolation. Access. WL confirmed w/ apex locator. Instrumentation [rotary_system]. Irrigation [NaOCl]. Obturation [gutta_percha/sealer]. Temp restoration placed.",
+    treatmentPerformedTemplate: "Anesthesia. Rubber dam isolation. Access. WL determined via apex locator/radiograph. Treatment performed using standard endodontic techniques based on clinical judgment. Instrumentation [rotary_system]. Irrigation [NaOCl]. Obturation [gutta_percha/sealer]. Temp restoration placed.",
     planTemplate: "Advised patient to restore with permanent restoration ASAP. Pain meds [OTC/Rx] discussed.",
     suggestedRiskLabels: [
       "Post-op soreness",
@@ -254,7 +298,11 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
       "WL documented",
       "Canals obturated",
       "Temp placed"
-    ]
+    ],
+    version: 1,
+    createdBy: "system_seed",
+    jurisdictionNote: "Drafted for US general use; clinic must review for state-specific requirements.",
+    isApprovedForProduction: false
   },
   {
     cdtCode: "D3320",
@@ -264,8 +312,8 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
     subjectiveTemplate: "Symptomatic #[tooth_number].",
     objectiveTemplate: "Deep caries into pulp. TTP [+].",
     assessmentTemplate: "Irreversible pulpitis / Necrosis #[tooth_number].",
-    treatmentPerformedTemplate: "Anes. Rubber dam. Access. [Number] canals located. Cleaned and shaped [size]. Dry. Obturation [method]. Temp [cavit/irm]. Occlusion reduced.",
-    planTemplate: "Ref for buildup and crown. Warned of fracture risk.",
+    treatmentPerformedTemplate: "Anes. Rubber dam. Access. Canals located and treated to working length based on radiographic and clinical assessment. Cleaned and shaped [size]. Dry. Obturation [method]. Temp [cavit/irm]. Occlusion reduced.",
+    planTemplate: "Ref for buildup and crown. Warned of fracture risk if not restored in a timely manner.",
     suggestedRiskLabels: [
       "Post-op soreness",
       "Fracture risk",
@@ -276,7 +324,11 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
       "Canal count verification",
       "Post-op radiograph",
       "Restorative plan"
-    ]
+    ],
+    version: 1,
+    createdBy: "system_seed",
+    jurisdictionNote: "Drafted for US general use; clinic must review for state-specific requirements.",
+    isApprovedForProduction: false
   },
   {
     cdtCode: "D3330",
@@ -286,7 +338,7 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
     subjectiveTemplate: "Patient reports throbbing pain #[tooth_number].",
     objectiveTemplate: "Deep decay. TTP [+].",
     assessmentTemplate: "Necrotic pulp #[tooth_number].",
-    treatmentPerformedTemplate: "Anes. Rubber dam. Access. located [3/4] canals. Instrumentation. Irrigation NaOCl/EDTA. Master cone fit. Obturation. Sealant. Temp placed.",
+    treatmentPerformedTemplate: "Anes. Rubber dam. Access. [3/4] canals located. Treatment performed using standard endodontic techniques. Instrumentation. Irrigation NaOCl/EDTA. Master cone fit. Obturation. Sealant. Temp placed.",
     planTemplate: "Crown recommended immediately. POI given.",
     suggestedRiskLabels: [
       "Post-op soreness",
@@ -299,7 +351,11 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
       "Canal configuration noted",
       "Obturation quality check",
       "Crown urgency discussed"
-    ]
+    ],
+    version: 1,
+    createdBy: "system_seed",
+    jurisdictionNote: "Drafted for US general use; clinic must review for state-specific requirements.",
+    isApprovedForProduction: false
   },
 
   // --- ORAL SURGERY ---
@@ -312,7 +368,7 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
     objectiveTemplate: "#[tooth_number] non-restorable due to [caries/fracture/perio].",
     assessmentTemplate: "Hopeless tooth #[tooth_number].",
     treatmentPerformedTemplate: "Review med hx. Anesthesia [agent]. Elevators and forceps used. Tooth delivered intact. Hemostasis achieved w/ gauze [and_sutures].",
-    planTemplate: "POI given: No smoking/straws 24-48hrs. Soft diet. Call if complications.",
+    planTemplate: "POI given: No smoking/straws 24-48hrs. Soft diet. Advised to call office if complications arise.",
     suggestedRiskLabels: [
       "Dry socket",
       "Post-op pain/swelling",
@@ -324,7 +380,11 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
       "Time out performed",
       "Tooth delivered entire",
       "Hemostasis confirmed"
-    ]
+    ],
+    version: 1,
+    createdBy: "system_seed",
+    jurisdictionNote: "Drafted for US general use; clinic must review for state-specific requirements.",
+    isApprovedForProduction: false
   },
   {
     cdtCode: "D7210",
@@ -334,8 +394,8 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
     subjectiveTemplate: "Patient presents for surgical ext #[tooth_number].",
     objectiveTemplate: "#[tooth_number] broken down below gumline / ankylosed.",
     assessmentTemplate: "Surgical extraction required #[tooth_number].",
-    treatmentPerformedTemplate: "Anesthesia. Flap reflected. Bone removal/troughing performed. Tooth sectioned. Roots delivered. Socket debrided. Sutures [type/number] placed.",
-    planTemplate: "Written/Verbal POI. Ice pack rec. Pain meds prescribed [Rx]. Follow-up in 1 week.",
+    treatmentPerformedTemplate: "Anesthesia. Flap reflected. Bone removal/troughing performed. Tooth sectioned. Roots delivered. Socket debrided. Hemostasis achieved. Sutures [type/number] placed.",
+    planTemplate: "Written/Verbal POI reviewed. Ice pack rec. Pain meds prescribed [Rx]. Follow-up in 1 week.",
     suggestedRiskLabels: [
       "Dry socket",
       "Nerve injury (paresthesia)",
@@ -347,7 +407,11 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
       "Flap design noted",
       "Bone removal noted",
       "Sutures documented"
-    ]
+    ],
+    version: 1,
+    createdBy: "system_seed",
+    jurisdictionNote: "Drafted for US general use; clinic must review for state-specific requirements.",
+    isApprovedForProduction: false
   },
 
   // --- IMPLANTS ---
@@ -359,8 +423,8 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
     subjectiveTemplate: "Patient presents for implant placement site #[tooth_number].",
     objectiveTemplate: "Edentulous site #[tooth_number]. Bone width/height adequate on CBCT.",
     assessmentTemplate: "Site #[tooth_number] suitable for implant.",
-    treatmentPerformedTemplate: "Anesthesia. Flap/Punch. Osteotomy prepared [size]. Implant [Brand/Size] placed at [torque] Ncm. [Cover_screw/Healing_abutment] placed. Sutures. Post-op PA taken.",
-    planTemplate: "POI given. Antibiotics/Chlorhexidine prescribed. Uncover/Restore in [3-4] months.",
+    treatmentPerformedTemplate: "Anesthesia. Flap/Punch. Osteotomy prepared [size]. Implant [Brand/Size] placed with torque approximately [torque] Ncm according to manufacturer recommendations. [Cover_screw/Healing_abutment] placed. Sutures. Post-op PA taken.",
+    planTemplate: "POI given. Antibiotics/Chlorhexidine prescribed. Discussed typical healing expectations and that implant success depends on healing, occlusion, and patient factors; long-term outcomes cannot be guaranteed. Uncover/Restore in [3-4] months.",
     suggestedRiskLabels: [
       "Implant failure (non-integration)",
       "Nerve injury",
@@ -372,6 +436,10 @@ export const PROCEDURE_TEMPLATES: ProcedureTemplate[] = [
       "Implant sticker/lot recorded",
       "Primary stability torque",
       "Post-op radiograph"
-    ]
+    ],
+    version: 1,
+    createdBy: "system_seed",
+    jurisdictionNote: "Drafted for US general use; clinic must review for state-specific requirements.",
+    isApprovedForProduction: false
   }
 ];
