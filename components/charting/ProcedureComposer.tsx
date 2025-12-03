@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { useChairside } from '../../context/ChairsideContext';
 import { X, Save, User, ChevronDown, Check, ChevronRight, StickyNote } from 'lucide-react';
 import { ToothNumber, ToothRecord } from '../../domain/dentalTypes';
+import { TreatmentPlanItem } from '../../types';
 
 const SURFACES = ['M', 'O', 'D', 'B', 'L', 'I', 'F']; 
 const PROVIDERS = ['Dr. Smith', 'Dr. Patel', 'Sarah (RDH)', 'Mike (DA)'];
@@ -124,7 +125,8 @@ export const ProcedureComposer = () => {
     toggleTooth, 
     addTimelineEvent, 
     clearTeeth, 
-    setIsQuickNoteOpen // Use Global Context for Drawer
+    setIsQuickNoteOpen, // Use Global Context for Drawer
+    updateCurrentNoteSectionsFromProcedure // New Context Method
   } = useChairside();
   
   const [selectedSurfaces, setSelectedSurfaces] = useState<string[]>([]);
@@ -146,6 +148,7 @@ export const ProcedureComposer = () => {
     if (selectedTeeth.length > 0) title += ` #${selectedTeeth.join(',')}`;
     if (selectedSurfaces.length > 0) title += ` - ${selectedSurfaces.join('')}`;
     
+    // 1. Add to Timeline (Visual Only)
     addTimelineEvent({
       type: 'PROCEDURE',
       title: title,
@@ -153,6 +156,20 @@ export const ProcedureComposer = () => {
       details: noteChip || undefined,
       provider: provider
     });
+
+    // 2. Build Transient Item for Auto-Note Engine
+    // We map the activeComposer (string) to a dummy TreatmentPlanItem
+    // The engine uses 'procedureName' to fuzzy match canonical names (e.g. "Composite")
+    const transientItem: Partial<TreatmentPlanItem> = {
+      id: Math.random().toString(36).substr(2, 9),
+      procedureName: activeComposer, 
+      procedureCode: '', // Engine will match by name if code missing
+      selectedTeeth: selectedTeeth,
+      itemType: 'PROCEDURE'
+    };
+
+    // 3. Trigger Auto-Population
+    updateCurrentNoteSectionsFromProcedure(transientItem as TreatmentPlanItem);
 
     // Reset
     setActiveComposer(null);

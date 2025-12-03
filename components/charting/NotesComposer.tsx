@@ -24,24 +24,6 @@ interface NotesComposerProps {
   pendingProcedure?: { label: string; teeth: number[] };
 }
 
-type NoteMode = 'QUICK' | 'FULL';
-
-const SECTION_ORDER: SoapSectionType[] = [
-  'SUBJECTIVE',
-  'OBJECTIVE',
-  'ASSESSMENT',
-  'TREATMENT_PERFORMED',
-  'PLAN'
-];
-
-const SECTION_LABELS: Record<SoapSectionType, string> = {
-  'SUBJECTIVE': 'Subjective / Chief Complaint',
-  'OBJECTIVE': 'Objective Findings',
-  'ASSESSMENT': 'Assessment / Diagnosis',
-  'TREATMENT_PERFORMED': 'Treatment Performed',
-  'PLAN': 'Plan / Next Steps'
-};
-
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 // Map QuickAction labels to CDT codes for risk lookup
@@ -112,11 +94,13 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
       currentPatientId,
       currentTreatmentPlanId,
       currentNoteId,
-      currentUserId 
+      currentUserId,
+      soapSections,        // Consumed from context
+      updateSoapSection    // Consumed from context
   } = useChairside();
   
   // -- STATE --
-  const [soapSections, setSoapSections] = useState<SoapSection[]>([]);
+  // soapSections state removed (lifted to context)
   const [assignedRisks, setAssignedRisks] = useState<AssignedRisk[]>([]);
   
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
@@ -133,19 +117,8 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
   // Persistence Key
   const buildRiskStorageKey = () => `dental_assigned_risks:${currentPatientId}:${currentNoteId}`;
 
-  // Initialize
+  // Initialize Risks
   useEffect(() => {
-    if (soapSections.length === 0) {
-        const initialSections: SoapSection[] = SECTION_ORDER.map(type => ({
-            id: `s-${type}`,
-            type,
-            title: SECTION_LABELS[type],
-            content: '',
-            lastEditedAt: new Date().toISOString()
-        }));
-        setSoapSections(initialSections);
-    }
-
     const key = buildRiskStorageKey();
     const storedRisks = localStorage.getItem(key);
     if (storedRisks) {
@@ -183,7 +156,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
   // -- HANDLERS --
 
   const handleUpdateSoap = (id: string, newContent: string) => {
-      setSoapSections(prev => prev.map(s => s.id === id ? { ...s, content: newContent, lastEditedAt: new Date().toISOString() } : s));
+      updateSoapSection(id, newContent);
   };
 
   const handleInsertChartFindings = () => {
@@ -214,13 +187,11 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
     
     textToInsert = chartSummary || "[Describe objective findings for this visit here].";
 
-    setSoapSections(prev => prev.map(s => {
-      if (s.type === 'OBJECTIVE') {
-        const newContent = s.content ? `${s.content}\n${textToInsert}` : textToInsert;
-        return { ...s, content: newContent, lastEditedAt: new Date().toISOString() };
-      }
-      return s;
-    }));
+    const objectiveSection = soapSections.find(s => s.type === 'OBJECTIVE');
+    if (objectiveSection) {
+        const newContent = objectiveSection.content ? `${objectiveSection.content}\n${textToInsert}` : textToInsert;
+        updateSoapSection(objectiveSection.id, newContent);
+    }
   };
 
   const handleAssignRisk = (riskItem: RiskLibraryItem) => {
@@ -344,12 +315,12 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
               visitType: 'restorative',
               procedureLabel: pendingProcedure?.label
           });
-          setSoapSections(prev => prev.map(s => {
-              if (s.type === sectionType) {
-                  return { ...s, content: s.content ? s.content + '\n' + text : text };
-              }
-              return s;
-          }));
+          
+          const section = soapSections.find(s => s.type === sectionType);
+          if (section) {
+              const newContent = section.content ? section.content + '\n' + text : text;
+              updateSoapSection(section.id, newContent);
+          }
       } catch (e) {
           console.error("Draft failed");
       } finally {

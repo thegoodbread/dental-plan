@@ -1,6 +1,9 @@
 
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ChairsideViewMode, TimelineEvent, QuickActionType } from '../types/charting';
+import { SoapSection, SoapSectionType } from '../domain/dentalTypes';
+import { TreatmentPlanItem } from '../types';
+import { applyTemplateToSoapSections } from '../src/domain/procedureNoteEngine';
 
 interface ChairsideContextType {
   currentView: ChairsideViewMode;
@@ -20,6 +23,11 @@ interface ChairsideContextType {
   isQuickNoteOpen: boolean;
   setIsQuickNoteOpen: (isOpen: boolean) => void;
 
+  // SOAP State (Lifted from NotesComposer)
+  soapSections: SoapSection[];
+  updateSoapSection: (id: string, content: string) => void;
+  updateCurrentNoteSectionsFromProcedure: (item: TreatmentPlanItem) => void;
+
   // Context Identifiers
   currentTenantId: string;
   currentPatientId: string;
@@ -35,6 +43,22 @@ const buildNoteIdForToday = () => {
   const datePart = new Date().toISOString().split('T')[0];
   const randomPart = Math.random().toString(36).substring(2, 8);
   return `note-${datePart}-${randomPart}`;
+};
+
+const SECTION_ORDER: SoapSectionType[] = [
+  'SUBJECTIVE',
+  'OBJECTIVE',
+  'ASSESSMENT',
+  'TREATMENT_PERFORMED',
+  'PLAN'
+];
+
+const SECTION_LABELS: Record<SoapSectionType, string> = {
+  'SUBJECTIVE': 'Subjective / Chief Complaint',
+  'OBJECTIVE': 'Objective Findings',
+  'ASSESSMENT': 'Assessment / Diagnosis',
+  'TREATMENT_PERFORMED': 'Treatment Performed',
+  'PLAN': 'Plan / Next Steps'
 };
 
 export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -58,6 +82,23 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     { id: '2', type: 'RADIOGRAPH', title: '4 BWX Taken', timestamp: new Date(Date.now() - 1000 * 60 * 10).toISOString(), details: 'Standard series' },
   ]);
 
+  // SOAP State
+  const [soapSections, setSoapSections] = useState<SoapSection[]>([]);
+
+  // Initialize SOAP sections if empty
+  useEffect(() => {
+    if (soapSections.length === 0) {
+        const initialSections: SoapSection[] = SECTION_ORDER.map(type => ({
+            id: `s-${type}`,
+            type,
+            title: SECTION_LABELS[type],
+            content: '',
+            lastEditedAt: new Date().toISOString()
+        }));
+        setSoapSections(initialSections);
+    }
+  }, []);
+
   const toggleTooth = (tooth: number) => {
     setSelectedTeeth(prev => 
       prev.includes(tooth) ? prev.filter(t => t !== tooth) : [...prev, tooth]
@@ -73,6 +114,22 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       timestamp: new Date().toISOString()
     };
     setTimeline(prev => [newEvent, ...prev]);
+  };
+
+  const updateSoapSection = (id: string, content: string) => {
+    setSoapSections(prev => prev.map(s => s.id === id ? { ...s, content, lastEditedAt: new Date().toISOString() } : s));
+  };
+
+  const updateCurrentNoteSectionsFromProcedure = (item: TreatmentPlanItem) => {
+    setSoapSections(prev => {
+        const { updatedSections } = applyTemplateToSoapSections({
+            item,
+            visitType: 'restorative', // Default, template can override
+            selectedTeeth: item.selectedTeeth ?? undefined,
+            existingSections: prev
+        });
+        return updatedSections;
+    });
   };
 
   return (
@@ -92,7 +149,10 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       currentPatientId,
       currentTreatmentPlanId,
       currentNoteId,
-      currentUserId
+      currentUserId,
+      soapSections,
+      updateSoapSection,
+      updateCurrentNoteSectionsFromProcedure
     }}>
       {children}
     </ChairsideContext.Provider>
