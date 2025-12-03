@@ -2,7 +2,8 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useChairside } from '../../context/ChairsideContext';
-import { X, Save, User, ChevronDown, Check, ChevronRight } from 'lucide-react';
+import { X, Save, User, ChevronDown, Check, ChevronRight, StickyNote } from 'lucide-react';
+import { ToothNumber, ToothRecord } from '../../domain/dentalTypes';
 
 const SURFACES = ['M', 'O', 'D', 'B', 'L', 'I', 'F']; 
 const PROVIDERS = ['Dr. Smith', 'Dr. Patel', 'Sarah (RDH)', 'Mike (DA)'];
@@ -101,7 +102,16 @@ const ToothDiagram = ({ selectedTeeth }: { selectedTeeth: number[] }) => {
 };
 
 export const ProcedureComposer = () => {
-  const { activeComposer, setActiveComposer, selectedTeeth, toggleTooth, addTimelineEvent, clearTeeth } = useChairside();
+  const { 
+    activeComposer, 
+    setActiveComposer, 
+    selectedTeeth, 
+    toggleTooth, 
+    addTimelineEvent, 
+    clearTeeth, 
+    setIsQuickNoteOpen // Use Global Context for Drawer
+  } = useChairside();
+  
   const [selectedSurfaces, setSelectedSurfaces] = useState<string[]>([]);
   const [provider, setProvider] = useState('Dr. Smith');
   const [noteChip, setNoteChip] = useState<string | null>(null);
@@ -235,9 +245,17 @@ export const ProcedureComposer = () => {
              </button>
           </div>
 
-          {/* 4. Quick Notes Chips */}
+          {/* 4. Quick Notes Chips & Trigger */}
           <div>
-             <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Clinical Notes</label>
+             <div className="flex items-center justify-between mb-2 ml-1">
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest">Clinical Notes</label>
+                <button 
+                  onClick={() => setIsQuickNoteOpen(true)}
+                  className="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 py-1 rounded-md transition-colors"
+                >
+                   <StickyNote size={14} /> Open Quick Note
+                </button>
+             </div>
              <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-hide">
                 {['WNL', 'Watch', 'Completed', 'Tol. Well', 'Referral'].map(note => (
                   <button

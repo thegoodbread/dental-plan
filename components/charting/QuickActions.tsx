@@ -2,7 +2,7 @@
 import React from 'react';
 import { useChairside } from '../../context/ChairsideContext';
 import { QuickActionType } from '../../types/charting';
-import { ClipboardList, Camera, FileText, Syringe, Crown, Activity, StickyNote, Scissors, PenTool, Star } from 'lucide-react';
+import { ClipboardList, Camera, FileText, Syringe, Crown, Activity, StickyNote, Scissors, PenTool, Star, Zap } from 'lucide-react';
 
 const QuickButton: React.FC<{ 
   label: string; 
@@ -10,16 +10,19 @@ const QuickButton: React.FC<{
   type: QuickActionType; 
   isFavorite?: boolean; 
 }> = ({ label, icon: Icon, type, isFavorite }) => {
-  const { setActiveComposer, setCurrentView, activeComposer } = useChairside();
+  const { setActiveComposer, setCurrentView, activeComposer, setIsQuickNoteOpen } = useChairside();
 
   const isActive = activeComposer === type;
 
   const handleClick = () => {
-    if (type === 'Perio') setCurrentView('PERIO');
-    else if (type === 'Notes') setCurrentView('NOTES');
-    else {
-      setActiveComposer(type);
-      setCurrentView('DASHBOARD');
+    if (type === 'Perio') {
+        setCurrentView('PERIO');
+    } else if (type === 'Notes') {
+        // Open drawer overlay, do NOT change main view
+        setIsQuickNoteOpen(true);
+    } else {
+        setActiveComposer(type);
+        setCurrentView('DASHBOARD');
     }
   };
 
@@ -67,6 +70,7 @@ export const QuickActions = () => {
           <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 text-center">Tx</div>
           <QuickButton label="Comp" icon={PenTool} type="Composite" />
           <QuickButton label="Crown" icon={Crown} type="Crown" />
+          <QuickButton label="RCT" icon={Zap} type="Root Canal" />
           <QuickButton label="Ext" icon={Scissors} type="Extraction" />
           <QuickButton label="Imp" icon={Syringe} type="Implant" />
       </div>

@@ -20,4 +20,4 @@ export interface ChartingPatient {
   image?: string;
 }
 
-export type QuickActionType = 'Exam' | 'PA' | 'FMX' | 'Composite' | 'Crown' | 'Implant' | 'Extraction' | 'Perio' | 'Notes' | 'Post-Op' | 'Occlusal';
+export type QuickActionType = 'Exam' | 'PA' | 'FMX' | 'Composite' | 'Crown' | 'Implant' | 'Extraction' | 'Perio' | 'Notes' | 'Post-Op' | 'Occlusal' | 'Root Canal';

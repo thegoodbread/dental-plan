@@ -16,6 +16,10 @@ interface ChairsideContextType {
   timeline: TimelineEvent[];
   addTimelineEvent: (event: Omit<TimelineEvent, 'id' | 'timestamp'>) => void;
 
+  // Drawer State
+  isQuickNoteOpen: boolean;
+  setIsQuickNoteOpen: (isOpen: boolean) => void;
+
   // Context Identifiers
   currentTenantId: string;
   currentPatientId: string;
@@ -37,6 +41,7 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [currentView, setCurrentView] = useState<ChairsideViewMode>('DASHBOARD');
   const [activeComposer, setActiveComposer] = useState<QuickActionType | null>(null);
   const [selectedTeeth, setSelectedTeeth] = useState<number[]>([]);
+  const [isQuickNoteOpen, setIsQuickNoteOpen] = useState(false);
   
   // Mock Context Values (In a real app, these would come from auth/routing)
   const [currentTenantId] = useState('tenant-demo-1');
@@ -81,6 +86,8 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       clearTeeth,
       timeline,
       addTimelineEvent,
+      isQuickNoteOpen,
+      setIsQuickNoteOpen,
       currentTenantId,
       currentPatientId,
       currentTreatmentPlanId,

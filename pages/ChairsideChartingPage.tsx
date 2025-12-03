@@ -7,11 +7,12 @@ import { ContextPane } from '../components/charting/ContextPane';
 import { PerioChart } from '../components/charting/PerioChart';
 import { NotesComposer } from '../components/charting/NotesComposer';
 import { RadiographViewer } from '../components/charting/RadiographViewer';
+import { QuickNoteDrawer } from '../components/charting/QuickNoteDrawer';
 import { useParams } from 'react-router-dom';
 import { PatientChart, ToothRecord, ToothNumber, mockPatientChart } from '../domain/dentalTypes';
 
 const ChartingLayout = () => {
-  const { currentView } = useChairside();
+  const { currentView, selectedTeeth, activeComposer } = useChairside();
   
   // --- DOMAIN STATE ---
   const [patientChart, setPatientChart] = useState<PatientChart | null>(null);
@@ -28,6 +29,14 @@ const ChartingLayout = () => {
     setActiveToothRecord(record);
   }, []);
 
+  // Sync Context Selection to Local State
+  useEffect(() => {
+    if (selectedTeeth.length > 0) {
+        // Use the first selected tooth as the primary context for the note
+        setActiveToothNumber(String(selectedTeeth[0]) as ToothNumber);
+    }
+  }, [selectedTeeth]);
+
   useEffect(() => {
     if (!patientChart || !activeToothNumber) {
       setActiveToothRecord(null);
@@ -37,18 +46,28 @@ const ChartingLayout = () => {
     setActiveToothRecord(record);
   }, [patientChart, activeToothNumber]);
 
-  // Full Screen Overlays
+  // Full Screen Overlays (Except Notes, which is now a drawer)
   if (currentView === 'PERIO') return <PerioChart />;
+  if (currentView === 'XRAY') return <RadiographViewer />;
+  
+  // Note: 'NOTES' view is technically deprecated in favor of drawer, but keeping fallback just in case
   if (currentView === 'NOTES') {
+    // Construct pending procedure object if composer is active
+    const pendingProcedure = activeComposer ? {
+        label: activeComposer,
+        teeth: selectedTeeth
+    } : undefined;
+
     return (
       <NotesComposer 
         activeToothNumber={activeToothNumber}
         activeToothRecord={activeToothRecord}
         onToothClick={(tooth) => setActiveToothNumber(prev => prev === tooth ? null : tooth)}
+        viewMode="page"
+        pendingProcedure={pendingProcedure}
       />
     );
   }
-  if (currentView === 'XRAY') return <RadiographViewer />;
 
   // iPad Optimized 3-Column Layout
   return (
@@ -67,6 +86,13 @@ const ChartingLayout = () => {
       <div className="w-[350px] shrink-0 h-full border-l border-slate-200 hidden lg:block shadow-xl z-20 bg-white">
         <ContextPane />
       </div>
+
+      {/* Global Drawer Overlay */}
+      <QuickNoteDrawer 
+         activeToothNumber={activeToothNumber}
+         activeToothRecord={activeToothRecord}
+         onToothClick={(tooth) => setActiveToothNumber(prev => prev === tooth ? null : tooth)}
+      />
     </div>
   );
 };
