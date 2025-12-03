@@ -10,27 +10,44 @@ const QuickButton: React.FC<{
   type: QuickActionType; 
   isFavorite?: boolean; 
 }> = ({ label, icon: Icon, type, isFavorite }) => {
-  const { setActiveComposer, setCurrentView, activeComposer, setIsQuickNoteOpen } = useChairside();
+  const { 
+    activeComposer, 
+    setActiveComposer, 
+    currentView, 
+    setCurrentView, 
+    setIsQuickNoteOpen 
+  } = useChairside();
 
-  const isActive = activeComposer === type;
+  // 1. Precise Active State Logic
+  let isActive = false;
+  if (type === 'Notes') {
+    isActive = currentView === 'NOTES';
+  } else if (type === 'Perio') {
+    isActive = currentView === 'PERIO';
+  } else {
+    // For procedures, we only highlight if the composer is active for that specific type
+    // AND we are on the dashboard (since these are dashboard tools)
+    isActive = activeComposer === type && currentView === 'DASHBOARD';
+  }
 
+  // 2. Strict Navigation Behavior
   const handleClick = () => {
     if (type === 'Perio') {
+        // Open Perio View
         setActiveComposer(null);
         setCurrentView('PERIO');
-        setIsQuickNoteOpen(false);
+        setIsQuickNoteOpen(false); // Ensure drawer is closed
     } else if (type === 'Notes') {
-        // Switch to Full Page Note Editor directly
-        setActiveComposer(null);
+        // Open Full Page Note Editor
+        // Note: We DO NOT clear activeComposer here. This allows the selected procedure/teeth context
+        // to be passed through to the Notes view (which reads activeComposer).
         setCurrentView('NOTES');
-        // Ensure drawer is closed so it doesn't overlay the full page
-        setIsQuickNoteOpen(false);
+        setIsQuickNoteOpen(false); // Ensure drawer is closed so it doesn't block view
     } else {
-        // For other actions, activate composer on dashboard
+        // Procedures: Open Composer on Dashboard
         setActiveComposer(type);
         setCurrentView('DASHBOARD');
-        // Close drawer if it was open to show the composer
-        setIsQuickNoteOpen(false);
+        setIsQuickNoteOpen(false); // Close drawer to show composer clearly
     }
   };
 
