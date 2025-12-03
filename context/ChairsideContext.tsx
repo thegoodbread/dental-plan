@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ChairsideViewMode, TimelineEvent, QuickActionType } from '../types/charting';
 import { SoapSection, SoapSectionType } from '../domain/dentalTypes';
 import { TreatmentPlanItem } from '../types';
-import { applyTemplateToSoapSections } from '../src/domain/procedureNoteEngine';
+import { applyTemplateToSoapSections } from '../domain/procedureNoteEngine';
 
 interface ChairsideContextType {
   currentView: ChairsideViewMode;
@@ -87,16 +87,16 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // Initialize SOAP sections if empty
   useEffect(() => {
-    if (soapSections.length === 0) {
-        const initialSections: SoapSection[] = SECTION_ORDER.map(type => ({
-            id: `s-${type}`,
-            type,
-            title: SECTION_LABELS[type],
-            content: '',
-            lastEditedAt: new Date().toISOString()
-        }));
-        setSoapSections(initialSections);
-    }
+    setSoapSections(prev => {
+      if (prev.length > 0) return prev;
+      return SECTION_ORDER.map(type => ({
+        id: `s-${type}`,
+        type,
+        title: SECTION_LABELS[type],
+        content: '',
+        lastEditedAt: new Date().toISOString()
+      }));
+    });
   }, []);
 
   const toggleTooth = (tooth: number) => {

@@ -160,16 +160,16 @@ export const ProcedureComposer = () => {
     // 2. Build Transient Item for Auto-Note Engine
     // We map the activeComposer (string) to a dummy TreatmentPlanItem
     // The engine uses 'procedureName' to fuzzy match canonical names (e.g. "Composite")
-    const transientItem: Partial<TreatmentPlanItem> = {
+    const transientItem = {
       id: Math.random().toString(36).substr(2, 9),
       procedureName: activeComposer, 
       procedureCode: '', // Engine will match by name if code missing
       selectedTeeth: selectedTeeth,
       itemType: 'PROCEDURE'
-    };
+    } as TreatmentPlanItem;
 
     // 3. Trigger Auto-Population
-    updateCurrentNoteSectionsFromProcedure(transientItem as TreatmentPlanItem);
+    updateCurrentNoteSectionsFromProcedure(transientItem);
 
     // Reset
     setActiveComposer(null);
