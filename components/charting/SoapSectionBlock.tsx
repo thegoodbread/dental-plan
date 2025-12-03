@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
-import { Edit2, Mic, Check, X, Wand2, ChevronRight, Stethoscope } from 'lucide-react';
+import { Edit2, Mic, Check, X, Wand2, ChevronRight, Stethoscope, RotateCcw, Lock } from 'lucide-react';
 import { SoapSection } from '../../domain/dentalTypes';
+import { useChairside } from '../../context/ChairsideContext';
 
 interface SoapSectionBlockProps {
   section: SoapSection;
@@ -10,6 +10,9 @@ interface SoapSectionBlockProps {
   onDictate?: () => void;
   onAiDraft?: () => void;
   onInsertChartFindings?: () => void;
+  undoSnapshot?: { sourceLabel: string };
+  onUndo?: () => void;
+  onDismissUndo?: () => void;
 }
 
 export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
@@ -18,19 +21,28 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
   onSave,
   onDictate,
   onAiDraft,
-  onInsertChartFindings
+  onInsertChartFindings,
+  undoSnapshot,
+  onUndo,
+  onDismissUndo
 }) => {
+  const { noteStatus } = useChairside();
+  const isLocked = noteStatus === 'signed';
+
   const [isEditing, setIsEditing] = useState(false);
   const [draftContent, setDraftContent] = useState(section.content);
   const [isExpanded, setIsExpanded] = useState(!!section.content);
 
-  // Sync draft when prop changes
+  // Sync draft when prop changes and auto-expand on incoming content
   useEffect(() => {
       setDraftContent(section.content);
+      // Auto-expand if new content arrives and we aren't already editing
+      // Only if not locked, or just visual expansion
       if (section.content && !isEditing) setIsExpanded(true);
   }, [section.content, isEditing]);
 
   const handleSave = () => {
+    if (isLocked) return;
     onSave(section.id, draftContent);
     setIsEditing(false);
     setIsExpanded(true);
@@ -44,19 +56,23 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
 
   // Toggle expansion
   const toggleExpand = () => {
-      if (isEditing) return; // Don't collapse while editing
+      if (isEditing) return; 
       setIsExpanded(!isExpanded);
   };
 
   const handleHeaderClick = (e: React.MouseEvent) => {
       if (isEditing) return;
+      if (isLocked) {
+          // If locked, just toggle visibility
+          setIsExpanded(!isExpanded);
+          return;
+      }
+
       if (!isExpanded) {
           setIsExpanded(true);
-          // If empty, go straight to edit
+          // If empty and NOT locked, go straight to edit
           if (!section.content) setIsEditing(true);
       } else {
-          // If expanded and clicked, maybe just toggle? Or go to edit?
-          // Let's toggle for "SaaS" feel unless clicking the edit button
           toggleExpand();
       }
   };
@@ -69,6 +85,7 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
                 ? 'border-blue-500 ring-1 ring-blue-500 shadow-md' 
                 : 'border-slate-300 shadow-sm hover:border-slate-400'
             }
+            ${isLocked ? 'bg-slate-50' : ''}
         `}
     >
       {/* Header */}
@@ -93,28 +110,54 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
             </div>
         </div>
         
-        {/* Actions (visible on hover or active) */}
-        {!isEditing && (
-          <div className="flex items-center gap-2">
+        {/* Actions */}
+        <div className="flex items-center gap-2">
              {section.content && (
                  <span className="text-[10px] text-slate-400 font-mono">
                      {new Date(section.lastEditedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                  </span>
              )}
-             <button 
-                onClick={(e) => { e.stopPropagation(); setIsEditing(true); setIsExpanded(true); }}
-                className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                title="Edit Section"
-             >
-                <Edit2 size={14} />
-             </button>
-          </div>
-        )}
+             
+             {!isEditing && !isLocked && (
+                 <button 
+                    onClick={(e) => { e.stopPropagation(); setIsEditing(true); setIsExpanded(true); }}
+                    className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                    title="Edit Section"
+                 >
+                    <Edit2 size={14} />
+                 </button>
+             )}
+             {isLocked && (
+                 <div className="flex items-center gap-1 text-slate-400">
+                    <Lock size={12} />
+                 </div>
+             )}
+        </div>
       </div>
 
       {/* Content Area - Collapsible */}
       {isExpanded && (
           <div className="bg-white">
+            {/* Undo Banner - HIDDEN IF LOCKED */}
+            {!isLocked && undoSnapshot && !isEditing && (
+                <div className="bg-blue-50/80 px-4 py-2 flex justify-between items-center text-xs border-b border-blue-100 animate-in slide-in-from-top-2">
+                    <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+                        <span className="text-blue-700 font-medium">
+                            Added from <span className="font-bold">{undoSnapshot.sourceLabel}</span>
+                        </span>
+                    </div>
+                    <div className="flex gap-3">
+                        <button onClick={onUndo} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-bold transition-colors">
+                            <RotateCcw size={12} /> Undo
+                        </button>
+                        <button onClick={onDismissUndo} className="text-blue-400 hover:text-blue-600">
+                            <X size={14} />
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {contextLabel && (
                 <div className="md:hidden px-4 py-1 bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 font-medium">
                     Applies to: {contextLabel}
@@ -162,13 +205,19 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
               </div>
             ) : (
               <div 
-                className="p-4 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed cursor-text min-h-[40px] hover:bg-slate-50/30 transition-colors"
-                onClick={() => setIsEditing(true)}
+                className={`
+                    p-4 text-sm whitespace-pre-wrap leading-relaxed min-h-[40px] transition-colors
+                    ${isLocked 
+                        ? 'text-slate-600 bg-slate-50 cursor-default' 
+                        : 'text-slate-700 cursor-text hover:bg-slate-50/30'
+                    }
+                `}
+                onClick={() => !isLocked && setIsEditing(true)}
               >
                 {section.content ? (
                     section.content
                 ) : (
-                    <span className="text-slate-400 italic text-xs">Click to add details...</span>
+                    <span className="text-slate-400 italic text-xs">{isLocked ? 'No content.' : 'Click to add details...'}</span>
                 )}
               </div>
             )}

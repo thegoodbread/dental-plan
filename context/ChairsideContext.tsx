@@ -1,9 +1,15 @@
-
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ChairsideViewMode, TimelineEvent, QuickActionType } from '../types/charting';
-import { SoapSection, SoapSectionType } from '../domain/dentalTypes';
+import { SoapSection, SoapSectionType, ToothNumber, VisitType } from '../domain/dentalTypes';
 import { TreatmentPlanItem } from '../types';
 import { applyTemplateToSoapSections } from '../domain/procedureNoteEngine';
+
+// Lightweight snapshot for Undo functionality
+interface UndoSnapshot {
+  content: string;
+  sourceLabel: string;
+  timestamp: number;
+}
 
 interface ChairsideContextType {
   currentView: ChairsideViewMode;
@@ -12,7 +18,8 @@ interface ChairsideContextType {
   activeComposer: QuickActionType | null;
   setActiveComposer: (action: QuickActionType | null) => void;
   
-  selectedTeeth: number[];
+  // Normalized to string types (1-32)
+  selectedTeeth: ToothNumber[];
   toggleTooth: (tooth: number) => void;
   clearTeeth: () => void;
 
@@ -23,10 +30,21 @@ interface ChairsideContextType {
   isQuickNoteOpen: boolean;
   setIsQuickNoteOpen: (isOpen: boolean) => void;
 
-  // SOAP State (Lifted from NotesComposer)
+  // SOAP State
   soapSections: SoapSection[];
   updateSoapSection: (id: string, content: string) => void;
-  updateCurrentNoteSectionsFromProcedure: (item: TreatmentPlanItem, visitType?: string) => void;
+  updateCurrentNoteSectionsFromProcedure: (item: TreatmentPlanItem, visitType?: VisitType) => void;
+  
+  // Note Status & Persistence
+  noteStatus: 'draft' | 'signed';
+  saveCurrentNote: () => void;
+  signNote: () => void;
+  lastSavedAt?: string;
+
+  // Undo / Redo Support
+  undoSnapshots: Record<string, UndoSnapshot>;
+  undoAppend: (sectionId: string) => void;
+  dismissUndo: (sectionId: string) => void;
 
   // Context Identifiers
   currentTenantId: string;
@@ -37,13 +55,6 @@ interface ChairsideContextType {
 }
 
 const ChairsideContext = createContext<ChairsideContextType | undefined>(undefined);
-
-// Helper for collision-resistant IDs (temporary until backend wired)
-const buildNoteIdForToday = () => {
-  const datePart = new Date().toISOString().split('T')[0];
-  const randomPart = Math.random().toString(36).substring(2, 8);
-  return `note-${datePart}-${randomPart}`;
-};
 
 const SECTION_ORDER: SoapSectionType[] = [
   'SUBJECTIVE',
@@ -64,18 +75,26 @@ const SECTION_LABELS: Record<SoapSectionType, string> = {
 export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentView, setCurrentView] = useState<ChairsideViewMode>('DASHBOARD');
   const [activeComposer, setActiveComposer] = useState<QuickActionType | null>(null);
-  const [selectedTeeth, setSelectedTeeth] = useState<number[]>([]);
+  const [selectedTeeth, setSelectedTeeth] = useState<ToothNumber[]>([]);
   const [isQuickNoteOpen, setIsQuickNoteOpen] = useState(false);
   
-  // Mock Context Values (In a real app, these would come from auth/routing)
+  // Mock Context Values
   const [currentTenantId] = useState('tenant-demo-1');
   const [currentPatientId] = useState('patient-demo-1');
   const [currentTreatmentPlanId] = useState('plan-demo-A');
-  
-  // FIXED: Use lazy initialization for the ID so we get a string, not a function reference.
-  const [currentNoteId] = useState(() => buildNoteIdForToday()); 
-  
   const [currentUserId] = useState('user-dr-smith');
+
+  // Visit-Based Identity (Deterministic)
+  const [currentVisitId] = useState(() => {
+      // In a real app, this would be passed via routing or selected from a visit list.
+      // For now, we generate a stable ID based on today's date.
+      const today = new Date().toISOString().split('T')[0];
+      return `visit-${today}`;
+  });
+
+  const currentNoteId = useMemo(() => {
+      return `note-${currentPatientId}-${currentVisitId}`;
+  }, [currentPatientId, currentVisitId]);
 
   const [timeline, setTimeline] = useState<TimelineEvent[]>([
     { id: '1', type: 'CHECK_IN', title: 'Patient Checked In', timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString() },
@@ -84,24 +103,76 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // SOAP State
   const [soapSections, setSoapSections] = useState<SoapSection[]>([]);
+  const [noteStatus, setNoteStatus] = useState<'draft' | 'signed'>('draft');
+  const [lastSavedAt, setLastSavedAt] = useState<string | undefined>();
+  const [undoSnapshots, setUndoSnapshots] = useState<Record<string, UndoSnapshot>>({});
+  
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Initialize SOAP sections if empty
+  // --- PERSISTENCE HELPERS ---
+  const buildNoteStorageKey = useCallback(() => {
+    return `chairside-note-${currentTenantId}-${currentPatientId}-${currentNoteId}`;
+  }, [currentTenantId, currentPatientId, currentNoteId]);
+
+  const loadCurrentNoteFromStorage = useCallback((): { sections: SoapSection[], status: 'draft'|'signed', savedAt?: string } | null => {
+    const key = buildNoteStorageKey();
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      return {
+          sections: parsed?.soapSections ?? [],
+          status: parsed?.status ?? 'draft',
+          savedAt: parsed?.savedAt
+      };
+    } catch {
+      return null;
+    }
+  }, [buildNoteStorageKey]);
+
+  const saveCurrentNoteToStorage = useCallback((sections: SoapSection[], status: 'draft' | 'signed') => {
+    const key = buildNoteStorageKey();
+    const now = new Date().toISOString();
+    const payload = {
+      tenantId: currentTenantId,
+      patientId: currentPatientId,
+      treatmentPlanId: currentTreatmentPlanId,
+      noteId: currentNoteId,
+      soapSections: sections,
+      status: status,
+      savedAt: now
+    };
+    window.localStorage.setItem(key, JSON.stringify(payload));
+    setLastSavedAt(now);
+  }, [buildNoteStorageKey, currentTenantId, currentPatientId, currentTreatmentPlanId, currentNoteId]);
+
+  // Initialize SOAP sections from Storage or Default
   useEffect(() => {
-    setSoapSections(prev => {
-      if (prev.length > 0) return prev;
-      return SECTION_ORDER.map(type => ({
-        id: `s-${type}`,
-        type,
-        title: SECTION_LABELS[type],
-        content: '',
-        lastEditedAt: new Date().toISOString()
-      }));
-    });
-  }, []);
+    const data = loadCurrentNoteFromStorage();
+    
+    if (data && data.sections.length > 0) {
+        setSoapSections(data.sections);
+        setNoteStatus(data.status);
+        if (data.savedAt) setLastSavedAt(data.savedAt);
+    } else {
+        // Init clean sections
+        setSoapSections(SECTION_ORDER.map(type => ({
+            id: `s-${type}`,
+            type,
+            title: SECTION_LABELS[type],
+            content: '',
+            lastEditedAt: new Date().toISOString()
+        })));
+        setNoteStatus('draft');
+    }
+  }, [currentNoteId, loadCurrentNoteFromStorage]); // Re-run when note ID changes (visit change)
+
+  // --- ACTIONS ---
 
   const toggleTooth = (tooth: number) => {
+    const t = String(tooth) as ToothNumber;
     setSelectedTeeth(prev => 
-      prev.includes(tooth) ? prev.filter(t => t !== tooth) : [...prev, tooth]
+      prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]
     );
   };
 
@@ -116,20 +187,121 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setTimeline(prev => [newEvent, ...prev]);
   };
 
-  const updateSoapSection = (id: string, content: string) => {
-    setSoapSections(prev => prev.map(s => s.id === id ? { ...s, content, lastEditedAt: new Date().toISOString() } : s));
+  // Helper to trigger debounce save
+  const triggerAutoSave = (sections: SoapSection[], status: 'draft'|'signed') => {
+    // SECURITY: Autosave should never run on signed notes
+    if (status === 'signed') return; 
+    
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      saveCurrentNoteToStorage(sections, status);
+    }, 5000); // 5 second debounce
   };
 
-  const updateCurrentNoteSectionsFromProcedure = (item: TreatmentPlanItem, visitType?: string) => {
-    setSoapSections(prev => {
-        const { updatedSections } = applyTemplateToSoapSections({
-            item,
-            visitType: visitType || 'restorative', // Use passed visitType or fallback
-            selectedTeeth: item.selectedTeeth ?? undefined,
-            existingSections: prev
+  const updateSoapSection = (id: string, content: string) => {
+    if (noteStatus === 'signed') return; // LOCK: No manual edits allowed
+
+    // Rule 10 & 6: If user manually edits, clear undo snapshot for that section
+    if (undoSnapshots[id]) {
+        setUndoSnapshots(prev => {
+            const next = { ...prev };
+            delete next[id];
+            return next;
         });
-        return updatedSections;
+    }
+
+    const updated = soapSections.map(s => 
+      s.id === id 
+        ? { ...s, content, lastEditedAt: new Date().toISOString() } 
+        : s
+    );
+    
+    setSoapSections(updated); // Instant UI update
+    triggerAutoSave(updated, noteStatus);
+  };
+
+  const updateCurrentNoteSectionsFromProcedure = (item: TreatmentPlanItem, visitType?: VisitType) => {
+    if (noteStatus === 'signed') return; // LOCK: No appends allowed
+
+    const { updatedSections } = applyTemplateToSoapSections({
+        item,
+        visitType: visitType || 'restorative', 
+        selectedTeeth: item.selectedTeeth?.map(t => Number(t)) ?? undefined,
+        existingSections: soapSections
     });
+
+    // Detect changes and store snapshots for Undo
+    const newSnapshots = { ...undoSnapshots };
+    let hasChanges = false;
+
+    updatedSections.forEach(newSec => {
+        const oldSec = soapSections.find(s => s.id === newSec.id);
+        if (oldSec && oldSec.content !== newSec.content) {
+            // Snapshot the OLD content
+            newSnapshots[newSec.id] = {
+                content: oldSec.content,
+                sourceLabel: item.procedureName,
+                timestamp: Date.now()
+            };
+            hasChanges = true;
+        }
+    });
+
+    if (hasChanges) {
+        setUndoSnapshots(newSnapshots);
+        // Instant update (Rule 4 & 11)
+        setSoapSections(updatedSections);
+        // Persist immediately for important state changes
+        saveCurrentNoteToStorage(updatedSections, noteStatus);
+    }
+  };
+
+  const undoAppend = (sectionId: string) => {
+      if (noteStatus === 'signed') return; // LOCK
+
+      const snapshot = undoSnapshots[sectionId];
+      if (snapshot) {
+          const updated = soapSections.map(s => 
+              s.id === sectionId ? { ...s, content: snapshot.content, lastEditedAt: new Date().toISOString() } : s
+          );
+          setSoapSections(updated);
+          // Remove snapshot after use
+          setUndoSnapshots(prev => {
+              const next = { ...prev };
+              delete next[sectionId];
+              return next;
+          });
+          // Save the restored state immediately
+          saveCurrentNoteToStorage(updated, noteStatus);
+      }
+  };
+
+  const dismissUndo = (sectionId: string) => {
+      setUndoSnapshots(prev => {
+          const next = { ...prev };
+          delete next[sectionId];
+          return next;
+      });
+  };
+
+  // Manual Save Action
+  const saveCurrentNote = () => {
+    if (noteStatus === 'signed') return; // Cannot manual save a signed note
+    saveCurrentNoteToStorage(soapSections, noteStatus);
+  };
+
+  // Sign Action (Finalizes note)
+  const signNote = () => {
+      setNoteStatus('signed');
+      setUndoSnapshots({}); // Clear undo history
+      // Cancel any pending autosave to ensure clean state
+      if (autoSaveTimeoutRef.current) {
+          clearTimeout(autoSaveTimeoutRef.current);
+      }
+      // Immediate final save with signed status
+      saveCurrentNoteToStorage(soapSections, 'signed');
   };
 
   return (
@@ -152,7 +324,14 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       currentUserId,
       soapSections,
       updateSoapSection,
-      updateCurrentNoteSectionsFromProcedure
+      updateCurrentNoteSectionsFromProcedure,
+      saveCurrentNote,
+      signNote,
+      lastSavedAt,
+      noteStatus,
+      undoSnapshots,
+      undoAppend,
+      dismissUndo
     }}>
       {children}
     </ChairsideContext.Provider>

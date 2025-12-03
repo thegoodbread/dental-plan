@@ -1,40 +1,38 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useChairside } from '../../context/ChairsideContext';
-import { X, Save, User, ChevronDown, Check, ChevronRight, StickyNote } from 'lucide-react';
-import { ToothNumber, ToothRecord } from '../../domain/dentalTypes';
+import { X, Save, User, ChevronDown, Check, ChevronRight, StickyNote, AlertCircle } from 'lucide-react';
+import { ToothNumber, VisitType } from '../../domain/dentalTypes';
 import { TreatmentPlanItem } from '../../types';
 
 const SURFACES = ['M', 'O', 'D', 'B', 'L', 'I', 'F']; 
 const PROVIDERS = ['Dr. Smith', 'Dr. Patel', 'Sarah (RDH)', 'Mike (DA)'];
-const VISIT_TYPES = ['Restorative', 'Endo', 'Hygiene', 'Exam', 'Surgery', 'Ortho'];
 
-// --- ANATOMICAL DIAGRAM COMPONENT ---
-const ToothDiagram = ({ selectedTeeth }: { selectedTeeth: number[] }) => {
+const VISIT_TYPES: { key: VisitType; label: string }[] = [
+  { key: 'restorative', label: 'Restorative' },
+  { key: 'endo',        label: 'Endo' },
+  { key: 'hygiene',     label: 'Hygiene' },
+  { key: 'exam',        label: 'Exam' },
+  { key: 'surgery',     label: 'Surgery' },
+  { key: 'ortho',       label: 'Ortho' },
+];
+
+// --- ANATOMICAL DIAGRAM COMPONENT (VISUAL ONLY) ---
+const ToothDiagram = ({ selectedTeeth }: { selectedTeeth: ToothNumber[] }) => {
   // Helper to calculate tooth positions on an arch
-  // Upper Arch (1-16): Convex Up (y=20 to 70), X spans 20 to 320.
-  // 1 is Left (Patient Right), 16 is Right (Patient Left).
   const getUpperPos = (t: number) => {
-    // Distribute 1-16 along an arc
-    const index = t - 1; // 0-15
-    const percent = index / 15; // 0 to 1
-    // Simple quadratic curve approximation
-    const x = 40 + (percent * 260); // Inset slightly for labels
-    // Y curve
+    const index = t - 1; 
+    const percent = index / 15; 
+    const x = 40 + (percent * 260); 
     const y = 0.0022 * Math.pow(x - 170, 2) + 30;
     return { x, y };
   };
 
-  // Lower Arch (17-32): Convex Down (y=140 to 90)
-  // Standard Dentist View: 32 is Left, 17 is Right.
   const getLowerPos = (t: number) => {
-    // t is 17..32.
-    // We want 32 at x=20, 17 at x=320.
-    const index = 32 - t; // 32->0, 17->15
+    const index = 32 - t; 
     const percent = index / 15;
     const x = 40 + (percent * 260);
-    // Y curve
     const y = -0.0022 * Math.pow(x - 170, 2) + 130;
     return { x, y };
   };
@@ -42,22 +40,19 @@ const ToothDiagram = ({ selectedTeeth }: { selectedTeeth: number[] }) => {
   return (
     <div className="w-full max-w-[550px] aspect-[2.2/1] mx-auto relative select-none pointer-events-none">
       <svg viewBox="0 0 340 160" className="w-full h-full drop-shadow-sm">
-        {/* Quadrant Labels inside Diagram */}
         <text x="20" y="35" className="text-[10px] fill-slate-300 font-bold uppercase tracking-widest">UR</text>
         <text x="305" y="35" className="text-[10px] fill-slate-300 font-bold uppercase tracking-widest">UL</text>
         <text x="20" y="135" className="text-[10px] fill-slate-300 font-bold uppercase tracking-widest">LR</text>
         <text x="305" y="135" className="text-[10px] fill-slate-300 font-bold uppercase tracking-widest">LL</text>
 
-        {/* Upper Gum Line (Visual Guide) */}
         <path d="M 40 70 Q 170 -10 300 70" fill="none" stroke="#e2e8f0" strokeWidth="2" strokeLinecap="round" />
-        {/* Lower Gum Line (Visual Guide) */}
         <path d="M 40 90 Q 170 170 300 90" fill="none" stroke="#e2e8f0" strokeWidth="2" strokeLinecap="round" />
 
         {/* Upper Teeth 1-16 */}
         {Array.from({ length: 16 }).map((_, i) => {
           const t = i + 1;
           const { x, y } = getUpperPos(t);
-          const isSelected = selectedTeeth.includes(t);
+          const isSelected = selectedTeeth.includes(String(t) as ToothNumber);
           return (
             <g key={t}>
               <circle 
@@ -77,11 +72,9 @@ const ToothDiagram = ({ selectedTeeth }: { selectedTeeth: number[] }) => {
 
         {/* Lower Teeth 17-32 */}
         {Array.from({ length: 16 }).map((_, i) => {
-          const t = 17 + i; // 17, 18 ... 32
-          // Diagram logic: 17 is on Right (Screen Right), 32 is on Left (Screen Left)
-          // getLowerPos handles 32->Left, 17->Right logic internally
+          const t = 17 + i; 
           const { x, y } = getLowerPos(t);
-          const isSelected = selectedTeeth.includes(t);
+          const isSelected = selectedTeeth.includes(String(t) as ToothNumber);
           return (
             <g key={t}>
               <circle 
@@ -103,8 +96,8 @@ const ToothDiagram = ({ selectedTeeth }: { selectedTeeth: number[] }) => {
   );
 };
 
-// Button Component for Grid (Moved outside)
-const ToothButton: React.FC<{ t: number, selected: boolean, onClick: () => void }> = ({ t, selected, onClick }) => (
+// Button Component for Grid
+const ToothButton: React.FC<{ t: ToothNumber, selected: boolean, onClick: () => void }> = ({ t, selected, onClick }) => (
   <button
     onClick={onClick}
     className={`
@@ -123,23 +116,30 @@ export const ProcedureComposer = () => {
     activeComposer, 
     setActiveComposer, 
     selectedTeeth, 
-    toggleTooth, 
-    addTimelineEvent, 
+    toggleTooth, // This now expects a number for compatibility but updates typed state
     clearTeeth, 
-    setIsQuickNoteOpen, // Use Global Context for Drawer
-    updateCurrentNoteSectionsFromProcedure // New Context Method
+    addTimelineEvent, 
+    setIsQuickNoteOpen, 
+    updateCurrentNoteSectionsFromProcedure 
   } = useChairside();
   
   const [selectedSurfaces, setSelectedSurfaces] = useState<string[]>([]);
   const [provider, setProvider] = useState('Dr. Smith');
   const [noteChip, setNoteChip] = useState<string | null>(null);
-  
-  // Visit Type State
-  const [visitType, setVisitType] = useState<string>('Restorative');
+  const [visitType, setVisitType] = useState<VisitType>('restorative');
   
   // Modal States
   const [isTeethModalOpen, setIsTeethModalOpen] = useState(false);
+  const [draftTeeth, setDraftTeeth] = useState<ToothNumber[]>([]);
+  
   const [isProviderSheetOpen, setIsProviderSheetOpen] = useState(false);
+
+  // Sync draft teeth when modal opens
+  useEffect(() => {
+    if (isTeethModalOpen) {
+      setDraftTeeth(selectedTeeth);
+    }
+  }, [isTeethModalOpen, selectedTeeth]);
 
   if (!activeComposer) return null;
 
@@ -147,7 +147,36 @@ export const ProcedureComposer = () => {
     setSelectedSurfaces(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
   };
 
+  const resetComposer = () => {
+    setActiveComposer(null);
+    clearTeeth();
+    setSelectedSurfaces([]);
+    setNoteChip(null);
+    setVisitType('restorative');
+  };
+
+  const handleToothModalToggle = (t: ToothNumber) => {
+    setDraftTeeth(prev => 
+      prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]
+    );
+  };
+
+  const handleToothModalDone = () => {
+    // Commit changes to context
+    clearTeeth();
+    draftTeeth.forEach(t => toggleTooth(parseInt(t)));
+    setIsTeethModalOpen(false);
+  };
+
+  const isSelectionValid = () => {
+    const requiresTooth = ['Composite', 'Crown', 'Extraction', 'Root Canal', 'Implant'].includes(activeComposer);
+    if (requiresTooth && selectedTeeth.length === 0) return false;
+    return true;
+  };
+
   const handleSave = () => {
+    if (!isSelectionValid()) return;
+
     let title = activeComposer;
     if (selectedTeeth.length > 0) title += ` #${selectedTeeth.join(',')}`;
     if (selectedSurfaces.length > 0) title += ` - ${selectedSurfaces.join('')}`;
@@ -156,36 +185,30 @@ export const ProcedureComposer = () => {
     addTimelineEvent({
       type: 'PROCEDURE',
       title: title,
-      tooth: selectedTeeth,
+      tooth: selectedTeeth.map(t => parseInt(t)), // Back to numbers for timeline visual if needed
       details: noteChip || undefined,
       provider: provider
     });
 
     // 2. Build Transient Item for Auto-Note Engine
-    // We map the activeComposer (string) to a dummy TreatmentPlanItem
-    // The engine uses 'procedureName' to fuzzy match canonical names (e.g. "Composite")
     const transientItem = {
       id: Math.random().toString(36).substr(2, 9),
       procedureName: activeComposer, 
-      procedureCode: '', // Engine will match by name if code missing
-      selectedTeeth: selectedTeeth,
+      procedureCode: '', 
+      selectedTeeth, // Now passed as ToothNumber[]
+      surfaces: selectedSurfaces, // Passed as string[]
       itemType: 'PROCEDURE'
-    } as TreatmentPlanItem;
+    } as unknown as TreatmentPlanItem; // Cast to satisfy type, knowing we added extra fields if needed by engine
 
-    // 3. Trigger Auto-Population with selected Visit Type
-    updateCurrentNoteSectionsFromProcedure(transientItem, visitType.toLowerCase());
+    // 3. Trigger Auto-Population
+    updateCurrentNoteSectionsFromProcedure(transientItem, visitType);
 
-    // Reset
-    setActiveComposer(null);
-    clearTeeth();
-    setSelectedSurfaces([]);
-    setNoteChip(null);
-    setVisitType('Restorative'); // Reset default
+    resetComposer();
   };
 
-  // Dental sequence helper: 1-16 (Upper), 17-32 (Lower - sequential)
-  const UPPER_TEETH = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
-  const LOWER_TEETH = [17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]; 
+  // Dental sequence helpers
+  const UPPER_TEETH: ToothNumber[] = Array.from({length: 16}, (_, i) => String(i + 1) as ToothNumber);
+  const LOWER_TEETH: ToothNumber[] = Array.from({length: 16}, (_, i) => String(i + 17) as ToothNumber);
 
   return (
     <div className="mb-8 relative z-30">
@@ -193,14 +216,29 @@ export const ProcedureComposer = () => {
       <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden animate-in slide-in-from-bottom-6 duration-300">
         
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-start bg-slate-50/50">
           <div>
             <div className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">New Procedure</div>
-            <h3 className="text-2xl font-black text-slate-900 tracking-tight">{activeComposer}</h3>
+            <h3 className="text-2xl font-black text-slate-900 tracking-tight leading-none">{activeComposer}</h3>
+            
+            {/* Context Pills */}
+            <div className="flex flex-wrap gap-2 mt-2">
+                {selectedTeeth.length > 0 && (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700 uppercase tracking-wide">
+                    Teeth #{selectedTeeth.join(', ')}
+                    </span>
+                )}
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600 uppercase tracking-wide">
+                    {VISIT_TYPES.find(v => v.key === visitType)?.label || visitType}
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600 uppercase tracking-wide">
+                    {provider}
+                </span>
+            </div>
           </div>
           <button 
-            onClick={() => setActiveComposer(null)} 
-            className="w-10 h-10 flex items-center justify-center bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 active:bg-slate-300 transition-colors"
+            onClick={resetComposer} 
+            className="w-10 h-10 flex items-center justify-center bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 active:bg-slate-300 transition-colors shrink-0 ml-2"
           >
             <X size={24} />
           </button>
@@ -231,17 +269,17 @@ export const ProcedureComposer = () => {
           <div>
              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Visit Type</label>
              <div className="flex flex-wrap gap-2">
-                {VISIT_TYPES.map(type => (
+                {VISIT_TYPES.map(vt => (
                   <button
-                    key={type}
-                    onClick={() => setVisitType(type)}
+                    key={vt.key}
+                    onClick={() => setVisitType(vt.key)}
                     className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
-                      visitType === type
+                      visitType === vt.key
                       ? 'bg-blue-600 border-blue-600 text-white shadow-md'
                       : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
                     }`}
                   >
-                    {type}
+                    {vt.label}
                   </button>
                 ))}
              </div>
@@ -317,9 +355,15 @@ export const ProcedureComposer = () => {
 
           {/* 6. Main Action */}
           <div className="pt-2">
+            {!isSelectionValid() && (
+                <div className="mb-3 flex items-center gap-2 text-xs font-bold text-red-500 bg-red-50 p-3 rounded-xl border border-red-100">
+                    <AlertCircle size={16} /> Please select at least one tooth to proceed.
+                </div>
+            )}
             <button 
                 onClick={handleSave}
-                className="w-full h-16 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-xl font-bold rounded-2xl shadow-xl shadow-blue-200 flex items-center justify-center gap-3 transition-all"
+                disabled={!isSelectionValid()}
+                className={`w-full h-16 text-xl font-bold rounded-2xl shadow-xl flex items-center justify-center gap-3 transition-all ${isSelectionValid() ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200 active:scale-[0.98]' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}
             >
                 <Save size={24} /> 
                 Add to Timeline
@@ -340,14 +384,14 @@ export const ProcedureComposer = () => {
               <div className="bg-white px-6 py-4 border-b border-slate-200 flex justify-between items-center shrink-0 shadow-sm z-20 relative">
                  <button onClick={() => setIsTeethModalOpen(false)} className="text-slate-500 font-bold hover:text-slate-800 text-lg">Cancel</button>
                  <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Select Teeth</h3>
-                 <button onClick={() => setIsTeethModalOpen(false)} className="text-blue-600 font-bold hover:text-blue-700 text-lg">Done</button>
+                 <button onClick={handleToothModalDone} className="text-blue-600 font-bold hover:text-blue-700 text-lg">Done</button>
               </div>
               
               <div className="flex-1 flex flex-col overflow-hidden relative bg-slate-50">
                  
-                 {/* Visual Diagram - Fixed Area */}
+                 {/* Visual Diagram - Fixed Area using Draft State */}
                  <div className="shrink-0 h-[38%] min-h-[200px] bg-white border-b border-slate-200 flex items-center justify-center p-4 shadow-sm z-10">
-                    <ToothDiagram selectedTeeth={selectedTeeth} />
+                    <ToothDiagram selectedTeeth={draftTeeth} />
                  </div>
 
                  {/* Grid Section - Flex container for vertical centering */}
@@ -357,21 +401,19 @@ export const ProcedureComposer = () => {
                         <div className="space-y-1">
                             <div className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Upper Arch</div>
                             <div className="flex flex-col gap-2 items-center">
-                                {/* Row 1: 1-8 */}
                                 <div className="flex items-center gap-4">
                                     <span className="text-2xl font-black text-slate-300 w-8 text-right">UR</span>
                                     <div className="flex gap-2 justify-center flex-wrap">
                                         {UPPER_TEETH.slice(0, 8).map(t => (
-                                            <ToothButton key={t} t={t} selected={selectedTeeth.includes(t)} onClick={() => toggleTooth(t)} />
+                                            <ToothButton key={t} t={t} selected={draftTeeth.includes(t)} onClick={() => handleToothModalToggle(t)} />
                                         ))}
                                     </div>
                                 </div>
-                                {/* Row 2: 9-16 */}
                                 <div className="flex items-center gap-4">
                                     <span className="text-2xl font-black text-slate-300 w-8 text-right">UL</span>
                                     <div className="flex gap-2 justify-center flex-wrap">
                                         {UPPER_TEETH.slice(8, 16).map(t => (
-                                            <ToothButton key={t} t={t} selected={selectedTeeth.includes(t)} onClick={() => toggleTooth(t)} />
+                                            <ToothButton key={t} t={t} selected={draftTeeth.includes(t)} onClick={() => handleToothModalToggle(t)} />
                                         ))}
                                     </div>
                                 </div>
@@ -382,21 +424,19 @@ export const ProcedureComposer = () => {
                         <div className="space-y-1 mt-2">
                             <div className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Lower Arch</div>
                             <div className="flex flex-col gap-2 items-center">
-                                {/* Row 3: 17-24 */}
                                 <div className="flex items-center gap-4">
                                     <span className="text-2xl font-black text-slate-300 w-8 text-right">LL</span>
                                     <div className="flex gap-2 justify-center flex-wrap">
                                         {LOWER_TEETH.slice(0, 8).map(t => (
-                                            <ToothButton key={t} t={t} selected={selectedTeeth.includes(t)} onClick={() => toggleTooth(t)} />
+                                            <ToothButton key={t} t={t} selected={draftTeeth.includes(t)} onClick={() => handleToothModalToggle(t)} />
                                         ))}
                                     </div>
                                 </div>
-                                {/* Row 4: 25-32 */}
                                 <div className="flex items-center gap-4">
                                     <span className="text-2xl font-black text-slate-300 w-8 text-right">LR</span>
                                     <div className="flex gap-2 justify-center flex-wrap">
                                         {LOWER_TEETH.slice(8, 16).map(t => (
-                                            <ToothButton key={t} t={t} selected={selectedTeeth.includes(t)} onClick={() => toggleTooth(t)} />
+                                            <ToothButton key={t} t={t} selected={draftTeeth.includes(t)} onClick={() => handleToothModalToggle(t)} />
                                         ))}
                                     </div>
                                 </div>

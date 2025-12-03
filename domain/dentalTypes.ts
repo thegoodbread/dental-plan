@@ -7,7 +7,7 @@ export type ToothNumber =
   | "17" | "18" | "19" | "20" | "21" | "22" | "23" | "24"
   | "25" | "26" | "27" | "28" | "29" | "30" | "31" | "32";
 
-export type VisitType = "exam" | "restorative" | "endo" | "surgery" | "emergency" | "hygiene" | "other";
+export type VisitType = "restorative" | "endo" | "hygiene" | "exam" | "surgery" | "ortho" | "other";
 
 // --- EXISTING TYPES ---
 export interface Condition {

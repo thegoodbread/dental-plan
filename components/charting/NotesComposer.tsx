@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useChairside } from '../../context/ChairsideContext';
 import { GoogleGenAI } from "@google/genai";
 import { 
-  ArrowLeft, Save, PanelRightClose, PanelRightOpen, ShieldCheck, AlertTriangle, Wand2, Lightbulb, Activity, CheckCircle2, Plus, X, Trash2
+  ArrowLeft, Save, PanelRightClose, PanelRightOpen, ShieldCheck, AlertTriangle, Wand2, Lightbulb, Activity, CheckCircle2, Plus, X, Trash2, Clock, Lock
 } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -21,12 +20,11 @@ interface NotesComposerProps {
   activeTreatmentItemId?: string | null;
   activePhaseId?: string | number | null;
   viewMode: 'drawer' | 'page'; // Strict UI Mode
-  pendingProcedure?: { label: string; teeth: number[] };
+  pendingProcedure?: { label: string; teeth: ToothNumber[] };
 }
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
-// Map QuickAction labels to CDT codes for risk lookup
 const QUICK_ACTION_TO_CODES: Record<string, string[]> = {
   'Composite': ['D2391', 'D2392', 'D2393'],
   'Crown': ['D2740', 'D2950'],
@@ -95,29 +93,31 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
       currentTreatmentPlanId,
       currentNoteId,
       currentUserId,
-      soapSections,        // Consumed from context
-      updateSoapSection    // Consumed from context
+      soapSections,
+      updateSoapSection,
+      saveCurrentNote,
+      signNote,
+      lastSavedAt,
+      noteStatus,
+      undoSnapshots,
+      undoAppend,
+      dismissUndo
   } = useChairside();
   
-  // -- STATE --
-  // soapSections state removed (lifted to context)
+  const isLocked = noteStatus === 'signed';
+
   const [assignedRisks, setAssignedRisks] = useState<AssignedRisk[]>([]);
-  
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [aiLoading, setAiLoading] = useState(false);
-  
   const riskSectionRef = useRef<HTMLDivElement>(null);
 
-  // DnD Sensors (Only used in Page mode)
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor)
   );
 
-  // Persistence Key
   const buildRiskStorageKey = () => `dental_assigned_risks:${currentPatientId}:${currentNoteId}`;
 
-  // Initialize Risks
   useEffect(() => {
     const key = buildRiskStorageKey();
     const storedRisks = localStorage.getItem(key);
@@ -135,34 +135,28 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
       localStorage.setItem(key, JSON.stringify(risks));
   };
 
-  // -- CALCULATE SUGGESTIONS --
   const suggestedRiskIds = useMemo(() => {
     let codes: string[] = [];
-    
-    // 1. From pending procedure (Composer Selection)
     if (pendingProcedure) {
         const mapped = QUICK_ACTION_TO_CODES[pendingProcedure.label];
         if (mapped) codes.push(...mapped);
     }
-
-    // 2. From existing tooth record (History)
     if (activeToothRecord) {
         codes.push(...activeToothRecord.procedures.map(p => p.code));
     }
-    
     return getSuggestedRiskIdsForProcedures(codes);
   }, [activeToothRecord, pendingProcedure]);
 
-  // -- HANDLERS --
-
   const handleUpdateSoap = (id: string, newContent: string) => {
+      // Locking handled inside updateSoapSection via context, but double checking here isn't harmful
+      if (isLocked) return;
       updateSoapSection(id, newContent);
   };
 
   const handleInsertChartFindings = () => {
+    if (isLocked) return;
     let textToInsert = "";
     
-    // Build chart string
     let chartSummary = "";
     if (pendingProcedure) {
         chartSummary = `Scheduled: ${pendingProcedure.label} ${pendingProcedure.teeth.length > 0 ? 'on #' + pendingProcedure.teeth.join(',#') : ''}. `;
@@ -195,6 +189,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
   };
 
   const handleAssignRisk = (riskItem: RiskLibraryItem) => {
+      if (isLocked) return;
       if (assignedRisks.some(r => r.riskLibraryItemId === riskItem.id && r.isActive)) return;
 
       const activeCount = assignedRisks.filter(r => r.isActive).length;
@@ -241,6 +236,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
   };
 
   const handleRemoveRisk = (id: string) => {
+      if (isLocked) return;
       const updatedRisks = assignedRisks.map(r => {
           if (r.id === id) {
               return {
@@ -259,13 +255,22 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
 
   const handleToggleRiskExpand = (id: string) => {
       const updatedRisks = assignedRisks.map(r => 
-          r.id === id ? { ...r, isExpanded: !r.isExpanded, lastUpdatedAt: new Date().toISOString() } : r
+          r.id === id ? { ...r, isExpanded: !r.isExpanded } : r
       );
       setAssignedRisks(updatedRisks);
-      persistRisks(updatedRisks);
+      
+      // REQUIREMENT: Do not persist if note is locked.
+      if (!isLocked) {
+          // Update timestamp only if not locked
+          const risksWithTimestamp = updatedRisks.map(r => 
+              r.id === id ? { ...r, lastUpdatedAt: new Date().toISOString() } : r
+          );
+          persistRisks(risksWithTimestamp);
+      }
   };
 
   const handleUpdateConsent = (id: string, updates: Partial<AssignedRisk>) => {
+      if (isLocked) return;
       const updatedRisks = assignedRisks.map(r => {
           if (r.id === id) {
               return {
@@ -283,6 +288,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
+    if (isLocked) return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const oldIndex = activeRisks.findIndex((r) => r.id === active.id);
@@ -306,8 +312,8 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
 
   const activeRisks = assignedRisks.filter(r => r.isActive).sort((a, b) => a.sortOrder - b.sortOrder);
 
-  // -- AI CALL --
   const generateSoapDraft = async (sectionType: SoapSectionType) => {
+      if (isLocked) return;
       setAiLoading(true);
       try {
           const text = await requestSoapDraftFromBackend(sectionType, {
@@ -329,16 +335,25 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
   };
 
   const handleFinalize = () => {
-      addTimelineEvent({
-        type: 'NOTE',
-        title: 'Clinical Note Finalized',
-        details: 'Comprehensive SOAP note signed.',
-        provider: 'Dr. Smith'
-      });
-      setCurrentView('DASHBOARD');
+      if (isLocked) return;
+      if (window.confirm("Sign this clinical note? This will lock the note from further editing.")) {
+          signNote();
+          addTimelineEvent({
+            type: 'NOTE',
+            title: 'Clinical Note Signed',
+            details: 'Comprehensive SOAP note finalized and locked.',
+            provider: 'Dr. Smith'
+          });
+          // Optional: redirect to dashboard
+          if (viewMode === 'page') setCurrentView('DASHBOARD');
+      }
   };
 
-  // Determine context label
+  const handleManualSave = () => {
+      if (isLocked) return;
+      saveCurrentNote();
+  };
+
   let contextLabel = 'General Visit';
   if (pendingProcedure) {
       contextLabel = `${pendingProcedure.label} ${pendingProcedure.teeth.length > 0 ? '#' + pendingProcedure.teeth.join(',') : ''}`;
@@ -346,13 +361,10 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
       contextLabel = `Tooth #${activeToothNumber}`;
   }
   
-  // -- MODE LOGIC: DRAWER vs PAGE --
   const displayedSections = soapSections.filter(s => {
       if (viewMode === 'drawer') {
-          // Drawer Mode: Subset only
           return ['SUBJECTIVE', 'OBJECTIVE', 'ASSESSMENT', 'PLAN'].includes(s.type);
       }
-      // Page Mode: All sections
       return true; 
   });
 
@@ -368,13 +380,30 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
                 <ArrowLeft size={18} />
               </button>
               <h2 className="text-lg font-bold text-slate-800">Clinical Note Editor</h2>
+              {isLocked && (
+                  <span className="px-2 py-0.5 bg-slate-100 border border-slate-300 rounded text-xs font-bold text-slate-500 flex items-center gap-1">
+                      <Lock size={12} /> SIGNED
+                  </span>
+              )}
             </div>
             <div className="flex items-center gap-3">
+              {lastSavedAt && (
+                  <span className="text-[10px] text-slate-400 font-medium mr-2 flex items-center gap-1">
+                      <Clock size={10} /> Saved {new Date(lastSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+              )}
+              {!isLocked && (
+                  <>
+                    <button onClick={handleManualSave} className="h-9 px-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-md shadow-sm transition-all">
+                        Save
+                    </button>
+                    <button onClick={handleFinalize} className="h-9 px-4 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-md shadow-sm flex items-center gap-2 transition-all">
+                        <Save size={16} /> Sign
+                    </button>
+                  </>
+              )}
               <button onClick={() => setRightPanelOpen(!rightPanelOpen)} className={`p-2 rounded-md border transition-all hidden md:flex ${rightPanelOpen ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'}`} title={rightPanelOpen ? "Hide Library" : "Show Library"}>
                 {rightPanelOpen ? <PanelRightOpen size={18} /> : <PanelRightClose size={18} />}
-              </button>
-              <button onClick={handleFinalize} className="h-9 px-4 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-md shadow-sm flex items-center gap-2 transition-all">
-                <Save size={16} /> Sign
               </button>
             </div>
           </div>
@@ -416,9 +445,12 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
                         section={section}
                         contextLabel={contextLabel}
                         onSave={handleUpdateSoap}
-                        onDictate={() => alert("Dictation placeholder")}
-                        onAiDraft={() => generateSoapDraft(section.type)}
-                        onInsertChartFindings={isObjective ? handleInsertChartFindings : undefined}
+                        onDictate={isLocked ? undefined : () => alert("Dictation placeholder")}
+                        onAiDraft={isLocked ? undefined : () => generateSoapDraft(section.type)}
+                        onInsertChartFindings={isLocked ? undefined : (isObjective ? handleInsertChartFindings : undefined)}
+                        undoSnapshot={undoSnapshots[section.id]}
+                        onUndo={() => undoAppend(section.id)}
+                        onDismissUndo={() => dismissUndo(section.id)}
                     />
                 );
             })}
@@ -436,8 +468,8 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
 
                 <div className="bg-slate-50 rounded-lg border border-slate-200 p-3 shadow-inner">
                     
-                    {/* 1. SUGGESTED RISKS (CHIPS) - Always visible */}
-                    {suggestedRiskIds.length > 0 && (
+                    {/* 1. SUGGESTED RISKS (CHIPS) - Hide if locked */}
+                    {suggestedRiskIds.length > 0 && !isLocked && (
                         <div className="mb-4">
                             <div className="flex items-center gap-1.5 mb-2 text-[10px] font-bold text-amber-600 uppercase tracking-wider">
                                 <Lightbulb size={12} /> Recommended based on procedures
@@ -471,24 +503,22 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
                             <p className="text-xs italic">No risks assigned.</p>
                         </div>
                     ) : (
-                        viewMode === 'drawer' ? (
-                            // Drawer Mode: Simple List (No Drag, No Consent Metadata)
+                        viewMode === 'drawer' || isLocked ? (
+                            // Drawer Mode or Locked Mode: Simple List (No Drag)
                             <div className="space-y-2">
                                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Assigned</div>
                                 {activeRisks.map(risk => (
-                                    <div key={risk.id} className="flex justify-between items-center bg-white p-2 rounded border border-slate-200 shadow-sm">
-                                        <span className="text-xs font-semibold text-slate-700 truncate mr-2">{risk.titleSnapshot}</span>
-                                        <button 
-                                            onClick={() => handleRemoveRisk(risk.id)}
-                                            className="text-slate-300 hover:text-red-500 p-1"
-                                        >
-                                            <Trash2 size={14} />
-                                        </button>
-                                    </div>
+                                    <AssignedRiskRow 
+                                        key={risk.id}
+                                        risk={risk}
+                                        onToggleExpand={handleToggleRiskExpand}
+                                        onRemove={isLocked ? () => {} : handleRemoveRisk}
+                                        onUpdateConsent={isLocked ? () => {} : handleUpdateConsent}
+                                    />
                                 ))}
                             </div>
                         ) : (
-                            // Page Mode: Full Draggable List with Consent Controls
+                            // Page Mode (Unlocked): Full Draggable List
                             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                                 <SortableContext items={activeRisks.map(r => r.id)} strategy={verticalListSortingStrategy}>
                                     <div className="space-y-1">
@@ -511,8 +541,8 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
           </div>
         </div>
 
-        {/* RIGHT COLUMN: RISK LIBRARY (Only in Full Page Mode) */}
-        {viewMode === 'page' && rightPanelOpen && (
+        {/* RIGHT COLUMN: RISK LIBRARY (Only in Full Page Mode and Not Locked) */}
+        {viewMode === 'page' && rightPanelOpen && !isLocked && (
           <div className={`shrink-0 bg-white border-l border-slate-300 shadow-xl z-20 w-[320px] md:w-[380px] h-full flex flex-col`}>
              <RiskLibraryPanel 
                 assignedRiskIds={activeRisks.map(r => r.riskLibraryItemId)}

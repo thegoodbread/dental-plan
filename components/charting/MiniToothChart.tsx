@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { useChairside } from '../../context/ChairsideContext';
+import { ToothNumber } from '../../domain/dentalTypes';
 
 // Sequential 1-32 ordering
 const ALL_TEETH = [
@@ -23,7 +24,7 @@ export const MiniToothChart = () => {
             onClick={() => toggleTooth(tooth)}
             className={`
               aspect-square rounded flex items-center justify-center text-[10px] font-bold border transition-all
-              ${selectedTeeth.includes(tooth) 
+              ${selectedTeeth.includes(String(tooth) as ToothNumber) 
                 ? 'bg-blue-600 border-blue-600 text-white' 
                 : 'bg-white border-gray-200 text-gray-400 hover:border-blue-400 hover:text-blue-600'}
             `}
