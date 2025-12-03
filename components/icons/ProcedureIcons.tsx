@@ -1,7 +1,11 @@
+
 import React from 'react';
 
 export interface IconProps extends React.SVGProps<SVGSVGElement> {
   size?: number | string;
+  children?: React.ReactNode;
+  width?: number | string;
+  height?: number | string;
 }
 
 const BaseIcon = ({ children, size = 24, width, height, ...props }: IconProps) => (

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { X, Delete } from 'lucide-react';
 
@@ -9,6 +10,16 @@ interface NumberPadModalProps {
   title: string;
   isPercentage?: boolean;
 }
+
+const Key: React.FC<{ children: React.ReactNode; onClick: () => void; className?: string }> = ({ children, onClick, className = '' }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={`flex items-center justify-center text-2xl font-medium text-gray-800 bg-gray-100 h-14 rounded-lg active:bg-gray-200 transition-colors ${className}`}
+  >
+    {children}
+  </button>
+);
 
 export const NumberPadModal: React.FC<NumberPadModalProps> = ({
   isOpen,
@@ -47,16 +58,6 @@ export const NumberPadModal: React.FC<NumberPadModalProps> = ({
     // If empty, treat as 0
     onDone(value || '0');
   };
-
-  const Key = ({ children, onClick, className = '' }: { children: React.ReactNode; onClick: () => void; className?: string }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex items-center justify-center text-2xl font-medium text-gray-800 bg-gray-100 h-14 rounded-lg active:bg-gray-200 transition-colors ${className}`}
-    >
-      {children}
-    </button>
-  );
 
   return (
     <div

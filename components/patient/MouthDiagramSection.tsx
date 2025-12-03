@@ -285,18 +285,20 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
 
 // --- SUB-COMPONENTS ---
 
-const Tooth = ({ 
+interface ToothProps {
+  num: number;
+  className: string;
+  onEnter: () => void;
+  onLeave: () => void;
+  children?: React.ReactNode;
+}
+
+const Tooth: React.FC<ToothProps> = ({ 
   num, 
   className, 
   onEnter, 
   onLeave,
   children
-}: { 
-  num: number, 
-  className: string, 
-  onEnter: () => void, 
-  onLeave: () => void,
-  children?: React.ReactNode
 }) => (
   <div 
     className="flex-1 flex flex-col items-center gap-0.5 group relative"

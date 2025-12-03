@@ -20,8 +20,8 @@ interface NotesComposerProps {
   onToothClick: (tooth: ToothNumber) => void;
   activeTreatmentItemId?: string | null;
   activePhaseId?: string | number | null;
-  viewMode: 'drawer' | 'page'; // Strict mode separation
-  pendingProcedure?: { label: string; teeth: number[] }; // New prop for active composition context
+  viewMode: 'drawer' | 'page'; // Strict UI Mode
+  pendingProcedure?: { label: string; teeth: number[] };
 }
 
 type NoteMode = 'QUICK' | 'FULL';
@@ -102,7 +102,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
   activeToothRecord,
   activeTreatmentItemId,
   activePhaseId,
-  viewMode, // 'drawer' | 'page'
+  viewMode, 
   pendingProcedure
 }) => {
   const { 
@@ -116,7 +116,6 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
   } = useChairside();
   
   // -- STATE --
-  const [noteMode, setNoteMode] = useState<NoteMode>('QUICK');
   const [soapSections, setSoapSections] = useState<SoapSection[]>([]);
   const [assignedRisks, setAssignedRisks] = useState<AssignedRisk[]>([]);
   
@@ -376,18 +375,20 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
       contextLabel = `Tooth #${activeToothNumber}`;
   }
   
-  // -- MODE LOGIC --
-  // In Drawer mode, we only show S, O, A, P. Treatment Performed is optional or part of O.
+  // -- MODE LOGIC: DRAWER vs PAGE --
   const displayedSections = soapSections.filter(s => {
-      if (viewMode === 'drawer') return ['SUBJECTIVE', 'OBJECTIVE', 'ASSESSMENT', 'PLAN'].includes(s.type);
-      // In page mode, always show all sections regardless of 'noteMode' state
+      if (viewMode === 'drawer') {
+          // Drawer Mode: Subset only
+          return ['SUBJECTIVE', 'OBJECTIVE', 'ASSESSMENT', 'PLAN'].includes(s.type);
+      }
+      // Page Mode: All sections
       return true; 
   });
 
   return (
     <div className={`flex flex-col h-full bg-slate-100 font-sans text-slate-900 overflow-hidden`}>
       
-      {/* 1. HEADER (Only in Full Page Mode) */}
+      {/* HEADER: Only in Full Page Mode */}
       {viewMode === 'page' && (
         <>
           <div className="bg-white border-b border-slate-300 flex items-center justify-between px-4 py-2.5 shadow-sm z-30 shrink-0">
@@ -427,7 +428,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
         </>
       )}
 
-      {/* 2. MAIN CONTENT AREA */}
+      {/* MAIN CONTENT AREA */}
       <div className="flex-1 flex overflow-hidden">
         
         {/* LEFT COLUMN: SOAP Content */}
@@ -464,7 +465,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
 
                 <div className="bg-slate-50 rounded-lg border border-slate-200 p-3 shadow-inner">
                     
-                    {/* 1. SUGGESTED RISKS (CHIPS) - Always visible in Drawer */}
+                    {/* 1. SUGGESTED RISKS (CHIPS) - Always visible */}
                     {suggestedRiskIds.length > 0 && (
                         <div className="mb-4">
                             <div className="flex items-center gap-1.5 mb-2 text-[10px] font-bold text-amber-600 uppercase tracking-wider">
@@ -500,17 +501,17 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
                         </div>
                     ) : (
                         viewMode === 'drawer' ? (
-                            // Drawer Mode: Simple List (No Drag, No Heavy Metadata)
+                            // Drawer Mode: Simple List (No Drag, No Consent Metadata)
                             <div className="space-y-2">
                                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Assigned</div>
                                 {activeRisks.map(risk => (
                                     <div key={risk.id} className="flex justify-between items-center bg-white p-2 rounded border border-slate-200 shadow-sm">
-                                        <span className="text-xs font-semibold text-slate-700">{risk.titleSnapshot}</span>
+                                        <span className="text-xs font-semibold text-slate-700 truncate mr-2">{risk.titleSnapshot}</span>
                                         <button 
                                             onClick={() => handleRemoveRisk(risk.id)}
                                             className="text-slate-300 hover:text-red-500 p-1"
                                         >
-                                            <Trash2 size={12} />
+                                            <Trash2 size={14} />
                                         </button>
                                     </div>
                                 ))}

@@ -101,6 +101,21 @@ const ToothDiagram = ({ selectedTeeth }: { selectedTeeth: number[] }) => {
   );
 };
 
+// Button Component for Grid (Moved outside)
+const ToothButton: React.FC<{ t: number, selected: boolean, onClick: () => void }> = ({ t, selected, onClick }) => (
+  <button
+    onClick={onClick}
+    className={`
+      w-16 h-16 md:w-20 md:h-20 rounded-2xl text-2xl font-bold transition-all flex items-center justify-center border-2
+      ${selected 
+      ? 'bg-blue-600 border-blue-600 text-white shadow-xl shadow-blue-200/50 scale-105 z-10' 
+      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 active:bg-slate-50'}
+    `}
+  >
+    {t}
+  </button>
+);
+
 export const ProcedureComposer = () => {
   const { 
     activeComposer, 
@@ -145,21 +160,6 @@ export const ProcedureComposer = () => {
     setSelectedSurfaces([]);
     setNoteChip(null);
   };
-
-  // Button Component for Grid
-  const ToothButton = ({ t, selected, onClick }: { t: number, selected: boolean, onClick: () => void }) => (
-    <button
-      onClick={onClick}
-      className={`
-        w-16 h-16 md:w-20 md:h-20 rounded-2xl text-2xl font-bold transition-all flex items-center justify-center border-2
-        ${selected 
-        ? 'bg-blue-600 border-blue-600 text-white shadow-xl shadow-blue-200/50 scale-105 z-10' 
-        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 active:bg-slate-50'}
-      `}
-    >
-      {t}
-    </button>
-  );
 
   // Dental sequence helper: 1-16 (Upper), 17-32 (Lower - sequential)
   const UPPER_TEETH = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];

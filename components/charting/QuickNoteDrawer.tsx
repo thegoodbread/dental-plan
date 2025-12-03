@@ -30,6 +30,7 @@ export const QuickNoteDrawer: React.FC<{
   };
 
   const handleGoToFullNotes = () => {
+      // CONDUIT: Close drawer and switch to Full Page
       setIsQuickNoteOpen(false);
       setCurrentView('NOTES');
   };

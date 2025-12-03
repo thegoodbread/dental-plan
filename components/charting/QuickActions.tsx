@@ -18,8 +18,10 @@ const QuickButton: React.FC<{
     if (type === 'Perio') {
         setCurrentView('PERIO');
     } else if (type === 'Notes') {
-        // Open drawer overlay, do NOT change main view
-        setIsQuickNoteOpen(true);
+        // Switch to Full Page Note Editor
+        setCurrentView('NOTES');
+        // Close drawer to ensure clean state if returning to dashboard
+        setIsQuickNoteOpen(false);
     } else {
         setActiveComposer(type);
         setCurrentView('DASHBOARD');
