@@ -1,5 +1,5 @@
 import { TreatmentPlanItem } from "../types";
-import { SoapSection } from "./dentalTypes";
+import { SoapSection, VisitType } from "./dentalTypes";
 import { PROCEDURE_NOTE_TEMPLATES, ProcedureNoteTemplate } from "./procedureNoteTemplates";
 
 /**
@@ -39,7 +39,7 @@ export function findTemplateForItem(item: TreatmentPlanItem): ProcedureNoteTempl
  */
 export function buildTemplateContext(args: {
   item: TreatmentPlanItem;
-  visitType?: string;
+  visitType?: VisitType;
   selectedTeeth?: number[];
 }): Record<string, string> {
   const { item } = args;
@@ -84,7 +84,7 @@ export function buildTemplateContext(args: {
  */
 export function applyTemplateToSoapSections(params: {
   item: TreatmentPlanItem;
-  visitType?: string;
+  visitType?: VisitType;
   selectedTeeth?: number[];
   existingSections: SoapSection[];
 }): { updatedSections: SoapSection[]; usedTemplateId?: string } {
@@ -97,7 +97,7 @@ export function applyTemplateToSoapSections(params: {
   }
 
   // Ensure we use the passed-in visitType, falling back to template default or string
-  const effectiveVisitType = visitType || template.visitType || 'restorative';
+  const effectiveVisitType = (visitType || template.visitType || 'restorative') as VisitType;
 
   const context = buildTemplateContext({
     item,

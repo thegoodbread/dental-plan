@@ -8,7 +8,6 @@ import { applyTemplateToSoapSections } from '../domain/procedureNoteEngine';
 interface UndoSnapshot {
   content: string;
   sourceLabel: string;
-  timestamp: number;
 }
 
 // NOTE LEGAL REQUIREMENT:
@@ -108,7 +107,8 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [lastSavedAt, setLastSavedAt] = useState<string | undefined>();
   const [undoSnapshots, setUndoSnapshots] = useState<Record<string, UndoSnapshot>>({});
   
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Use ReturnType<typeof setTimeout> for browser/node compatibility
+  const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // --- PERSISTENCE HELPERS ---
   const buildNoteStorageKey = useCallback(() => {
@@ -116,6 +116,7 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [currentTenantId, currentPatientId, currentNoteId]);
 
   const loadCurrentNoteFromStorage = useCallback((): { sections: SoapSection[], status: 'draft'|'signed', savedAt?: string } | null => {
+    if (typeof window === 'undefined') return null;
     const key = buildNoteStorageKey();
     const raw = window.localStorage.getItem(key);
     if (!raw) return null;
@@ -132,8 +133,14 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [buildNoteStorageKey]);
 
   const saveCurrentNoteToStorage = useCallback((sections: SoapSection[], status: 'draft' | 'signed') => {
-    // FINAL SAFETY CHECK: If trying to save as draft but state is signed, block it (except explicit sign action)
-    if (status === 'draft' && noteStatus === 'signed') return;
+    // SECURITY: If the current in-memory state is signed, allow NO writes unless this specific
+    // action is the one transitioning it TO 'signed' (checked via status arg).
+    if (noteStatus === 'signed' && status !== 'signed') {
+        console.warn("Attempted to modify a signed note. Operation blocked.");
+        return;
+    }
+
+    if (typeof window === 'undefined') return;
 
     const key = buildNoteStorageKey();
     const now = new Date().toISOString();
@@ -247,7 +254,6 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             newSnapshots[newSec.id] = {
                 content: oldSec.content,
                 sourceLabel: item.procedureName,
-                timestamp: Date.now()
             };
             hasChanges = true;
         }

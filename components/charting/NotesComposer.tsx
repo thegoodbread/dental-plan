@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useChairside } from '../../context/ChairsideContext';
-import { GoogleGenAI } from "@google/genai";
 import { 
   ArrowLeft, Save, PanelRightClose, PanelRightOpen, ShieldCheck, AlertTriangle, Wand2, Lightbulb, Activity, CheckCircle2, Plus, X, Trash2, Clock, Lock
 } from 'lucide-react';
@@ -52,25 +51,33 @@ async function requestSoapDraftFromBackend(
   sectionType: SoapSectionType,
   promptContext: { toothNumber?: ToothNumber | null; visitType?: VisitType; procedureLabel?: string; }
 ): Promise<string> {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
   const procedureContext = promptContext.procedureLabel ? ` for a ${promptContext.procedureLabel}` : '';
   const toothContext = promptContext.toothNumber ? ` on tooth #${promptContext.toothNumber}` : '';
 
-  const promptMap: Record<string, string> = {
-      'SUBJECTIVE': `Summarize a typical chief complaint${procedureContext}${toothContext}.`,
-      'OBJECTIVE': `List standard objective findings${procedureContext}${toothContext}.`,
-      'ASSESSMENT': `Write a sample diagnosis${procedureContext}${toothContext}.`,
-      'TREATMENT_PERFORMED': `Draft a standard narrative${procedureContext}${toothContext}, including anesthesia and isolation details.`,
-      'PLAN': `Draft post-op instructions${procedureContext}.`
+  const promptMap: Record<SoapSectionType, string> = {
+    'SUBJECTIVE': `Summarize a typical chief complaint${procedureContext}${toothContext}.`,
+    'OBJECTIVE': `List standard objective findings${procedureContext}${toothContext}.`,
+    'ASSESSMENT': `Write a sample diagnosis${procedureContext}${toothContext}.`,
+    'TREATMENT_PERFORMED': `Draft a standard narrative${procedureContext}${toothContext}, including anesthesia and isolation details.`,
+    'PLAN': `Draft post-op instructions${procedureContext}.`
   };
 
+  const prompt = `You are a dental assistant. ${promptMap[sectionType] || "Draft a clinical note section."} Keep it concise, professional, and clinical.`;
+
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `You are a dental assistant. ${promptMap[sectionType] || "Draft a clinical note section."} Keep it concise, professional, and clinical.`,
+    const response = await fetch('/api/soap-draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, sectionType, promptContext })
     });
-    return response.text || "";
+
+    if (!response.ok) {
+      console.error('AI backend returned error', response.status);
+      return "Could not generate draft. Please try again.";
+    }
+
+    const data = await response.json();
+    return typeof data.text === 'string' ? data.text : "Could not generate draft. Please try again.";
   } catch (e) {
     console.error("AI Generation Error", e);
     return "Could not generate draft. Please try again.";
@@ -131,8 +138,11 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
   }, [currentPatientId, currentNoteId]);
 
   const persistRisks = (risks: AssignedRisk[]) => {
-      // SECURITY: Never overwrite storage if note is locked
-      if (isLocked) return;
+      // SECURITY: Crucial Check. Never overwrite storage if note is locked.
+      if (isLocked) {
+          console.warn("Blocked attempt to persist risks on a signed note.");
+          return;
+      }
       const key = buildRiskStorageKey();
       localStorage.setItem(key, JSON.stringify(risks));
   };

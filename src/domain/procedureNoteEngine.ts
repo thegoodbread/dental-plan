@@ -1,7 +1,13 @@
-
 import { TreatmentPlanItem } from "../types";
-import { SoapSection } from "./dentalTypes";
-import { PROCEDURE_NOTE_TEMPLATES, ProcedureNoteTemplate, SoapSectionId } from "./procedureNoteTemplates";
+import { SoapSection, VisitType } from "./dentalTypes";
+import { PROCEDURE_NOTE_TEMPLATES, ProcedureNoteTemplate } from "./procedureNoteTemplates";
+
+const FALLBACK_VISIT_TYPE: VisitType = 'restorative';
+
+function normalizeVisitType(v?: string | VisitType): VisitType {
+  const allowed: VisitType[] = ['restorative', 'endo', 'hygiene', 'exam', 'surgery', 'ortho', 'other'];
+  return v && (allowed as string[]).includes(v) ? (v as VisitType) : FALLBACK_VISIT_TYPE;
+}
 
 /**
  * Replaces {{key}} in template with value from context.
@@ -40,7 +46,7 @@ export function findTemplateForItem(item: TreatmentPlanItem): ProcedureNoteTempl
  */
 export function buildTemplateContext(args: {
   item: TreatmentPlanItem;
-  visitType?: string;
+  visitType?: VisitType;
   selectedTeeth?: number[];
 }): Record<string, string> {
   const { item } = args;
@@ -59,29 +65,37 @@ export function buildTemplateContext(args: {
     toothList = item.selectedArches.join(" ") + " arch";
   }
 
-  // 2. Defaults
-  return {
+  // 2. Build Base Context
+  const context: Record<string, string> = {
     tooth_list: toothList,
     visit_type_label: args.visitType || "dental visit",
-    chief_complaint: "sensitivity to cold/sweets", // Default placeholder
+    chief_complaint: "sensitivity to cold/sweets",
     percussion_status: "WNL",
     palpation_status: "WNL",
     vitality_status: "vital",
     isolation_method: "rubber dam/isolation system",
-    ... (item.procedureName ? { procedure_name: item.procedureName } : {})
   };
+
+  // 3. Conditional Additions
+  if (item.procedureName) {
+    context.procedure_name = item.procedureName;
+  }
+
+  return context;
 }
 
 /**
  * Merges the template into existing SOAP sections.
+ * STRICTLY APPENDS. Never overwrites.
+ * Implements duplicate guarding based on content content-idempotency.
  */
 export function applyTemplateToSoapSections(params: {
   item: TreatmentPlanItem;
-  visitType?: string;
+  visitType?: VisitType;
   selectedTeeth?: number[];
   existingSections: SoapSection[];
 }): { updatedSections: SoapSection[]; usedTemplateId?: string } {
-  const { item, existingSections } = params;
+  const { item, existingSections, visitType } = params;
   
   const template = findTemplateForItem(item);
   
@@ -89,11 +103,22 @@ export function applyTemplateToSoapSections(params: {
     return { updatedSections: existingSections };
   }
 
+  // Use helper to ensure type safety
+  const effectiveVisitType = normalizeVisitType(visitType ?? template.visitType);
+
   const context = buildTemplateContext({
     item,
-    visitType: template.visitType,
+    visitType: effectiveVisitType,
     selectedTeeth: params.selectedTeeth
   });
+
+  // Construct label for the append block header
+  let procedureLabel = item.procedureName || "Procedure";
+  if (context.tooth_list && context.tooth_list !== "treated area") {
+      procedureLabel += ` ${context.tooth_list}`;
+  } else if (item.selectedTeeth && item.selectedTeeth.length > 0) {
+      procedureLabel += ` #${item.selectedTeeth.join(",")}`;
+  }
 
   const updatedSections = existingSections.map(section => {
     // Determine which part of the template maps to this section ID
@@ -103,24 +128,35 @@ export function applyTemplateToSoapSections(params: {
     else if (section.type === 'ASSESSMENT') templatePart = template.soap.assessment;
     else if (section.type === 'PLAN') templatePart = template.soap.plan;
     
-    // Treatment Performed is usually mapped from objective or separate, but we can map PLAN to it if needed.
-    // For this engine, we stick to strict S-O-A-P mapping.
-    
     if (!templatePart || !templatePart.template) {
       return section;
     }
 
-    const hydratedText = hydrateTemplate(templatePart.template, context);
+    const hydratedText = hydrateTemplate(templatePart.template, context).trim();
     
+    if (!hydratedText) {
+      return section;
+    }
+
     // Append logic
-    let newContent = section.content;
-    if (!newContent) {
-      newContent = hydratedText;
+    let newContent = section.content || "";
+    
+    // Rule: First procedure = fill empty sections (full template, no header)
+    if (!newContent.trim()) {
+        newContent = hydratedText;
     } else {
-      // Avoid duplicating if exactly same text exists (basic check)
-      if (!newContent.includes(hydratedText)) {
-        newContent = `${newContent}\n\n${hydratedText}`;
-      }
+        // Rule: Always append with distinct header if content exists
+        // Format: — <ProcedureName> #<teeth> —\n<text>
+        const header = `— ${procedureLabel} —`;
+        const blockToAppend = `\n\n${header}\n${hydratedText}`;
+        
+        // Duplicate Guard: content-idempotent check
+        // If the exact same block is already at the end, don't append again
+        if (newContent.trimEnd().endsWith(blockToAppend.trim())) {
+             return section; 
+        }
+        
+        newContent = newContent + blockToAppend;
     }
 
     return {
