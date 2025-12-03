@@ -8,7 +8,7 @@ import {
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
-import { ToothNumber, ToothRecord, SoapSection, AssignedRisk, RiskLibraryItem, SoapSectionType } from '../../domain/dentalTypes';
+import { ToothNumber, ToothRecord, SoapSection, AssignedRisk, RiskLibraryItem, SoapSectionType, recordRiskEvent } from '../../domain/dentalTypes';
 import { SoapSectionBlock } from './SoapSectionBlock';
 import { RiskLibraryPanel } from './RiskLibraryPanel';
 import { AssignedRiskRow } from './AssignedRiskRow';
@@ -230,20 +230,40 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
 
   // 3. REMOVING A RISK (Soft Delete)
   const handleRemoveRisk = (id: string) => {
+      let riskToRemove: AssignedRisk | undefined;
       const updatedRisks = assignedRisks.map(r => {
           if (r.id === id) {
-              return {
+              const updated = {
                   ...r,
                   isActive: false,
                   removedAt: new Date().toISOString(),
                   removedByUserId: currentUserId,
                   lastUpdatedAt: new Date().toISOString()
               };
+              riskToRemove = r; // Store reference to original for logging
+              return updated;
           }
           return r;
       });
       setAssignedRisks(updatedRisks);
       persistRisks(updatedRisks);
+
+      // Audit Event
+      if (riskToRemove) {
+        recordRiskEvent({
+          id: Math.random().toString(36).substring(2, 9),
+          tenantId: currentTenantId,
+          patientId: currentPatientId,
+          clinicalNoteId: currentNoteId,
+          treatmentPlanId: currentTreatmentPlanId,
+          assignedRiskId: riskToRemove.id,
+          riskLibraryItemId: riskToRemove.riskLibraryItemId,
+          eventType: 'RISK_REMOVED',
+          occurredAt: new Date().toISOString(),
+          userId: currentUserId,
+          details: "Risk removed from AssignedRisk"
+        });
+      }
   };
 
   // 5. EXPAND/COLLAPSE - Now Persisted
@@ -257,9 +277,10 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
 
   // 6. UPDATE CONSENT (Metadata)
   const handleUpdateConsent = (id: string, updates: Partial<AssignedRisk>) => {
+      let updatedRiskRef: AssignedRisk | undefined;
       const updatedRisks = assignedRisks.map(r => {
           if (r.id === id) {
-              return {
+              const merged = {
                   ...r,
                   ...updates,
                   // If we are capturing, ensure we stamp the user
@@ -267,11 +288,34 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
                   lastUpdatedAt: new Date().toISOString(),
                   lastUpdatedByUserId: currentUserId
               };
+              updatedRiskRef = merged;
+              return merged;
           }
           return r;
       });
       setAssignedRisks(updatedRisks);
       persistRisks(updatedRisks);
+
+      // Audit Event
+      if (updatedRiskRef && (updates.consentCapturedAt || updates.consentMethod)) {
+        const detailText = updates.consentCapturedAt 
+          ? "Consent captured" 
+          : "Consent method updated";
+          
+        recordRiskEvent({
+          id: Math.random().toString(36).substring(2, 9),
+          tenantId: currentTenantId,
+          patientId: currentPatientId,
+          clinicalNoteId: currentNoteId,
+          treatmentPlanId: currentTreatmentPlanId,
+          assignedRiskId: updatedRiskRef.id,
+          riskLibraryItemId: updatedRiskRef.riskLibraryItemId,
+          eventType: 'CONSENT_CAPTURED',
+          occurredAt: new Date().toISOString(),
+          userId: currentUserId,
+          details: detailText
+        });
+      }
   };
 
   // 4. SORTING (SortOrder updates)

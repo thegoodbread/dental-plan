@@ -190,7 +190,9 @@ export interface RiskEvent {
  */
 export const recordRiskEvent = (event: RiskEvent) => {
   // TODO: send to backend audit log endpoint.
-  console.log('[AUDIT LOG]', event.eventType, event);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[AUDIT LOG]', event.eventType, event);
+  }
 };
 
 // NOTE TEMPLATE MODEL

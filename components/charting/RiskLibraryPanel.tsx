@@ -45,7 +45,7 @@ export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({
     
     // 2. Tenant Isolation
     // Show global items (tenantId is null) OR items matching current tenant.
-    const effectiveTenantId = tenantId || currentTenantId; 
+    const effectiveTenantId = tenantId !== undefined ? tenantId : currentTenantId;
     if (risk.tenantId && risk.tenantId !== effectiveTenantId) return false;
 
     // 3. User Filter Criteria
