@@ -11,6 +11,10 @@ interface UndoSnapshot {
   timestamp: number;
 }
 
+// NOTE LEGAL REQUIREMENT:
+// Once a note is signed, it becomes immutable. All mutation APIs and persistence paths 
+// must treat `noteStatus === 'signed'` as read-only. No autosaves allowed after signing.
+
 interface ChairsideContextType {
   currentView: ChairsideViewMode;
   setCurrentView: (view: ChairsideViewMode) => void;
@@ -18,7 +22,6 @@ interface ChairsideContextType {
   activeComposer: QuickActionType | null;
   setActiveComposer: (action: QuickActionType | null) => void;
   
-  // Normalized to string types (1-32)
   selectedTeeth: ToothNumber[];
   toggleTooth: (tooth: number) => void;
   clearTeeth: () => void;
@@ -86,8 +89,6 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // Visit-Based Identity (Deterministic)
   const [currentVisitId] = useState(() => {
-      // In a real app, this would be passed via routing or selected from a visit list.
-      // For now, we generate a stable ID based on today's date.
       const today = new Date().toISOString().split('T')[0];
       return `visit-${today}`;
   });
@@ -131,6 +132,9 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [buildNoteStorageKey]);
 
   const saveCurrentNoteToStorage = useCallback((sections: SoapSection[], status: 'draft' | 'signed') => {
+    // FINAL SAFETY CHECK: If trying to save as draft but state is signed, block it (except explicit sign action)
+    if (status === 'draft' && noteStatus === 'signed') return;
+
     const key = buildNoteStorageKey();
     const now = new Date().toISOString();
     const payload = {
@@ -144,7 +148,7 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
     window.localStorage.setItem(key, JSON.stringify(payload));
     setLastSavedAt(now);
-  }, [buildNoteStorageKey, currentTenantId, currentPatientId, currentTreatmentPlanId, currentNoteId]);
+  }, [buildNoteStorageKey, currentTenantId, currentPatientId, currentTreatmentPlanId, currentNoteId, noteStatus]);
 
   // Initialize SOAP sections from Storage or Default
   useEffect(() => {
@@ -165,7 +169,7 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         })));
         setNoteStatus('draft');
     }
-  }, [currentNoteId, loadCurrentNoteFromStorage]); // Re-run when note ID changes (visit change)
+  }, [currentNoteId, loadCurrentNoteFromStorage]);
 
   // --- ACTIONS ---
 
@@ -203,7 +207,7 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const updateSoapSection = (id: string, content: string) => {
     if (noteStatus === 'signed') return; // LOCK: No manual edits allowed
 
-    // Rule 10 & 6: If user manually edits, clear undo snapshot for that section
+    // If user manually edits, clear undo snapshot for that section
     if (undoSnapshots[id]) {
         setUndoSnapshots(prev => {
             const next = { ...prev };
@@ -251,7 +255,6 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     if (hasChanges) {
         setUndoSnapshots(newSnapshots);
-        // Instant update (Rule 4 & 11)
         setSoapSections(updatedSections);
         // Persist immediately for important state changes
         saveCurrentNoteToStorage(updatedSections, noteStatus);
@@ -288,18 +291,22 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // Manual Save Action
   const saveCurrentNote = () => {
-    if (noteStatus === 'signed') return; // Cannot manual save a signed note
+    if (noteStatus === 'signed') return; // LOCK
     saveCurrentNoteToStorage(soapSections, noteStatus);
   };
 
   // Sign Action (Finalizes note)
+  // This is the ONLY place a note transitions to 'signed'.
   const signNote = () => {
       setNoteStatus('signed');
       setUndoSnapshots({}); // Clear undo history
+      
       // Cancel any pending autosave to ensure clean state
       if (autoSaveTimeoutRef.current) {
           clearTimeout(autoSaveTimeoutRef.current);
+          autoSaveTimeoutRef.current = null;
       }
+      
       // Immediate final save with signed status
       saveCurrentNoteToStorage(soapSections, 'signed');
   };

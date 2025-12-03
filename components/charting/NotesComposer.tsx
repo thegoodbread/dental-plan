@@ -131,6 +131,8 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
   }, [currentPatientId, currentNoteId]);
 
   const persistRisks = (risks: AssignedRisk[]) => {
+      // SECURITY: Never overwrite storage if note is locked
+      if (isLocked) return;
       const key = buildRiskStorageKey();
       localStorage.setItem(key, JSON.stringify(risks));
   };
@@ -188,6 +190,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
     }
   };
 
+  // RISK: Assign (Blocked if locked)
   const handleAssignRisk = (riskItem: RiskLibraryItem) => {
       if (isLocked) return;
       if (assignedRisks.some(r => r.riskLibraryItemId === riskItem.id && r.isActive)) return;
@@ -235,6 +238,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
       });
   };
 
+  // RISK: Remove (Blocked if locked)
   const handleRemoveRisk = (id: string) => {
       if (isLocked) return;
       const updatedRisks = assignedRisks.map(r => {
@@ -253,15 +257,16 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
       persistRisks(updatedRisks);
   };
 
+  // RISK: Expand (UI allowed, Persistence blocked)
   const handleToggleRiskExpand = (id: string) => {
       const updatedRisks = assignedRisks.map(r => 
           r.id === id ? { ...r, isExpanded: !r.isExpanded } : r
       );
       setAssignedRisks(updatedRisks);
       
-      // REQUIREMENT: Do not persist if note is locked.
+      // REQUIREMENT: Do not persist expand state if note is locked.
       if (!isLocked) {
-          // Update timestamp only if not locked
+          // Update timestamp only if not locked and saving
           const risksWithTimestamp = updatedRisks.map(r => 
               r.id === id ? { ...r, lastUpdatedAt: new Date().toISOString() } : r
           );
@@ -269,6 +274,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
       }
   };
 
+  // RISK: Consent Update (Blocked if locked)
   const handleUpdateConsent = (id: string, updates: Partial<AssignedRisk>) => {
       if (isLocked) return;
       const updatedRisks = assignedRisks.map(r => {
@@ -448,9 +454,10 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
                         onDictate={isLocked ? undefined : () => alert("Dictation placeholder")}
                         onAiDraft={isLocked ? undefined : () => generateSoapDraft(section.type)}
                         onInsertChartFindings={isLocked ? undefined : (isObjective ? handleInsertChartFindings : undefined)}
-                        undoSnapshot={undoSnapshots[section.id]}
-                        onUndo={() => undoAppend(section.id)}
-                        onDismissUndo={() => dismissUndo(section.id)}
+                        // Only pass undo capabilities if not locked
+                        undoSnapshot={!isLocked ? undoSnapshots[section.id] : undefined}
+                        onUndo={!isLocked ? () => undoAppend(section.id) : undefined}
+                        onDismissUndo={!isLocked ? () => dismissUndo(section.id) : undefined}
                     />
                 );
             })}
@@ -512,6 +519,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
                                         key={risk.id}
                                         risk={risk}
                                         onToggleExpand={handleToggleRiskExpand}
+                                        // Pass empty fn or undefined if locked
                                         onRemove={isLocked ? () => {} : handleRemoveRisk}
                                         onUpdateConsent={isLocked ? () => {} : handleUpdateConsent}
                                     />

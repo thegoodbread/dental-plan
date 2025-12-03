@@ -80,6 +80,7 @@ export function buildTemplateContext(args: {
 /**
  * Merges the template into existing SOAP sections.
  * STRICTLY APPENDS. Never overwrites.
+ * Implements duplicate guarding for rapid clicks.
  */
 export function applyTemplateToSoapSections(params: {
   item: TreatmentPlanItem;
