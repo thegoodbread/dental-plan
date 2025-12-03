@@ -26,7 +26,7 @@ interface ChairsideContextType {
   // SOAP State (Lifted from NotesComposer)
   soapSections: SoapSection[];
   updateSoapSection: (id: string, content: string) => void;
-  updateCurrentNoteSectionsFromProcedure: (item: TreatmentPlanItem) => void;
+  updateCurrentNoteSectionsFromProcedure: (item: TreatmentPlanItem, visitType?: string) => void;
 
   // Context Identifiers
   currentTenantId: string;
@@ -72,8 +72,8 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [currentPatientId] = useState('patient-demo-1');
   const [currentTreatmentPlanId] = useState('plan-demo-A');
   
-  // TODO: When wiring to a real backend, replace this with the actual note ID from the server/router.
-  const [currentNoteId] = useState(buildNoteIdForToday); 
+  // FIXED: Use lazy initialization for the ID so we get a string, not a function reference.
+  const [currentNoteId] = useState(() => buildNoteIdForToday()); 
   
   const [currentUserId] = useState('user-dr-smith');
 
@@ -120,11 +120,11 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setSoapSections(prev => prev.map(s => s.id === id ? { ...s, content, lastEditedAt: new Date().toISOString() } : s));
   };
 
-  const updateCurrentNoteSectionsFromProcedure = (item: TreatmentPlanItem) => {
+  const updateCurrentNoteSectionsFromProcedure = (item: TreatmentPlanItem, visitType?: string) => {
     setSoapSections(prev => {
         const { updatedSections } = applyTemplateToSoapSections({
             item,
-            visitType: 'restorative', // Default, template can override
+            visitType: visitType || 'restorative', // Use passed visitType or fallback
             selectedTeeth: item.selectedTeeth ?? undefined,
             existingSections: prev
         });

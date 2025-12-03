@@ -8,6 +8,7 @@ import { TreatmentPlanItem } from '../../types';
 
 const SURFACES = ['M', 'O', 'D', 'B', 'L', 'I', 'F']; 
 const PROVIDERS = ['Dr. Smith', 'Dr. Patel', 'Sarah (RDH)', 'Mike (DA)'];
+const VISIT_TYPES = ['Restorative', 'Endo', 'Hygiene', 'Exam', 'Surgery', 'Ortho'];
 
 // --- ANATOMICAL DIAGRAM COMPONENT ---
 const ToothDiagram = ({ selectedTeeth }: { selectedTeeth: number[] }) => {
@@ -133,6 +134,9 @@ export const ProcedureComposer = () => {
   const [provider, setProvider] = useState('Dr. Smith');
   const [noteChip, setNoteChip] = useState<string | null>(null);
   
+  // Visit Type State
+  const [visitType, setVisitType] = useState<string>('Restorative');
+  
   // Modal States
   const [isTeethModalOpen, setIsTeethModalOpen] = useState(false);
   const [isProviderSheetOpen, setIsProviderSheetOpen] = useState(false);
@@ -168,14 +172,15 @@ export const ProcedureComposer = () => {
       itemType: 'PROCEDURE'
     } as TreatmentPlanItem;
 
-    // 3. Trigger Auto-Population
-    updateCurrentNoteSectionsFromProcedure(transientItem);
+    // 3. Trigger Auto-Population with selected Visit Type
+    updateCurrentNoteSectionsFromProcedure(transientItem, visitType.toLowerCase());
 
     // Reset
     setActiveComposer(null);
     clearTeeth();
     setSelectedSurfaces([]);
     setNoteChip(null);
+    setVisitType('Restorative'); // Reset default
   };
 
   // Dental sequence helper: 1-16 (Upper), 17-32 (Lower - sequential)
@@ -222,7 +227,27 @@ export const ProcedureComposer = () => {
              </button>
           </div>
 
-          {/* 2. Surfaces Row */}
+          {/* 2. Visit Type Selector */}
+          <div>
+             <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Visit Type</label>
+             <div className="flex flex-wrap gap-2">
+                {VISIT_TYPES.map(type => (
+                  <button
+                    key={type}
+                    onClick={() => setVisitType(type)}
+                    className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
+                      visitType === type
+                      ? 'bg-blue-600 border-blue-600 text-white shadow-md'
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    {type}
+                  </button>
+                ))}
+             </div>
+          </div>
+
+          {/* 3. Surfaces Row */}
           {['Composite', 'Amalgam', 'Crown', 'Sealant', 'Exam'].includes(activeComposer || '') && (
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Surfaces</label>
@@ -244,7 +269,7 @@ export const ProcedureComposer = () => {
             </div>
           )}
           
-          {/* 3. Provider Trigger */}
+          {/* 4. Provider Trigger */}
           <div>
              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Provider</label>
              <button 
@@ -262,7 +287,7 @@ export const ProcedureComposer = () => {
              </button>
           </div>
 
-          {/* 4. Quick Notes Chips & Trigger */}
+          {/* 5. Quick Notes Chips & Trigger */}
           <div>
              <div className="flex items-center justify-between mb-2 ml-1">
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest">Clinical Notes</label>
@@ -290,7 +315,7 @@ export const ProcedureComposer = () => {
              </div>
           </div>
 
-          {/* 5. Main Action */}
+          {/* 6. Main Action */}
           <div className="pt-2">
             <button 
                 onClick={handleSave}
