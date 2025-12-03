@@ -116,7 +116,7 @@ export const ProcedureComposer = () => {
     activeComposer, 
     setActiveComposer, 
     selectedTeeth, 
-    toggleTooth, // This now expects a number for compatibility but updates typed state
+    toggleTooth, 
     clearTeeth, 
     addTimelineEvent, 
     setIsQuickNoteOpen, 
@@ -126,7 +126,10 @@ export const ProcedureComposer = () => {
   const [selectedSurfaces, setSelectedSurfaces] = useState<string[]>([]);
   const [provider, setProvider] = useState('Dr. Smith');
   const [noteChip, setNoteChip] = useState<string | null>(null);
-  const [visitType, setVisitType] = useState<VisitType>('restorative');
+  
+  // Visit Type now explicit null default, required
+  const [visitType, setVisitType] = useState<VisitType | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   
   // Modal States
   const [isTeethModalOpen, setIsTeethModalOpen] = useState(false);
@@ -152,7 +155,8 @@ export const ProcedureComposer = () => {
     clearTeeth();
     setSelectedSurfaces([]);
     setNoteChip(null);
-    setVisitType('restorative');
+    setVisitType(null); // Reset to null
+    setValidationError(null);
   };
 
   const handleToothModalToggle = (t: ToothNumber) => {
@@ -177,6 +181,12 @@ export const ProcedureComposer = () => {
   const handleSave = () => {
     if (!isSelectionValid()) return;
 
+    if (!visitType) {
+      setValidationError("Please select a visit type before adding this procedure to the note.");
+      return;
+    }
+    setValidationError(null);
+
     let title = activeComposer;
     if (selectedTeeth.length > 0) title += ` #${selectedTeeth.join(',')}`;
     if (selectedSurfaces.length > 0) title += ` - ${selectedSurfaces.join('')}`;
@@ -200,7 +210,7 @@ export const ProcedureComposer = () => {
       itemType: 'PROCEDURE'
     } as unknown as TreatmentPlanItem; // Cast to satisfy type, knowing we added extra fields if needed by engine
 
-    // 3. Trigger Auto-Population
+    // 3. Trigger Auto-Population with explicit visitType
     updateCurrentNoteSectionsFromProcedure(transientItem, visitType);
 
     resetComposer();
@@ -228,9 +238,11 @@ export const ProcedureComposer = () => {
                     Teeth #{selectedTeeth.join(', ')}
                     </span>
                 )}
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600 uppercase tracking-wide">
-                    {VISIT_TYPES.find(v => v.key === visitType)?.label || visitType}
-                </span>
+                {visitType && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600 uppercase tracking-wide">
+                      {VISIT_TYPES.find(v => v.key === visitType)?.label || visitType}
+                  </span>
+                )}
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600 uppercase tracking-wide">
                     {provider}
                 </span>
@@ -272,7 +284,7 @@ export const ProcedureComposer = () => {
                 {VISIT_TYPES.map(vt => (
                   <button
                     key={vt.key}
-                    onClick={() => setVisitType(vt.key)}
+                    onClick={() => { setVisitType(vt.key); setValidationError(null); }}
                     className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
                       visitType === vt.key
                       ? 'bg-blue-600 border-blue-600 text-white shadow-md'
@@ -283,6 +295,11 @@ export const ProcedureComposer = () => {
                   </button>
                 ))}
              </div>
+             {validationError && (
+                <p className="mt-2 text-xs font-bold text-red-500 animate-in fade-in flex items-center gap-1">
+                   <AlertCircle size={12} /> {validationError}
+                </p>
+             )}
           </div>
 
           {/* 3. Surfaces Row */}

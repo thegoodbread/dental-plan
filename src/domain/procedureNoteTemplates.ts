@@ -1,17 +1,16 @@
 
+
 export type SoapSectionId = 'SUBJECTIVE' | 'OBJECTIVE' | 'ASSESSMENT' | 'PLAN';
 
 export interface SoapSectionTemplate {
   template: string;           // Text with {{tokens}} to replace
   chips?: string[];           // Optional quick-phrase chips for that section
-  appendChartFindings?: boolean; // For OBJECTIVE, whether to also call the existing chart findings helper
 }
 
 export interface ProcedureNoteTemplate {
   id: string;
   name: string;
   category: string;           // e.g. "direct_restoration", "crown", "endo", etc.
-  visitType: string;          // e.g. "restorative", "endo"
   triggers: {
     matchBy: ('cdtCode' | 'canonicalName')[];
     cdtCodes?: string[];      // e.g. ["D2391", "D2392"]
@@ -38,7 +37,6 @@ export const PROCEDURE_NOTE_TEMPLATES: ProcedureNoteTemplate[] = [
     id: "REST_COMPOSITE_POST",
     name: "Posterior Composite Restoration",
     category: "direct_restoration",
-    visitType: "restorative",
     triggers: {
       matchBy: ["cdtCode", "canonicalName"],
       cdtCodes: ["D2391", "D2392", "D2393", "D2394"],
@@ -49,8 +47,7 @@ export const PROCEDURE_NOTE_TEMPLATES: ProcedureNoteTemplate[] = [
         template: "Patient reports {{chief_complaint}} on {{tooth_list}} and presents today for composite restoration."
       },
       objective: {
-        template: "Existing restoration and recurrent caries noted on {{tooth_list}}. No swelling or sinus tract present. Percussion: {{percussion_status}}. Palpation: {{palpation_status}}. Isolation achieved via {{isolation_method}}.",
-        appendChartFindings: true
+        template: "Existing restoration and recurrent caries noted on {{tooth_list}}. No swelling or sinus tract present. Percussion: {{percussion_status}}. Palpation: {{palpation_status}}. Isolation achieved via {{isolation_method}}."
       },
       assessment: {
         template: "Recurrent caries associated with existing restoration on {{tooth_list}}. Tooth restorable with direct composite restoration."
@@ -71,7 +68,6 @@ export const PROCEDURE_NOTE_TEMPLATES: ProcedureNoteTemplate[] = [
     id: "REST_CROWN_PREP",
     name: "Crown Preparation",
     category: "indirect_restoration",
-    visitType: "restorative",
     triggers: {
       matchBy: ["cdtCode", "canonicalName"],
       cdtCodes: ["D2740", "D2750", "D2790"],
@@ -82,8 +78,7 @@ export const PROCEDURE_NOTE_TEMPLATES: ProcedureNoteTemplate[] = [
         template: "Patient presents for crown preparation on {{tooth_list}}."
       },
       objective: {
-        template: "{{tooth_list}} exhibits compromised structural integrity due to extensive decay/fracture. Vitality: {{vitality_status}}.",
-        appendChartFindings: true
+        template: "{{tooth_list}} exhibits compromised structural integrity due to extensive decay/fracture. Vitality: {{vitality_status}}."
       },
       assessment: {
         template: "{{tooth_list}} requires full coverage restoration."
@@ -97,7 +92,6 @@ export const PROCEDURE_NOTE_TEMPLATES: ProcedureNoteTemplate[] = [
     id: "ENDO_RCT",
     name: "Root Canal Therapy",
     category: "endo",
-    visitType: "endo",
     triggers: {
       matchBy: ["cdtCode", "canonicalName"],
       cdtCodes: ["D3310", "D3320", "D3330"],
@@ -108,8 +102,7 @@ export const PROCEDURE_NOTE_TEMPLATES: ProcedureNoteTemplate[] = [
         template: "Patient presents with spontaneous pain on {{tooth_list}}."
       },
       objective: {
-        template: "Deep caries communicating with pulp on {{tooth_list}}. Percussion (+). Cold (Lingering).",
-        appendChartFindings: true
+        template: "Deep caries communicating with pulp on {{tooth_list}}. Percussion (+). Cold (Lingering)."
       },
       assessment: {
         template: "Irreversible Pulpitis with Symptomatic Apical Periodontitis {{tooth_list}}."

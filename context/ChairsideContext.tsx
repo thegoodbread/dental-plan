@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ChairsideViewMode, TimelineEvent, QuickActionType } from '../types/charting';
 import { SoapSection, SoapSectionType, ToothNumber, VisitType } from '../domain/dentalTypes';
@@ -35,7 +36,7 @@ interface ChairsideContextType {
   // SOAP State
   soapSections: SoapSection[];
   updateSoapSection: (id: string, content: string) => void;
-  updateCurrentNoteSectionsFromProcedure: (item: TreatmentPlanItem, visitType?: VisitType) => void;
+  updateCurrentNoteSectionsFromProcedure: (item: TreatmentPlanItem, visitType: VisitType) => void;
   
   // Note Status & Persistence
   noteStatus: 'draft' | 'signed';
@@ -233,12 +234,12 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     triggerAutoSave(updated, noteStatus);
   };
 
-  const updateCurrentNoteSectionsFromProcedure = (item: TreatmentPlanItem, visitType?: VisitType) => {
+  const updateCurrentNoteSectionsFromProcedure = (item: TreatmentPlanItem, visitType: VisitType) => {
     if (noteStatus === 'signed') return; // LOCK: No appends allowed
 
     const { updatedSections } = applyTemplateToSoapSections({
         item,
-        visitType: visitType || 'restorative', 
+        visitType, // Passed directly, required
         selectedTeeth: item.selectedTeeth?.map(t => Number(t)) ?? undefined,
         existingSections: soapSections
     });

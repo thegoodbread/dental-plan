@@ -1,12 +1,14 @@
+
 import { TreatmentPlanItem } from "../types";
 import { SoapSection, VisitType } from "./dentalTypes";
 import { PROCEDURE_NOTE_TEMPLATES, ProcedureNoteTemplate } from "./procedureNoteTemplates";
 
-const FALLBACK_VISIT_TYPE: VisitType = 'restorative';
-
-function normalizeVisitType(v?: string | VisitType): VisitType {
+function normalizeVisitType(v: string | VisitType): VisitType {
   const allowed: VisitType[] = ['restorative', 'endo', 'hygiene', 'exam', 'surgery', 'ortho', 'other'];
-  return v && (allowed as string[]).includes(v) ? (v as VisitType) : FALLBACK_VISIT_TYPE;
+  if (!(allowed as string[]).includes(v)) {
+    throw new Error(`Invalid visitType passed to applyTemplateToSoapSections: ${v}`);
+  }
+  return v as VisitType;
 }
 
 /**
@@ -46,7 +48,7 @@ export function findTemplateForItem(item: TreatmentPlanItem): ProcedureNoteTempl
  */
 export function buildTemplateContext(args: {
   item: TreatmentPlanItem;
-  visitType?: VisitType;
+  visitType: VisitType; // Required
   selectedTeeth?: number[];
 }): Record<string, string> {
   const { item } = args;
@@ -68,7 +70,7 @@ export function buildTemplateContext(args: {
   // 2. Build Base Context
   const context: Record<string, string> = {
     tooth_list: toothList,
-    visit_type_label: args.visitType || "dental visit",
+    visit_type_label: args.visitType,
     chief_complaint: "sensitivity to cold/sweets",
     percussion_status: "WNL",
     palpation_status: "WNL",
@@ -87,11 +89,11 @@ export function buildTemplateContext(args: {
 /**
  * Merges the template into existing SOAP sections.
  * STRICTLY APPENDS. Never overwrites.
- * Implements duplicate guarding based on content content-idempotency.
+ * Implements duplicate guarding for rapid clicks.
  */
 export function applyTemplateToSoapSections(params: {
   item: TreatmentPlanItem;
-  visitType?: VisitType;
+  visitType: VisitType; // Required
   selectedTeeth?: number[];
   existingSections: SoapSection[];
 }): { updatedSections: SoapSection[]; usedTemplateId?: string } {
@@ -103,8 +105,8 @@ export function applyTemplateToSoapSections(params: {
     return { updatedSections: existingSections };
   }
 
-  // Use helper to ensure type safety
-  const effectiveVisitType = normalizeVisitType(visitType ?? template.visitType);
+  // Ensure we use the passed-in visitType
+  const effectiveVisitType = normalizeVisitType(visitType);
 
   const context = buildTemplateContext({
     item,
@@ -150,9 +152,14 @@ export function applyTemplateToSoapSections(params: {
         const header = `— ${procedureLabel} —`;
         const blockToAppend = `\n\n${header}\n${hydratedText}`;
         
-        // Duplicate Guard: content-idempotent check
-        // If the exact same block is already at the end, don't append again
-        if (newContent.trimEnd().endsWith(blockToAppend.trim())) {
+        // Duplicate Guard: Prevent double-click spam (within 500ms)
+        // We check if the exact block text is already at the end of the content
+        const lastEditedTime = section.lastEditedAt ? new Date(section.lastEditedAt).getTime() : 0;
+        const now = Date.now();
+        const isRecent = (now - lastEditedTime) < 500; // 500ms threshold
+
+        // If the exact same block is already at the end AND it was added very recently, skip
+        if (isRecent && newContent.endsWith(blockToAppend.trim())) {
              return section; 
         }
         
