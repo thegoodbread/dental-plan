@@ -16,15 +16,21 @@ const QuickButton: React.FC<{
 
   const handleClick = () => {
     if (type === 'Perio') {
+        setActiveComposer(null);
         setCurrentView('PERIO');
+        setIsQuickNoteOpen(false);
     } else if (type === 'Notes') {
-        // Switch to Full Page Note Editor
+        // Switch to Full Page Note Editor directly
+        setActiveComposer(null);
         setCurrentView('NOTES');
-        // Close drawer to ensure clean state if returning to dashboard
+        // Ensure drawer is closed so it doesn't overlay the full page
         setIsQuickNoteOpen(false);
     } else {
+        // For other actions, activate composer on dashboard
         setActiveComposer(type);
         setCurrentView('DASHBOARD');
+        // Close drawer if it was open to show the composer
+        setIsQuickNoteOpen(false);
     }
   };
 
