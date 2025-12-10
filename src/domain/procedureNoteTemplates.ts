@@ -1,20 +1,21 @@
 
+import { ProcedureTemplate } from './dentalTypes';
 
 export type SoapSectionId = 'SUBJECTIVE' | 'OBJECTIVE' | 'ASSESSMENT' | 'PLAN';
 
 export interface SoapSectionTemplate {
-  template: string;           // Text with {{tokens}} to replace
-  chips?: string[];           // Optional quick-phrase chips for that section
+  template: string;
+  chips?: string[];
 }
 
 export interface ProcedureNoteTemplate {
   id: string;
   name: string;
-  category: string;           // e.g. "direct_restoration", "crown", "endo", etc.
+  category: string;
   triggers: {
     matchBy: ('cdtCode' | 'canonicalName')[];
-    cdtCodes?: string[];      // e.g. ["D2391", "D2392"]
-    canonicalNames?: string[];// e.g. ["Composite", "Comp"]
+    cdtCodes?: string[];
+    canonicalNames?: string[];
   };
   soap: {
     subjective?: SoapSectionTemplate;
@@ -27,7 +28,7 @@ export interface ProcedureNoteTemplate {
     delivery: 'chairside_only' | 'chairside_and_print';
   };
   riskSuggestions?: {
-    linkToRiskIds: string[];   // existing riskLibrary IDs
+    linkToRiskIds: string[];
     requireConfirmation?: boolean;
   };
 }

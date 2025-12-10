@@ -3,8 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useChairside } from '../../context/ChairsideContext';
 import { X, Save, User, ChevronDown, Check, ChevronRight, StickyNote, AlertCircle } from 'lucide-react';
-import { ToothNumber, VisitType } from '../../domain/dentalTypes';
-import { TreatmentPlanItem } from '../../types';
+import { ToothNumber, VisitType, NoteEngineProcedureInput } from '../../src/domain/dentalTypes';
 
 const SURFACES = ['M', 'O', 'D', 'B', 'L', 'I', 'F']; 
 const PROVIDERS = ['Dr. Smith', 'Dr. Patel', 'Sarah (RDH)', 'Mike (DA)'];
@@ -195,20 +194,20 @@ export const ProcedureComposer = () => {
     addTimelineEvent({
       type: 'PROCEDURE',
       title: title,
-      tooth: selectedTeeth.map(t => parseInt(t)), // Back to numbers for timeline visual if needed
+      tooth: selectedTeeth.map(t => parseInt(t)), // Back to numbers for timeline visual
       details: noteChip || undefined,
       provider: provider
     });
 
-    // 2. Build Transient Item for Auto-Note Engine
-    const transientItem = {
+    // 2. Build Transient Item for Auto-Note Engine using Strict Type
+    // Replaced unsafe cast with type-safe construction
+    const transientItem: NoteEngineProcedureInput = {
       id: Math.random().toString(36).substr(2, 9),
       procedureName: activeComposer, 
-      procedureCode: '', 
-      selectedTeeth, // Now passed as ToothNumber[]
-      surfaces: selectedSurfaces, // Passed as string[]
-      itemType: 'PROCEDURE'
-    } as unknown as TreatmentPlanItem; // Cast to satisfy type, knowing we added extra fields if needed by engine
+      procedureCode: '', // In a real app, this would be looked up from a fee schedule
+      selectedTeeth, // Now passed strictly as ToothNumber[]
+      surfaces: selectedSurfaces, 
+    };
 
     // 3. Trigger Auto-Population with explicit visitType
     updateCurrentNoteSectionsFromProcedure(transientItem, visitType);
@@ -287,216 +286,95 @@ export const ProcedureComposer = () => {
                     onClick={() => { setVisitType(vt.key); setValidationError(null); }}
                     className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
                       visitType === vt.key
-                      ? 'bg-blue-600 border-blue-600 text-white shadow-md'
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                      ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-200' 
+                      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                     }`}
                   >
                     {vt.label}
                   </button>
                 ))}
              </div>
-             {validationError && (
-                <p className="mt-2 text-xs font-bold text-red-500 animate-in fade-in flex items-center gap-1">
-                   <AlertCircle size={12} /> {validationError}
-                </p>
-             )}
           </div>
 
-          {/* 3. Surfaces Row */}
-          {['Composite', 'Amalgam', 'Crown', 'Sealant', 'Exam'].includes(activeComposer || '') && (
+          {/* 3. Surface Selector (Conditional) */}
+          {['Composite', 'Amalgam'].includes(activeComposer) && (
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Surfaces</label>
-              <div className="flex flex-wrap gap-2">
-                {SURFACES.map(s => (
-                  <button
-                    key={s}
-                    onClick={() => toggleSurface(s)}
-                    className={`w-14 h-14 rounded-2xl text-xl font-bold transition-all border-2 shadow-sm flex items-center justify-center ${
-                      selectedSurfaces.includes(s)
-                      ? 'bg-blue-600 border-blue-600 text-white shadow-blue-200'
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 active:scale-95'
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
+               <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Surfaces</label>
+               <div className="flex gap-2">
+                  {SURFACES.map(s => (
+                    <button
+                      key={s}
+                      onClick={() => toggleSurface(s)}
+                      className={`w-12 h-12 rounded-xl font-bold text-lg transition-all border-2 ${selectedSurfaces.includes(s) ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+               </div>
             </div>
           )}
-          
-          {/* 4. Provider Trigger */}
-          <div>
-             <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Provider</label>
+
+          {/* Validation Error */}
+          {validationError && (
+            <div className="p-3 bg-red-50 text-red-700 text-sm font-medium rounded-xl flex items-center gap-2 border border-red-100">
+               <AlertCircle size={16} /> {validationError}
+            </div>
+          )}
+
+          {/* Action Footer */}
+          <div className="pt-4 flex gap-3">
              <button 
-                onClick={() => setIsProviderSheetOpen(true)}
-                className="w-full py-3 px-5 rounded-2xl border-2 border-slate-200 bg-white text-left flex items-center gap-3 active:bg-slate-50 transition-colors"
+                onClick={resetComposer}
+                className="flex-1 py-4 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-colors"
              >
-                <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100">
-                   <User size={20} />
-                </div>
-                <div className="flex-1">
-                    <div className="text-xs font-bold text-slate-400 uppercase">Assigned To</div>
-                    <div className="text-lg font-bold text-slate-900">{provider}</div>
-                </div>
-                <ChevronDown size={20} className="text-slate-400" />
+                Cancel
+             </button>
+             <button 
+                onClick={handleSave}
+                className="flex-[2] py-4 bg-slate-900 text-white rounded-xl font-bold shadow-lg shadow-slate-200 hover:bg-slate-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+             >
+                <Save size={20} />
+                Add to Chart
              </button>
           </div>
-
-          {/* 5. Quick Notes Chips & Trigger */}
-          <div>
-             <div className="flex items-center justify-between mb-2 ml-1">
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest">Clinical Notes</label>
-                <button 
-                  onClick={() => setIsQuickNoteOpen(true)}
-                  className="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 py-1 rounded-md transition-colors"
-                >
-                   <StickyNote size={14} /> Open Quick Note
-                </button>
-             </div>
-             <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-hide">
-                {['WNL', 'Watch', 'Completed', 'Tol. Well', 'Referral'].map(note => (
-                  <button
-                    key={note}
-                    onClick={() => setNoteChip(note === noteChip ? null : note)}
-                    className={`px-5 py-3 rounded-xl text-base font-bold border-2 whitespace-nowrap transition-all ${
-                      noteChip === note 
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-500 shadow-sm' 
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    {note}
-                  </button>
-                ))}
-             </div>
-          </div>
-
-          {/* 6. Main Action */}
-          <div className="pt-2">
-            {!isSelectionValid() && (
-                <div className="mb-3 flex items-center gap-2 text-xs font-bold text-red-500 bg-red-50 p-3 rounded-xl border border-red-100">
-                    <AlertCircle size={16} /> Please select at least one tooth to proceed.
-                </div>
-            )}
-            <button 
-                onClick={handleSave}
-                disabled={!isSelectionValid()}
-                className={`w-full h-16 text-xl font-bold rounded-2xl shadow-xl flex items-center justify-center gap-3 transition-all ${isSelectionValid() ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200 active:scale-[0.98]' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}
-            >
-                <Save size={24} /> 
-                Add to Timeline
-            </button>
-          </div>
-
         </div>
       </div>
 
-      {/* --- OVERLAYS (PORTALED to body) --- */}
-
-      {/* Tooth Selection Modal */}
+      {/* TEETH SELECTOR MODAL */}
       {isTeethModalOpen && createPortal(
-        <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setIsTeethModalOpen(false)}>
-           <div className="bg-slate-50 w-[90vw] md:w-[85vw] h-[90vh] max-w-5xl rounded-[2rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border border-slate-200" onClick={e => e.stopPropagation()}>
-              
-              {/* Modal Header */}
-              <div className="bg-white px-6 py-4 border-b border-slate-200 flex justify-between items-center shrink-0 shadow-sm z-20 relative">
-                 <button onClick={() => setIsTeethModalOpen(false)} className="text-slate-500 font-bold hover:text-slate-800 text-lg">Cancel</button>
-                 <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Select Teeth</h3>
-                 <button onClick={handleToothModalDone} className="text-blue-600 font-bold hover:text-blue-700 text-lg">Done</button>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/90 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+           <div className="bg-slate-100 w-full max-w-4xl h-[85vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col">
+              <div className="px-8 py-6 bg-white border-b border-slate-200 flex justify-between items-center">
+                 <h2 className="text-2xl font-black text-slate-900 tracking-tight">Select Teeth</h2>
+                 <button onClick={() => setIsTeethModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={24}/></button>
               </div>
               
-              <div className="flex-1 flex flex-col overflow-hidden relative bg-slate-50">
-                 
-                 {/* Visual Diagram - Fixed Area using Draft State */}
-                 <div className="shrink-0 h-[38%] min-h-[200px] bg-white border-b border-slate-200 flex items-center justify-center p-4 shadow-sm z-10">
-                    <ToothDiagram selectedTeeth={draftTeeth} />
+              <div className="flex-1 overflow-y-auto p-8">
+                 <div className="grid grid-cols-8 gap-4 max-w-3xl mx-auto mb-8">
+                    {/* Upper Arch 1-16 */}
+                    {UPPER_TEETH.map(t => (
+                       <ToothButton key={t} t={t} selected={draftTeeth.includes(t)} onClick={() => handleToothModalToggle(t)} />
+                    ))}
                  </div>
-
-                 {/* Grid Section - Flex container for vertical centering */}
-                 <div className="flex-1 overflow-y-auto p-2 flex flex-col justify-center">
-                    <div className="max-w-5xl mx-auto w-full space-y-2">
-                        {/* Upper Arch */}
-                        <div className="space-y-1">
-                            <div className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Upper Arch</div>
-                            <div className="flex flex-col gap-2 items-center">
-                                <div className="flex items-center gap-4">
-                                    <span className="text-2xl font-black text-slate-300 w-8 text-right">UR</span>
-                                    <div className="flex gap-2 justify-center flex-wrap">
-                                        {UPPER_TEETH.slice(0, 8).map(t => (
-                                            <ToothButton key={t} t={t} selected={draftTeeth.includes(t)} onClick={() => handleToothModalToggle(t)} />
-                                        ))}
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    <span className="text-2xl font-black text-slate-300 w-8 text-right">UL</span>
-                                    <div className="flex gap-2 justify-center flex-wrap">
-                                        {UPPER_TEETH.slice(8, 16).map(t => (
-                                            <ToothButton key={t} t={t} selected={draftTeeth.includes(t)} onClick={() => handleToothModalToggle(t)} />
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Lower Arch */}
-                        <div className="space-y-1 mt-2">
-                            <div className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Lower Arch</div>
-                            <div className="flex flex-col gap-2 items-center">
-                                <div className="flex items-center gap-4">
-                                    <span className="text-2xl font-black text-slate-300 w-8 text-right">LL</span>
-                                    <div className="flex gap-2 justify-center flex-wrap">
-                                        {LOWER_TEETH.slice(0, 8).map(t => (
-                                            <ToothButton key={t} t={t} selected={draftTeeth.includes(t)} onClick={() => handleToothModalToggle(t)} />
-                                        ))}
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    <span className="text-2xl font-black text-slate-300 w-8 text-right">LR</span>
-                                    <div className="flex gap-2 justify-center flex-wrap">
-                                        {LOWER_TEETH.slice(8, 16).map(t => (
-                                            <ToothButton key={t} t={t} selected={draftTeeth.includes(t)} onClick={() => handleToothModalToggle(t)} />
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                 <div className="w-full h-px bg-slate-300 max-w-3xl mx-auto mb-8 relative">
+                    <span className="absolute left-1/2 -translate-x-1/2 -top-3 bg-slate-100 px-4 text-slate-400 font-bold text-xs uppercase tracking-widest">Midline</span>
                  </div>
+                 <div className="grid grid-cols-8 gap-4 max-w-3xl mx-auto">
+                    {/* Lower Arch 32-17 (Reversed for visual correctness L->R) */}
+                    {[...LOWER_TEETH].reverse().map(t => (
+                       <ToothButton key={t} t={t} selected={draftTeeth.includes(t)} onClick={() => handleToothModalToggle(t)} />
+                    ))}
+                 </div>
+              </div>
+
+              <div className="p-6 bg-white border-t border-slate-200 flex justify-end gap-4">
+                 <button onClick={() => setDraftTeeth([])} className="px-6 py-3 font-bold text-slate-500 hover:text-slate-800">Clear Selection</button>
+                 <button onClick={handleToothModalDone} className="px-8 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:bg-blue-700 active:scale-95 transition-all">Confirm Selection</button>
               </div>
            </div>
         </div>,
         document.body
       )}
-
-      {/* Provider Bottom Sheet */}
-      {isProviderSheetOpen && createPortal(
-        <div className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm" onClick={() => setIsProviderSheetOpen(false)}>
-          <div 
-            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl animate-in slide-in-from-bottom duration-300 border-t border-slate-100 max-w-2xl mx-auto md:max-w-none md:mx-0"
-            onClick={e => e.stopPropagation()}
-          >
-             <div className="p-3 flex justify-center">
-                <div className="w-16 h-1.5 bg-slate-300 rounded-full"></div>
-             </div>
-             <div className="p-8 pt-2 pb-12">
-                <h3 className="text-xl font-bold text-slate-900 mb-6 px-2">Select Provider</h3>
-                <div className="space-y-3">
-                   {PROVIDERS.map(p => (
-                      <button
-                        key={p}
-                        onClick={() => { setProvider(p); setIsProviderSheetOpen(false); }}
-                        className={`w-full py-4 px-6 text-left text-lg font-bold rounded-2xl flex items-center justify-between transition-all ${provider === p ? 'bg-blue-50 text-blue-700 border-2 border-blue-200' : 'bg-white text-slate-700 border-2 border-slate-100 hover:bg-slate-50'}`}
-                      >
-                         {p}
-                         {provider === p && <div className="bg-blue-600 text-white rounded-full p-1"><Check size={18} /></div>}
-                      </button>
-                   ))}
-                </div>
-             </div>
-          </div>
-        </div>,
-        document.body
-      )}
-
     </div>
   );
 };

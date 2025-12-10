@@ -1,6 +1,6 @@
 
 // Enums
-import { AssignedRisk } from './domain/dentalTypes';
+import { AssignedRisk } from './src/domain/dentalTypes';
 
 export type UserRole = 'DOCTOR' | 'TREATMENT_COORDINATOR' | 'ADMIN';
 

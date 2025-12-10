@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
 import { Search, Plus, Filter, ShieldAlert, Check } from 'lucide-react';
-import { RISK_LIBRARY } from '../../domain/riskLibrary';
-import { RiskCategory, RiskLibraryItem, RiskSeverity, recordRiskEvent } from '../../domain/dentalTypes';
+import { RISK_LIBRARY } from '../../src/domain/riskLibrary';
+import { RiskCategory, RiskLibraryItem, RiskSeverity, recordRiskEvent } from '../../src/domain/dentalTypes';
 import { useChairside } from '../../context/ChairsideContext';
 
 interface RiskLibraryPanelProps {

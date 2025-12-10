@@ -83,92 +83,61 @@ export type RiskSeverity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'VERY_RARE';
 export type RiskCategory = 'DIRECT_RESTORATION' | 'INDIRECT_RESTORATION' | 'ENDO' | 'EXTRACTION' | 'IMPLANT' | 'SEDATION' | 'ANESTHESIA' | 'OTHER';
 
 // GOVERNANCE-READY RISK ITEM
-// Do not store PHI here; this is a global library item definition.
 export interface RiskLibraryItem {
   id: string;
-
-  // Category + Severity
   category: RiskCategory;
   severity: RiskSeverity;
-
-  // Versioning
-  version: number;             // increment whenever body or meaning changes
-
-  // Content
-  title: string;               // Short, clinic-facing
-  body: string;                // Patient-facing legal-text
-  procedureCodes?: string[];   // Optional CDT linking
+  version: number;
+  title: string;
+  body: string;
+  procedureCodes?: string[];
   activeByDefault: boolean;
-
-  // Governance / Compliance Metadata
-  createdBy: string;           // userId or "system_seed"
-  createdAt: string;           // ISO date
-  jurisdictionNote?: string;   // "US general", "CA-specific", etc.
-
-  reviewedByClinicianId?: string; // dentist reviewing
-  reviewedByLegalId?: string;     // legal/compliance reviewer
-  reviewedAt?: string;            // ISO date
-
-  isApprovedForProduction: boolean; // must be true to show in live clinics
-
-  // Audit lifecycle (soft delete)
-  deprecatedAt?: string;       // when this item version gets retired
-  replacedById?: string;       // points to the new version id
-  
-  // Multi-tenancy
-  tenantId?: string | null;    // null = Global, string = Clinic Override
+  createdBy: string;
+  createdAt: string;
+  jurisdictionNote?: string;
+  reviewedByClinicianId?: string;
+  reviewedByLegalId?: string;
+  reviewedAt?: string;
+  isApprovedForProduction: boolean;
+  deprecatedAt?: string;
+  replacedById?: string;
+  tenantId?: string | null;
 }
 
 // FINAL PRODUCTION MODEL
 export interface AssignedRisk {
   id: string;
-
-  // Linkage
   tenantId: string;
   patientId: string;
   treatmentPlanId: string;
   treatmentItemId?: string;
   phaseId?: string;
   clinicalNoteId?: string;
-
-  // Library Reference
   riskLibraryItemId: string;
   riskLibraryVersion: number;
-
-  // Snapshot (immutable)
   titleSnapshot: string;
   bodySnapshot: string;
   severitySnapshot: RiskSeverity;
   categorySnapshot: string;
   cdtCodesSnapshot?: string[];
-
-  // Consent metadata
   consentMethod: 'VERBAL' | 'WRITTEN' | 'ELECTRONIC_SIGNATURE' | 'UNKNOWN';
   consentCapturedAt?: string;
   consentCapturedByUserId?: string;
   consentNote?: string;
-
-  // UI + ordering
   isActive: boolean;
   sortOrder: number;
   isExpanded?: boolean;
-
-  // Audit
   addedAt: string;
   addedByUserId: string;
   lastUpdatedAt: string;
   lastUpdatedByUserId?: string;
-
   removedAt?: string;
   removedByUserId?: string;
 }
 
 // --- AUDIT & EVENT LOGGING ---
 
-export type RiskEventType =
-  | 'RISK_ASSIGNED'
-  | 'RISK_REMOVED'
-  | 'CONSENT_CAPTURED';
+export type RiskEventType = 'RISK_ASSIGNED' | 'RISK_REMOVED' | 'CONSENT_CAPTURED';
 
 export interface RiskEvent {
   id: string;
@@ -179,17 +148,12 @@ export interface RiskEvent {
   assignedRiskId?: string;
   riskLibraryItemId?: string;
   eventType: RiskEventType;
-  details?: string;          // freeform JSON-ish string or human note
-  occurredAt: string;        // ISO datetime
-  userId: string;            // who performed the action
+  details?: string;
+  occurredAt: string;
+  userId: string;
 }
 
-/**
- * Audit Log Helper
- * In a real application, this would send the event to a secure backend endpoint.
- */
 export const recordRiskEvent = (event: RiskEvent) => {
-  // TODO: send to backend audit log endpoint.
   if (process.env.NODE_ENV !== 'production') {
     console.log('[AUDIT LOG]', event.eventType, event);
   }
@@ -199,39 +163,39 @@ export const recordRiskEvent = (event: RiskEvent) => {
 export interface ProcedureTemplate {
   cdtCode: string;
   label: string;
-  category: string; // Matches ProcedureCategory or general string
+  category: string;
   toothContext: 'single_tooth' | 'multi_teeth' | 'quadrant' | 'arch' | 'full_mouth' | 'not_applicable';
-  
   subjectiveTemplate: string;
   objectiveTemplate: string;
   assessmentTemplate: string;
   treatmentPerformedTemplate: string;
   planTemplate: string;
-  
   suggestedRiskLabels: string[];
   complianceChecklist: string[];
+  version: number;
+  createdBy: string;
+  jurisdictionNote?: string;
+  reviewedByClinicianId?: string;
+  reviewedByLegalId?: string;
+  reviewedAt?: string;
+  isApprovedForProduction: boolean;
+}
 
-  // Governance / Compliance Meta
-  version: number;                    // semantic version for this template
-  createdBy: string;                  // e.g. "system_seed", "dr_smith"
-  jurisdictionNote?: string;          // e.g. "Drafted for US; state-level review required."
-  reviewedByClinicianId?: string;     // user id of reviewing dentist
-  reviewedByLegalId?: string;         // user id of legal/compliance reviewer
-  reviewedAt?: string;                // ISO datetime string
-  isApprovedForProduction: boolean;   // must be true before used in live clinics
+// --- NARROW INPUT FOR NOTE ENGINE ---
+export interface NoteEngineProcedureInput {
+  id: string;
+  procedureName: string;
+  procedureCode?: string;
+  selectedTeeth?: ToothNumber[];
+  selectedQuadrants?: string[];
+  selectedArches?: string[];
+  surfaces?: string[];
 }
 
 // --- RISK VALIDATOR ---
 const RISKY_PHRASES: string[] = [
-  "guarantee",
-  "guaranteed",
-  "will definitely",
-  "no risk",
-  "zero risk",
-  "complication-free",
-  "100% success",
-  "permanent solution",
-  "permanent fix"
+  "guarantee", "guaranteed", "will definitely", "no risk", "zero risk",
+  "complication-free", "100% success", "permanent solution", "permanent fix"
 ];
 
 export function validateTemplateForRisk(template: ProcedureTemplate): string[] {
@@ -242,44 +206,34 @@ export function validateTemplateForRisk(template: ProcedureTemplate): string[] {
     template.treatmentPerformedTemplate,
     template.planTemplate,
   ];
-
   const text = fieldsToCheck.join(" ").toLowerCase();
   const violations: string[] = [];
-
   for (const phrase of RISKY_PHRASES) {
     if (text.includes(phrase.toLowerCase())) {
       violations.push(phrase);
     }
   }
-
   return violations;
 }
 
-/**
- * Validates a risk library item for dangerous or non-compliant language.
- * Use this before setting isApprovedForProduction = true.
- */
 export function validateRiskItemForLanguage(item: RiskLibraryItem): string[] {
   const text = `${item.title} ${item.body}`.toLowerCase();
   const violations: string[] = [];
-
   for (const phrase of RISKY_PHRASES) {
     if (text.includes(phrase.toLowerCase())) {
       violations.push(phrase);
     }
   }
-
   return violations;
 }
 
-// Legacy support for existing components
+// Legacy support
 export interface ClinicalNote {
   id: string;
   patientId: string;
   visitId: string;
   visitType: VisitType;
   dateTime: string;
-  // Legacy fields mapped to sections
   chiefComplaint: string;
   objectiveFindings: {
     oralExam: string;
@@ -300,59 +254,18 @@ export interface ClinicalNote {
 }
 
 // --- Mock Data ---
-
 export const mockPatientChart: PatientChart = {
   patientId: "demo-patient-1",
   patientName: "John Doe",
   teeth: [
     {
       toothNumber: "14",
-      conditions: [
-        {
-          id: "cond-14-fracture",
-          toothNumber: "14",
-          label: "Fractured cusp",
-          createdAt: new Date().toISOString(),
-          source: "charting"
-        }
-      ],
-      procedures: [
-        {
-          id: "proc-14-crown",
-          toothNumber: "14",
-          code: "D2740",
-          name: "Crown - ceramic/porcelain",
-          status: "planned",
-          phase: 1,
-          visitId: "visit-restorative-1",
-          createdAt: new Date().toISOString()
-        }
-      ],
+      conditions: [{ id: "cond-14-fracture", toothNumber: "14", label: "Fractured cusp", createdAt: new Date().toISOString(), source: "charting" }],
+      procedures: [{ id: "proc-14-crown", toothNumber: "14", code: "D2740", name: "Crown - ceramic/porcelain", status: "planned", phase: 1, visitId: "visit-restorative-1", createdAt: new Date().toISOString() }],
       notes: [],
-      radiographs: [
-        {
-          id: "rad-pa-14",
-          type: "PA",
-          label: "PA #14",
-          toothNumbers: ["14"]
-        }
-      ]
+      radiographs: [{ id: "rad-pa-14", type: "PA", label: "PA #14", toothNumbers: ["14"] }]
     },
-    {
-      toothNumber: "30",
-      conditions: [],
-      procedures: [],
-      notes: [],
-      radiographs: []
-    }
+    { toothNumber: "30", conditions: [], procedures: [], notes: [], radiographs: [] }
   ],
-  visits: [
-    {
-      id: "visit-restorative-1",
-      patientId: "demo-patient-1",
-      type: "restorative",
-      dateTime: new Date().toISOString(),
-      chiefComplaint: "Cold sensitivity and fracture on upper left."
-    }
-  ]
+  visits: [{ id: "visit-restorative-1", patientId: "demo-patient-1", type: "restorative", dateTime: new Date().toISOString(), chiefComplaint: "Cold sensitivity and fracture on upper left." }]
 };

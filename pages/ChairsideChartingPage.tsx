@@ -9,7 +9,7 @@ import { NotesComposer } from '../components/charting/NotesComposer';
 import { RadiographViewer } from '../components/charting/RadiographViewer';
 import { QuickNoteDrawer } from '../components/charting/QuickNoteDrawer';
 import { useParams } from 'react-router-dom';
-import { PatientChart, ToothRecord, ToothNumber, mockPatientChart } from '../domain/dentalTypes';
+import { PatientChart, ToothRecord, ToothNumber, mockPatientChart } from '../src/domain/dentalTypes';
 
 const ChartingLayout = () => {
   const { currentView, selectedTeeth, activeComposer } = useChairside();

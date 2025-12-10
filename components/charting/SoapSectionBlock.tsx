@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { Edit2, Mic, Check, X, Wand2, ChevronRight, Stethoscope, RotateCcw, Lock } from 'lucide-react';
-import { SoapSection } from '../../domain/dentalTypes';
+import { SoapSection } from '../../src/domain/dentalTypes';
 import { useChairside } from '../../context/ChairsideContext';
 
 interface SoapSectionBlockProps {

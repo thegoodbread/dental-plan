@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useChairside } from '../../context/ChairsideContext';
 import { 
@@ -6,8 +7,8 @@ import {
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
-import { ToothNumber, ToothRecord, SoapSection, AssignedRisk, RiskLibraryItem, SoapSectionType, recordRiskEvent, VisitType } from '../../domain/dentalTypes';
-import { RISK_LIBRARY } from '../../domain/riskLibrary';
+import { ToothNumber, ToothRecord, SoapSection, AssignedRisk, RiskLibraryItem, SoapSectionType, recordRiskEvent, VisitType } from '../../src/domain/dentalTypes';
+import { RISK_LIBRARY } from '../../src/domain/riskLibrary';
 import { SoapSectionBlock } from './SoapSectionBlock';
 import { RiskLibraryPanel } from './RiskLibraryPanel';
 import { AssignedRiskRow } from './AssignedRiskRow';

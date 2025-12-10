@@ -1,9 +1,8 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ChairsideViewMode, TimelineEvent, QuickActionType } from '../types/charting';
-import { SoapSection, SoapSectionType, ToothNumber, VisitType } from '../domain/dentalTypes';
-import { TreatmentPlanItem } from '../types';
-import { applyTemplateToSoapSections } from '../domain/procedureNoteEngine';
+import { SoapSection, SoapSectionType, ToothNumber, VisitType, NoteEngineProcedureInput } from '../src/domain/dentalTypes';
+import { applyTemplateToSoapSections } from '../src/domain/procedureNoteEngine';
 
 // Lightweight snapshot for Undo functionality
 interface UndoSnapshot {
@@ -36,7 +35,7 @@ interface ChairsideContextType {
   // SOAP State
   soapSections: SoapSection[];
   updateSoapSection: (id: string, content: string) => void;
-  updateCurrentNoteSectionsFromProcedure: (item: TreatmentPlanItem, visitType: VisitType) => void;
+  updateCurrentNoteSectionsFromProcedure: (item: NoteEngineProcedureInput, visitType: VisitType) => void;
   
   // Note Status & Persistence
   noteStatus: 'draft' | 'signed';
@@ -234,13 +233,14 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     triggerAutoSave(updated, noteStatus);
   };
 
-  const updateCurrentNoteSectionsFromProcedure = (item: TreatmentPlanItem, visitType: VisitType) => {
+  const updateCurrentNoteSectionsFromProcedure = (item: NoteEngineProcedureInput, visitType: VisitType) => {
     if (noteStatus === 'signed') return; // LOCK: No appends allowed
 
     const { updatedSections } = applyTemplateToSoapSections({
         item,
         visitType, // Passed directly, required
-        selectedTeeth: item.selectedTeeth?.map(t => Number(t)) ?? undefined,
+        // Explicitly convert string ToothNumber to number if needed by engine logic
+        selectedTeeth: item.selectedTeeth?.map(t => Number(t)),
         existingSections: soapSections
     });
 

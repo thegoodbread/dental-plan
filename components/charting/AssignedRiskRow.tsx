@@ -3,7 +3,7 @@ import React from 'react';
 import { Trash2, GripVertical, ChevronDown, Check, User } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AssignedRisk, RiskSeverity } from '../../domain/dentalTypes';
+import { AssignedRisk, RiskSeverity } from '../../src/domain/dentalTypes';
 
 interface AssignedRiskRowProps {
   risk: AssignedRisk;
