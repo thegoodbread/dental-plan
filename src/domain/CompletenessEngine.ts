@@ -16,6 +16,10 @@ const isEndo = (item: TreatmentPlanItem) => hasCode(item, 'D3');
 const isExtraction = (item: TreatmentPlanItem) => hasCode(item, 'D7');
 const isPerio = (item: TreatmentPlanItem) => hasCode(item, 'D4');
 
+// Extension Points for Future Families
+const isImplant = (item: TreatmentPlanItem) => hasCode(item, 'D6');
+const isSedation = (item: TreatmentPlanItem) => hasCode(item, 'D92');
+
 export function evaluateVisitCompleteness(
   visit: Visit,
   procedures: TreatmentPlanItem[],
@@ -62,9 +66,6 @@ export function evaluateVisitCompleteness(
        check(!!p.surfaces && p.surfaces.length > 0, `${code}: Surfaces missing.`);
        check(!!p.diagnosisCodes && p.diagnosisCodes.length >= 1, `${code}: Diagnosis code required.`);
        check(!!visit.radiographicFindings, `${code}: Radiographic findings required.`);
-       // Restorative risks are often generic, but should still match category if possible. 
-       // For broad restorative, we relax slightly to allow category match if exact code missing, 
-       // but here we stick to the requested "tight" logic.
        check(activeRisksForProcedure.length > 0, `${code}: At least one risk linked to this procedure must be assigned.`);
     }
 
@@ -101,6 +102,19 @@ export function evaluateVisitCompleteness(
         if (!visit.radiographicFindings) {
             warnings.push(`${code}: Radiographic findings encouraged.`);
         }
+    }
+
+    // Implants (D6xxx) - Scaffolding
+    if (isImplant(p)) {
+        check(!!p.diagnosisCodes && p.diagnosisCodes.length >= 1, `${code}: Diagnosis code required for implant.`);
+        check(activeRisksForProcedure.length > 0, `${code}: Implant consent risk required.`);
+        // Future: Check for Lot #, Torque, etc.
+    }
+
+    // Sedation (D92xx) - Scaffolding
+    if (isSedation(p)) {
+        check(activeRisksForProcedure.length > 0, `${code}: Sedation consent risk required.`);
+        // Future: Check for start/stop times, vitals log.
     }
   });
 

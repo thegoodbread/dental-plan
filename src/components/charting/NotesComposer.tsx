@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useChairside } from '../../context/ChairsideContext';
 import { GoogleGenAI } from "@google/genai";
 import { 
-  ArrowLeft, Save, PanelRightClose, PanelRightOpen, ShieldCheck, AlertTriangle, Wand2, Lightbulb, Activity, CheckCircle2, Plus, X, Trash2, Clock, Lock, FileText
+  ArrowLeft, Save, PanelRightClose, PanelRightOpen, ShieldCheck, AlertTriangle, Wand2, Lightbulb, Activity, CheckCircle2, Plus, X, Trash2, Clock, Lock, FileText, AlertCircle
 } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -415,6 +415,10 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
   const [radiographicFindings, setRadiographicFindings] = useState('');
   const [localChiefComplaint, setLocalChiefComplaint] = useState(propCC || '');
   const [completeness, setCompleteness] = useState<CompletenessResult | null>(null);
+  
+  // Signing Modal State
+  const [showSignModal, setShowSignModal] = useState(false);
+  const [signOverrideReason, setSignOverrideReason] = useState('');
 
   useEffect(() => {
       setLocalChiefComplaint(propCC || '');
@@ -543,8 +547,8 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
   };
 
   // --- SAVE HANDLER REPLACEMENT (Pure Schema) ---
-  const handleSmartSave = () => {
-      if (isLocked) return;
+  const handleSmartSave = (): CompletenessResult => {
+      if (isLocked && completeness) return completeness;
 
       // 1. Gather data
       const { items } = loadTreatmentPlanWithItems(currentTreatmentPlanId) || { items: [] };
@@ -625,26 +629,41 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
       // 5. Persist
       if (onSave) onSave(); // Custom override (e.g. saves to Visit record)
       else saveCurrentNote(); // Context save
+      
+      return completenessResult;
   };
 
   const handleFinalize = () => {
       if (isLocked) return;
-      if (window.confirm("Sign this clinical note? This will lock the note from further editing.")) {
-          // Use provided override if available, otherwise default context
-          if (onSign) {
-              onSign();
-          } else {
-              signNote();
-          }
-          
-          addTimelineEvent({
-            type: 'NOTE',
-            title: 'Clinical Note Signed',
-            details: 'Comprehensive SOAP note finalized and locked.',
-            provider: 'Dr. Smith'
-          });
-          if (viewMode === 'page') setCurrentView('DASHBOARD');
+      // Ensure we have the latest completeness check
+      const result = handleSmartSave();
+      // Show custom modal instead of window.confirm
+      setShowSignModal(true);
+  };
+
+  const performSign = () => {
+      // Use provided override if available, otherwise default context
+      if (onSign) {
+          onSign();
+      } else {
+          signNote();
       }
+      
+      const isOverride = completeness && completeness.score < 90;
+      
+      addTimelineEvent({
+        type: 'NOTE',
+        title: isOverride ? 'Clinical Note Signed with Override' : 'Clinical Note Signed',
+        details: isOverride 
+            ? `Note signed with completeness score ${completeness?.score}%. Override reason: ${signOverrideReason}`
+            : `Note signed with completeness score ${completeness?.score}%.`,
+        provider: 'Dr. Smith'
+      });
+      
+      setShowSignModal(false);
+      setSignOverrideReason('');
+      
+      if (viewMode === 'page') setCurrentView('DASHBOARD');
   };
 
   // --- HELPER LOGIC FOR AI & CHART FINDINGS ---
@@ -739,6 +758,76 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
         onChiefComplaintChange={setLocalChiefComplaint}
         completeness={completeness}
       />
+
+      {/* SIGNING MODAL */}
+      {showSignModal && completeness && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col">
+                <div className={`px-6 py-4 border-b ${completeness.score < 90 ? 'bg-amber-50 border-amber-100' : 'bg-green-50 border-green-100'}`}>
+                    <h3 className={`text-lg font-bold ${completeness.score < 90 ? 'text-amber-800' : 'text-green-800'}`}>
+                        {completeness.score < 90 ? 'Completeness Check Failed' : 'Ready to Sign'}
+                    </h3>
+                    <div className="text-sm font-medium opacity-80">
+                        Score: {completeness.score}%
+                    </div>
+                </div>
+                
+                <div className="p-6 space-y-4">
+                    {completeness.score < 90 ? (
+                        <>
+                            <p className="text-sm text-gray-600">
+                                The following requirements are missing:
+                            </p>
+                            <ul className="list-disc list-inside text-sm text-red-600 font-medium bg-red-50 p-3 rounded-lg border border-red-100">
+                                {completeness.missing.map((m, i) => <li key={i}>{m}</li>)}
+                            </ul>
+                            {completeness.warnings.length > 0 && (
+                                 <div className="text-xs text-amber-600 mt-2 flex items-start gap-1">
+                                    <AlertCircle size={12} className="mt-0.5 shrink-0" />
+                                    <span>Also noted: {completeness.warnings.join(', ')}</span>
+                                 </div>
+                            )}
+                            
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Override Reason (Required)</label>
+                                <textarea 
+                                    className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                                    placeholder="Why are you signing incomplete documentation?"
+                                    value={signOverrideReason}
+                                    onChange={e => setSignOverrideReason(e.target.value)}
+                                    rows={2}
+                                />
+                            </div>
+                        </>
+                    ) : (
+                        <p className="text-gray-600">
+                            This note meets all documentation standards. Proceed to sign and lock?
+                        </p>
+                    )}
+                </div>
+
+                <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
+                    <button 
+                        onClick={() => { setShowSignModal(false); setSignOverrideReason(''); }}
+                        className="px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button 
+                        onClick={performSign}
+                        disabled={completeness.score < 90 && signOverrideReason.length < 5}
+                        className={`px-4 py-2 text-sm font-bold text-white rounded-lg shadow-sm transition-all ${
+                            completeness.score < 90 
+                            ? 'bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed'
+                            : 'bg-green-600 hover:bg-green-700'
+                        }`}
+                    >
+                        {completeness.score < 90 ? 'Sign Anyway' : 'Sign & Lock'}
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
     </div>
   );
 };
