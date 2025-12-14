@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useChairside } from '../../context/ChairsideContext';
 import { X, Save, User, ChevronDown, Check, ChevronRight, StickyNote, AlertCircle } from 'lucide-react';
-import { ToothNumber, VisitType, NoteEngineProcedureInput } from '../../src/domain/dentalTypes';
+import { ToothNumber, VisitType, NoteEngineProcedureInput } from '../../domain/dentalTypes';
 
 const SURFACES = ['M', 'O', 'D', 'B', 'L', 'I', 'F']; 
 const PROVIDERS = ['Dr. Smith', 'Dr. Patel', 'Sarah (RDH)', 'Mike (DA)'];

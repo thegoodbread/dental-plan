@@ -1,8 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Edit2, Mic, Check, X, Wand2, ChevronRight, Stethoscope, RotateCcw, Lock } from 'lucide-react';
-import { SoapSection } from '../../src/domain/dentalTypes';
-import { useChairside } from '../../context/ChairsideContext';
+import { SoapSection } from '../../domain/dentalTypes';
 
 interface SoapSectionBlockProps {
   section: SoapSection;
@@ -14,6 +13,7 @@ interface SoapSectionBlockProps {
   undoSnapshot?: { sourceLabel: string };
   onUndo?: () => void;
   onDismissUndo?: () => void;
+  isLocked?: boolean;
 }
 
 export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
@@ -25,11 +25,9 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
   onInsertChartFindings,
   undoSnapshot,
   onUndo,
-  onDismissUndo
+  onDismissUndo,
+  isLocked = false
 }) => {
-  const { noteStatus } = useChairside();
-  const isLocked = noteStatus === 'signed';
-
   const [isEditing, setIsEditing] = useState(false);
   const [draftContent, setDraftContent] = useState(section.content);
   const [isExpanded, setIsExpanded] = useState(!!section.content);

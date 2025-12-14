@@ -1,0 +1,532 @@
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useChairside } from '../../context/ChairsideContext';
+import { 
+  ArrowLeft, Save, PanelRightClose, PanelRightOpen, ShieldCheck, AlertTriangle, Wand2, Lightbulb, Activity, CheckCircle2, Plus, X, Trash2, Clock, Lock
+} from 'lucide-react';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+
+import { ToothNumber, ToothRecord, SoapSection, AssignedRisk, RiskLibraryItem, SoapSectionType, recordRiskEvent, VisitType } from '../../domain/dentalTypes';
+import { RISK_LIBRARY } from '../../domain/riskLibrary';
+import { SoapSectionBlock } from './SoapSectionBlock';
+import { RiskLibraryPanel } from './RiskLibraryPanel';
+import { AssignedRiskRow } from './AssignedRiskRow';
+
+// --- SHARED UTILS & TYPES ---
+
+const QUICK_ACTION_TO_CODES: Record<string, string[]> = {
+  'Composite': ['D2391', 'D2392', 'D2393'],
+  'Crown': ['D2740', 'D2950'],
+  'Extraction': ['D7140', 'D7210'],
+  'Root Canal': ['D3310', 'D3320', 'D3330'],
+  'Implant': ['D6010'],
+  'Exam': ['D0150', 'D0120'],
+  'Perio': ['D4341', 'D4910']
+};
+
+function getSuggestedRiskIdsForProcedures(codes: string[]): string[] {
+  const normalizedCodes = new Set(codes.map(c => c.toUpperCase()));
+  const suggestions = new Set<string>();
+
+  RISK_LIBRARY.forEach(risk => {
+    if (risk.procedureCodes && risk.procedureCodes.some(code => normalizedCodes.has(code))) {
+      suggestions.add(risk.id);
+    }
+  });
+
+  return Array.from(suggestions);
+}
+
+// Reusable Pure UI Component
+export interface ClinicalNoteEditorProps {
+  soapSections: SoapSection[];
+  onUpdateSoapSection: (id: string, content: string) => void;
+  assignedRisks: AssignedRisk[];
+  onAssignRisk: (risk: RiskLibraryItem) => void;
+  onRemoveRisk: (id: string) => void;
+  onToggleRiskExpand: (id: string) => void;
+  onUpdateConsent: (id: string, updates: Partial<AssignedRisk>) => void;
+  onReorderRisks: (oldIndex: number, newIndex: number) => void;
+  suggestedRiskIds: string[];
+  
+  isLocked: boolean;
+  contextLabel: string;
+  contextSubLabel?: React.ReactNode;
+  
+  onSave?: () => void;
+  onSign?: () => void;
+  lastSavedAt?: string;
+  
+  viewMode: 'drawer' | 'page';
+  showRiskPanel?: boolean;
+  onToggleRiskPanel?: () => void;
+  
+  // Optional features
+  undoSnapshotProvider?: (sectionId: string) => { sourceLabel: string } | undefined;
+  onUndo?: (sectionId: string) => void;
+  onDismissUndo?: (sectionId: string) => void;
+  onGenerateAiDraft?: (sectionType: SoapSectionType) => Promise<void>;
+  onInsertChartFindings?: (sectionType: SoapSectionType) => void;
+  
+  // IDs for context (Risk Library needs tenant)
+  currentTenantId: string;
+}
+
+export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => {
+  const {
+    soapSections, onUpdateSoapSection,
+    assignedRisks, onAssignRisk, onRemoveRisk, onToggleRiskExpand, onUpdateConsent, onReorderRisks, suggestedRiskIds,
+    isLocked, contextLabel, contextSubLabel,
+    onSave, onSign, lastSavedAt,
+    viewMode, showRiskPanel, onToggleRiskPanel,
+    undoSnapshotProvider, onUndo, onDismissUndo,
+    onGenerateAiDraft, onInsertChartFindings,
+    currentTenantId
+  } = props;
+
+  const riskSectionRef = useRef<HTMLDivElement>(null);
+  const activeRisks = assignedRisks.filter(r => r.isActive).sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor)
+  );
+
+  const displayedSections = soapSections.filter(s => {
+      if (viewMode === 'drawer') {
+          return ['SUBJECTIVE', 'OBJECTIVE', 'ASSESSMENT', 'PLAN'].includes(s.type);
+      }
+      return true; 
+  });
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    if (isLocked) return;
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = activeRisks.findIndex((r) => r.id === active.id);
+    const newIndex = activeRisks.findIndex((r) => r.id === over.id);
+    if (oldIndex !== -1 && newIndex !== -1) {
+        onReorderRisks(oldIndex, newIndex);
+    }
+  };
+
+  return (
+    <div className="flex-1 flex overflow-hidden h-full">
+        {/* LEFT COLUMN: SOAP Content */}
+        <div className="flex-1 overflow-y-auto relative bg-slate-100 custom-scrollbar">
+          {/* HEADER IN PAGE MODE */}
+          {viewMode === 'page' && (
+            <>
+              <div className="bg-white border-b border-slate-300 flex items-center justify-between px-4 py-2.5 shadow-sm z-30 sticky top-0">
+                <div className="flex items-center gap-4">
+                  <h2 className="text-lg font-bold text-slate-800">Clinical Note Editor</h2>
+                  {isLocked && (
+                      <span className="px-2 py-0.5 bg-slate-100 border border-slate-300 rounded text-xs font-bold text-slate-500 flex items-center gap-1">
+                          <Lock size={12} /> SIGNED
+                      </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  {lastSavedAt && (
+                      <span className="text-[10px] text-slate-400 font-medium mr-2 flex items-center gap-1">
+                          <Clock size={10} /> Saved {new Date(lastSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                  )}
+                  {!isLocked && onSave && (
+                      <button onClick={onSave} className="h-9 px-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-md shadow-sm transition-all">
+                          Save
+                      </button>
+                  )}
+                  {!isLocked && onSign && (
+                      <button onClick={onSign} className="h-9 px-4 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-md shadow-sm flex items-center gap-2 transition-all">
+                          <Save size={16} /> Sign
+                      </button>
+                  )}
+                  {onToggleRiskPanel && (
+                    <button onClick={onToggleRiskPanel} className={`p-2 rounded-md border transition-all hidden md:flex ${showRiskPanel ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'}`} title={showRiskPanel ? "Hide Library" : "Show Library"}>
+                        {showRiskPanel ? <PanelRightOpen size={18} /> : <PanelRightClose size={18} />}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="bg-blue-50/50 border-b border-blue-100 px-4 py-2 flex items-center justify-between text-xs text-blue-800">
+                <div className="flex items-center gap-3">
+                    <span className="font-bold bg-white px-2 py-0.5 rounded border border-blue-200 shadow-sm">
+                        {contextLabel}
+                    </span>
+                    {contextSubLabel}
+                </div>
+                <div className="flex items-center gap-1 font-medium">
+                    <ShieldCheck size={12} className={activeRisks.length > 0 ? "text-green-600" : "text-slate-400"} />
+                    <span>{activeRisks.length} active risks</span>
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className={`mx-auto p-4 space-y-4 pb-20 ${viewMode === 'page' ? 'max-w-4xl' : 'max-w-full'}`}>
+            {displayedSections.map(section => (
+                <SoapSectionBlock 
+                    key={section.id} 
+                    section={section}
+                    contextLabel={contextLabel}
+                    onSave={onUpdateSoapSection}
+                    onDictate={isLocked ? undefined : () => alert("Dictation placeholder")}
+                    onAiDraft={isLocked || !onGenerateAiDraft ? undefined : () => onGenerateAiDraft(section.type)}
+                    onInsertChartFindings={isLocked || !onInsertChartFindings ? undefined : (section.type === 'OBJECTIVE' ? () => onInsertChartFindings('OBJECTIVE') : undefined)}
+                    undoSnapshot={undoSnapshotProvider ? undoSnapshotProvider(section.id) : undefined}
+                    onUndo={onUndo ? () => onUndo(section.id) : undefined}
+                    onDismissUndo={onDismissUndo ? () => onDismissUndo(section.id) : undefined}
+                    isLocked={isLocked}
+                />
+            ))}
+
+            {/* --- IN-FLOW RISKS SECTION --- */}
+            <div ref={riskSectionRef} className="pt-2">
+                <div className="flex items-center gap-3 mb-2 px-1">
+                    <div className="h-px bg-slate-300 flex-1"></div>
+                    <div className="flex items-center gap-2 text-slate-500">
+                        <ShieldCheck size={14} />
+                        <span className="text-[10px] font-bold uppercase tracking-widest">Informed Consent & Risks</span>
+                    </div>
+                    <div className="h-px bg-slate-300 flex-1"></div>
+                </div>
+
+                <div className="bg-slate-50 rounded-lg border border-slate-200 p-3 shadow-inner">
+                    {/* SUGGESTED RISKS */}
+                    {suggestedRiskIds.length > 0 && !isLocked && (
+                        <div className="mb-4">
+                            <div className="flex items-center gap-1.5 mb-2 text-[10px] font-bold text-amber-600 uppercase tracking-wider">
+                                <Lightbulb size={12} /> Recommended based on procedures
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {suggestedRiskIds.map(riskId => {
+                                    const risk = RISK_LIBRARY.find(r => r.id === riskId);
+                                    if (!risk) return null;
+                                    if (activeRisks.some(ar => ar.riskLibraryItemId === riskId)) return null;
+                                    return (
+                                        <button
+                                            key={risk.id}
+                                            onClick={() => onAssignRisk(risk)}
+                                            className="flex items-center gap-1 px-3 py-1.5 bg-white border border-amber-200 text-amber-900 text-xs rounded-full shadow-sm hover:bg-amber-50 hover:border-amber-300 transition-colors group"
+                                        >
+                                            <span className="font-medium">{risk.title}</span>
+                                            <span className="text-amber-500 group-hover:text-amber-700 bg-amber-50 group-hover:bg-amber-100 rounded-full w-4 h-4 flex items-center justify-center text-[10px] ml-1">
+                                                <Plus size={8} strokeWidth={3} />
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ASSIGNED RISKS LIST */}
+                    {activeRisks.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-4 text-slate-400">
+                            <p className="text-xs italic">No risks assigned.</p>
+                        </div>
+                    ) : (
+                        viewMode === 'drawer' || isLocked ? (
+                            <div className="space-y-2">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Assigned</div>
+                                {activeRisks.map(risk => (
+                                    <AssignedRiskRow 
+                                        key={risk.id}
+                                        risk={risk}
+                                        onToggleExpand={onToggleRiskExpand}
+                                        onRemove={isLocked ? () => {} : onRemoveRisk}
+                                        onUpdateConsent={isLocked ? () => {} : onUpdateConsent}
+                                    />
+                                ))}
+                            </div>
+                        ) : (
+                            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                                <SortableContext items={activeRisks.map(r => r.id)} strategy={verticalListSortingStrategy}>
+                                    <div className="space-y-1">
+                                        {activeRisks.map(risk => (
+                                            <AssignedRiskRow 
+                                                key={risk.id}
+                                                risk={risk}
+                                                onToggleExpand={onToggleRiskExpand}
+                                                onRemove={onRemoveRisk}
+                                                onUpdateConsent={onUpdateConsent}
+                                            />
+                                        ))}
+                                    </div>
+                                </SortableContext>
+                            </DndContext>
+                        )
+                    )}
+                </div>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN: RISK LIBRARY */}
+        {viewMode === 'page' && showRiskPanel && !isLocked && (
+          <div className={`shrink-0 bg-white border-l border-slate-300 shadow-xl z-20 w-[320px] md:w-[380px] h-full flex flex-col`}>
+             <RiskLibraryPanel 
+                assignedRiskIds={activeRisks.map(r => r.riskLibraryItemId)}
+                onAssignRisk={onAssignRisk}
+                tenantId={currentTenantId}
+             />
+          </div>
+        )}
+    </div>
+  );
+};
+
+// --- WRAPPER FOR CHARTING CONTEXT ---
+
+interface NotesComposerProps {
+  activeToothNumber: ToothNumber | null;
+  activeToothRecord: ToothRecord | null;
+  onToothClick: (tooth: ToothNumber) => void;
+  activeTreatmentItemId?: string | null;
+  activePhaseId?: string | number | null;
+  viewMode: 'drawer' | 'page'; // Strict UI Mode
+  pendingProcedure?: { label: string; teeth: ToothNumber[] };
+}
+
+const generateId = () => Math.random().toString(36).substr(2, 9);
+
+export const NotesComposer: React.FC<NotesComposerProps> = ({ 
+  activeToothNumber,
+  activeToothRecord,
+  activeTreatmentItemId,
+  activePhaseId,
+  viewMode, 
+  pendingProcedure
+}) => {
+  const { 
+      setCurrentView, 
+      addTimelineEvent,
+      currentTenantId,
+      currentPatientId,
+      currentTreatmentPlanId,
+      currentNoteId,
+      currentUserId,
+      soapSections,
+      updateSoapSection,
+      saveCurrentNote,
+      signNote,
+      lastSavedAt,
+      noteStatus,
+      undoSnapshots,
+      undoAppend,
+      dismissUndo
+  } = useChairside();
+  
+  const isLocked = noteStatus === 'signed';
+  const [assignedRisks, setAssignedRisks] = useState<AssignedRisk[]>([]);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+
+  // Load Risks specific to this context
+  const buildRiskStorageKey = () => `dental_assigned_risks:${currentPatientId}:${currentNoteId}`;
+
+  useEffect(() => {
+    const key = buildRiskStorageKey();
+    const storedRisks = localStorage.getItem(key);
+    if (storedRisks) {
+        try {
+            setAssignedRisks(JSON.parse(storedRisks));
+        } catch (e) { console.error("Failed to load risks", e); }
+    } else {
+        setAssignedRisks([]);
+    }
+  }, [currentPatientId, currentNoteId]);
+
+  const persistRisks = (risks: AssignedRisk[]) => {
+      if (isLocked) return;
+      const key = buildRiskStorageKey();
+      localStorage.setItem(key, JSON.stringify(risks));
+  };
+
+  const suggestedRiskIds = useMemo(() => {
+    let codes: string[] = [];
+    if (pendingProcedure) {
+        const mapped = QUICK_ACTION_TO_CODES[pendingProcedure.label];
+        if (mapped) codes.push(...mapped);
+    }
+    if (activeToothRecord) {
+        codes.push(...activeToothRecord.procedures.map(p => p.code));
+    }
+    return getSuggestedRiskIdsForProcedures(codes);
+  }, [activeToothRecord, pendingProcedure]);
+
+  // Risk Handlers
+  const handleAssignRisk = (riskItem: RiskLibraryItem) => {
+      if (isLocked) return;
+      if (assignedRisks.some(r => r.riskLibraryItemId === riskItem.id && r.isActive)) return;
+
+      const activeCount = assignedRisks.filter(r => r.isActive).length;
+      const newAssignment: AssignedRisk = {
+          id: `ar-${generateId()}`,
+          tenantId: currentTenantId,
+          patientId: currentPatientId,
+          treatmentPlanId: currentTreatmentPlanId,
+          clinicalNoteId: currentNoteId,
+          treatmentItemId: activeTreatmentItemId ?? undefined,
+          phaseId: activePhaseId != null ? String(activePhaseId) : undefined,
+          riskLibraryItemId: riskItem.id,
+          riskLibraryVersion: riskItem.version || 1,
+          titleSnapshot: riskItem.title,
+          bodySnapshot: riskItem.body,
+          severitySnapshot: riskItem.severity,
+          categorySnapshot: riskItem.category,
+          cdtCodesSnapshot: riskItem.procedureCodes || [],
+          consentMethod: 'VERBAL',
+          isActive: true,
+          sortOrder: activeCount,
+          isExpanded: false,
+          addedAt: new Date().toISOString(),
+          addedByUserId: currentUserId,
+          lastUpdatedAt: new Date().toISOString(),
+      };
+
+      const updatedRisks = [...assignedRisks, newAssignment];
+      setAssignedRisks(updatedRisks);
+      persistRisks(updatedRisks);
+      
+      recordRiskEvent({
+        id: Math.random().toString(36).substring(2, 9),
+        tenantId: currentTenantId,
+        patientId: currentPatientId,
+        clinicalNoteId: currentNoteId,
+        treatmentPlanId: currentTreatmentPlanId,
+        riskLibraryItemId: riskItem.id,
+        eventType: 'RISK_ASSIGNED',
+        occurredAt: new Date().toISOString(),
+        userId: currentUserId,
+        details: 'Risk assigned via suggestion or manual selection'
+      });
+  };
+
+  const handleRemoveRisk = (id: string) => {
+      if (isLocked) return;
+      const updatedRisks = assignedRisks.map(r => 
+          r.id === id ? { ...r, isActive: false, removedAt: new Date().toISOString() } : r
+      );
+      setAssignedRisks(updatedRisks);
+      persistRisks(updatedRisks);
+  };
+
+  const handleToggleRiskExpand = (id: string) => {
+      const updatedRisks = assignedRisks.map(r => r.id === id ? { ...r, isExpanded: !r.isExpanded } : r);
+      setAssignedRisks(updatedRisks);
+      if (!isLocked) persistRisks(updatedRisks);
+  };
+
+  const handleUpdateConsent = (id: string, updates: Partial<AssignedRisk>) => {
+      if (isLocked) return;
+      const updatedRisks = assignedRisks.map(r => 
+          r.id === id ? { ...r, ...updates, lastUpdatedAt: new Date().toISOString() } : r
+      );
+      setAssignedRisks(updatedRisks);
+      persistRisks(updatedRisks);
+  };
+
+  const handleReorderRisks = (oldIndex: number, newIndex: number) => {
+      const activeItems = assignedRisks.filter(r => r.isActive).sort((a, b) => a.sortOrder - b.sortOrder);
+      const newOrder = arrayMove(activeItems, oldIndex, newIndex);
+      
+      const updatedActive = newOrder.map((risk, index) => ({
+        ...risk,
+        sortOrder: index,
+        lastUpdatedAt: new Date().toISOString()
+      }));
+      
+      const activeIds = new Set(updatedActive.map(r => r.id));
+      const others = assignedRisks.filter(r => !activeIds.has(r.id));
+      const finalList = [...updatedActive, ...others];
+      setAssignedRisks(finalList);
+      persistRisks(finalList);
+  };
+
+  const handleFinalize = () => {
+      if (isLocked) return;
+      if (window.confirm("Sign this clinical note? This will lock the note from further editing.")) {
+          signNote();
+          addTimelineEvent({
+            type: 'NOTE',
+            title: 'Clinical Note Signed',
+            details: 'Comprehensive SOAP note finalized and locked.',
+            provider: 'Dr. Smith'
+          });
+          if (viewMode === 'page') setCurrentView('DASHBOARD');
+      }
+  };
+
+  // Context Label Logic
+  let contextLabel = 'General Visit';
+  if (pendingProcedure) {
+      contextLabel = `${pendingProcedure.label} ${pendingProcedure.teeth.length > 0 ? '#' + pendingProcedure.teeth.join(',') : ''}`;
+  } else if (activeToothNumber) {
+      contextLabel = `Tooth #${activeToothNumber}`;
+  }
+
+  const subLabel = activeToothRecord && (
+    <div className="flex gap-2 text-blue-600">
+        <span className="flex items-center gap-1"><Activity size={12}/> {activeToothRecord.conditions.length} conditions</span>
+        <span className="opacity-50">|</span>
+        <span className="flex items-center gap-1"><CheckCircle2 size={12}/> {activeToothRecord.procedures.length} procedures</span>
+    </div>
+  );
+
+  const handleInsertChartFindings = (sectionType: SoapSectionType) => {
+    if (sectionType !== 'OBJECTIVE') return;
+    let textToInsert = "";
+    if (pendingProcedure) {
+        textToInsert += `Scheduled: ${pendingProcedure.label} ${pendingProcedure.teeth.length > 0 ? 'on #' + pendingProcedure.teeth.join(',#') : ''}. `;
+    }
+    if (activeToothRecord) {
+        textToInsert += `Tooth history loaded.`;
+    }
+    const objectiveSection = soapSections.find(s => s.type === 'OBJECTIVE');
+    if (objectiveSection) {
+        const newContent = objectiveSection.content ? `${objectiveSection.content}\n${textToInsert}` : textToInsert;
+        updateSoapSection(objectiveSection.id, newContent);
+    }
+  };
+
+  return (
+    <div className={`flex flex-col h-full bg-slate-100 font-sans text-slate-900 overflow-hidden`}>
+      {viewMode === 'page' && (
+        <div className="bg-white border-b border-slate-300 px-4 py-2.5 flex items-center justify-between shadow-sm z-30 shrink-0 sticky top-0">
+           <div className="flex items-center gap-4">
+              <button onClick={() => setCurrentView('DASHBOARD')} className="p-1.5 -ml-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"><ArrowLeft size={18} /></button>
+              <h2 className="text-lg font-bold text-slate-800">Clinical Note Editor (Chart)</h2>
+           </div>
+        </div>
+      )}
+      
+      <ClinicalNoteEditor
+        soapSections={soapSections}
+        onUpdateSoapSection={updateSoapSection}
+        assignedRisks={assignedRisks}
+        onAssignRisk={handleAssignRisk}
+        onRemoveRisk={handleRemoveRisk}
+        onToggleRiskExpand={handleToggleRiskExpand}
+        onUpdateConsent={handleUpdateConsent}
+        onReorderRisks={handleReorderRisks}
+        suggestedRiskIds={suggestedRiskIds}
+        isLocked={isLocked}
+        contextLabel={contextLabel}
+        contextSubLabel={subLabel}
+        onSave={() => saveCurrentNote()}
+        onSign={handleFinalize}
+        lastSavedAt={lastSavedAt}
+        viewMode={viewMode}
+        showRiskPanel={rightPanelOpen}
+        onToggleRiskPanel={() => setRightPanelOpen(!rightPanelOpen)}
+        undoSnapshotProvider={(id) => undoSnapshots[id]}
+        onUndo={undoAppend}
+        onDismissUndo={dismissUndo}
+        onInsertChartFindings={handleInsertChartFindings}
+        currentTenantId={currentTenantId}
+      />
+    </div>
+  );
+};

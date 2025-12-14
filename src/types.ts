@@ -1,6 +1,6 @@
 
 // Enums
-import { AssignedRisk } from './domain/dentalTypes';
+import { AssignedRisk, SoapSection } from './domain/dentalTypes';
 
 export type UserRole = 'DOCTOR' | 'TREATMENT_COORDINATOR' | 'ADMIN';
 
@@ -104,6 +104,13 @@ export interface Visit {
   claimPrepStatus?: 'NOT_STARTED' | 'IN_PROGRESS' | 'READY';
   claimId?: string;
   notes?: string;
+
+  // VISIT NOTES (SOAP)
+  clinicalNote?: string; // Final consolidated text
+  soapSections?: SoapSection[];
+  assignedRisks?: AssignedRisk[];
+  noteStatus?: 'draft' | 'signed';
+  noteSignedAt?: string;
 }
 
 // Entities

@@ -1,7 +1,6 @@
 
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { User, Calendar, ArrowRight } from 'lucide-react';
+import { User, Calendar } from 'lucide-react';
 
 const MOCK_PATIENTS = [
   { id: 'p1', name: 'John Doe', dob: '1985-04-12', lastVisit: '2023-11-15' },
@@ -11,13 +10,11 @@ const MOCK_PATIENTS = [
 ];
 
 export const PatientListPage = () => {
-  const navigate = useNavigate();
-
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Patient Charting</h1>
-        <p className="text-gray-500">Select a patient to open chairside chart</p>
+        <h1 className="text-2xl font-bold text-gray-900">Patients</h1>
+        <p className="text-gray-500">Manage patient records and history.</p>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -27,15 +24,13 @@ export const PatientListPage = () => {
                   <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Patient Name</th>
                   <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">DOB</th>
                   <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Last Visit</th>
-                  <th className="px-6 py-4"></th>
                </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
                {MOCK_PATIENTS.map(p => (
                  <tr 
                     key={p.id} 
-                    onClick={() => navigate(`/charting/${p.id}`)}
-                    className="hover:bg-blue-50 cursor-pointer transition-colors group"
+                    className="hover:bg-blue-50 transition-colors group"
                  >
                     <td className="px-6 py-4">
                        <div className="flex items-center gap-3">
@@ -47,9 +42,6 @@ export const PatientListPage = () => {
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">{p.dob}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">{p.lastVisit}</td>
-                    <td className="px-6 py-4 text-right">
-                       <ArrowRight className="text-gray-300 group-hover:text-blue-500" size={20} />
-                    </td>
                  </tr>
                ))}
             </tbody>

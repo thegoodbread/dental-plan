@@ -16,7 +16,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
     { icon: FileText, label: 'Treatment Plans', path: '/' }, // Reuse root for demo
     { icon: Users, label: 'Patients', path: '/patients' },
-    { icon: Activity, label: 'Chairside Charting', path: '/patients' }, // Added explicit item pointing to patient list
   ];
 
   return (
@@ -75,8 +74,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           {navItems.map((item) => {
             const isActive = 
                 (item.path === '/' && location.pathname === '/') ||
-                (item.path !== '/' && location.pathname.startsWith(item.path)) ||
-                (item.label === 'Chairside Charting' && location.pathname.startsWith('/charting'));
+                (item.path !== '/' && location.pathname.startsWith(item.path));
 
             const Icon = item.icon;
             return (

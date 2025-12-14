@@ -331,7 +331,14 @@ export function buildClaimNarrativeDraft(ctx: ClaimContext): string {
     ? new Date(ctx.visitDate).toLocaleDateString() 
     : 'today';
 
-  const toothStr = ctx.tooth ? ` on tooth #${ctx.tooth}` : '';
+  let toothStr = "";
+  if (ctx.tooth) {
+    const toothText = String(ctx.tooth);
+    toothStr = toothText.includes(",")
+      ? ` on teeth #${toothText}`
+      : ` on tooth #${toothText}`;
+  }
+  
   const surfaceStr = ctx.surface ? `, surface ${ctx.surface}` : '';
 
   // 1. Initial Statement
@@ -339,22 +346,186 @@ export function buildClaimNarrativeDraft(ctx: ClaimContext): string {
 
   // 2. Necessity Statement (Generalized based on code prefix)
   let sentence2 = "Treatment was clinically necessary to restore function and prevent disease progression.";
+  const code = ctx.procedureCode || "";
   
-  const codePrefix = ctx.procedureCode.substring(0, 3);
-  if (codePrefix.startsWith('D3')) { // Endo
+  if (code.startsWith("D33")) {
+    // Endodontic
     sentence2 = "Treatment required to resolve pulpal pathology and eliminate infection.";
-  } else if (codePrefix.startsWith('D4')) { // Perio
-    sentence2 = "Therapy required to arrest periodontal disease progression and reduce probing depths.";
-  } else if (codePrefix.startsWith('D7')) { // Surgery
+  } else if (code.startsWith("D43")) {
+    // Perio / SRP
+    sentence2 = "Therapy required to arrest periodontal disease progression and stabilize supporting structures.";
+  } else if (code.startsWith("D71") || code.startsWith("D72")) {
+    // Extractions
     sentence2 = "Extraction required due to non-restorable tooth structure or pathology.";
-  } else if (codePrefix.startsWith('D2') && parseInt(codePrefix[1]) > 6) { // Crowns (D27..)
-    sentence2 = "Full coverage restoration required due to extensive decay or fracture compromising structural integrity.";
-  } else if (codePrefix.startsWith('D6')) { // Implant/Bridge
-    sentence2 = "Prosthesis required to replace missing tooth and restore masticatory function.";
+  } else if (code.startsWith("D27")) {
+    // Crowns
+    sentence2 = "Full coverage restoration required due to extensive decay, fracture, or compromised tooth structure.";
+  } else if (code.startsWith("D60") || code.startsWith("D62")) {
+    // Implants / fixed prosthetics
+    sentence2 = "Prosthetic replacement required to restore missing tooth/teeth and masticatory function.";
   }
 
   // 3. Outcome Statement
   const sentence3 = "Post-operative outcome was stable with no immediate complications.";
 
   return `${sentence1} ${sentence2} ${sentence3}`;
+}
+
+// --- PAYER REQUIREMENT RULES ENGINE ---
+
+export type PayerId = 'GENERIC' | 'DELTA_PPO' | 'METLIFE_PPO' | 'MEDICAID_CA';
+
+export interface PayerRequirementRule {
+  payerId: PayerId;
+  cdtPattern: string; // e.g. "D2740", "D27*", "D4341", "D434*"
+  requiresDxCodes: boolean;
+  minDxCount?: number;
+  requiresNarrative: boolean;
+  requiresXray?: boolean;
+  requiresPhoto?: boolean;
+  requiresPerioChart?: boolean;
+  requiresFmxWithin36Months?: boolean;
+  notesForBiller?: string;
+}
+
+const PAYER_REQUIREMENT_RULES: PayerRequirementRule[] = [
+  {
+    payerId: 'GENERIC',
+    cdtPattern: 'D2740',
+    requiresDxCodes: true,
+    minDxCount: 1,
+    requiresNarrative: true,
+    requiresXray: true,
+    notesForBiller: 'Most payers expect pre-op PA or BW plus a short clinical narrative for crowns.'
+  },
+  {
+    payerId: 'GENERIC',
+    cdtPattern: 'D4341',
+    requiresDxCodes: true,
+    minDxCount: 1,
+    requiresNarrative: true,
+    requiresPerioChart: true,
+    notesForBiller: 'Scaling and root planing usually requires perio charting and clear diagnosis codes.'
+  },
+  {
+    payerId: 'GENERIC',
+    cdtPattern: 'D3330',
+    requiresDxCodes: true,
+    minDxCount: 1,
+    requiresNarrative: true,
+    requiresXray: true,
+    notesForBiller: 'Endodontic therapy generally needs pre-op x-ray and clinical necessity documented.'
+  }
+];
+
+export function findPayerRuleForItem(
+  item: TreatmentPlanItem,
+  payerId: PayerId
+): PayerRequirementRule | null {
+  const code = item.procedureCode || '';
+  if (!code) return null;
+
+  // 1. Prefer rules matching the specific payer
+  const candidateRules = PAYER_REQUIREMENT_RULES.filter(
+    r => r.payerId === payerId || r.payerId === 'GENERIC'
+  );
+
+  let bestMatch: PayerRequirementRule | null = null;
+  let bestScore = -1;
+
+  for (const rule of candidateRules) {
+    const pattern = rule.cdtPattern;
+    let matches = false;
+    let score = 0;
+
+    if (pattern.endsWith('*')) {
+      const prefix = pattern.slice(0, -1);
+      if (code.startsWith(prefix)) {
+        matches = true;
+        score = prefix.length; // longer prefix = more specific
+      }
+    } else if (pattern === code) {
+      matches = true;
+      score = 100; // exact match wins
+    }
+
+    if (matches) {
+       // Boost score if it matches the specific payerId
+       if (rule.payerId === payerId && payerId !== 'GENERIC') {
+           score += 50; 
+       }
+       
+       if (score > bestScore) {
+          bestMatch = rule;
+          bestScore = score;
+       }
+    }
+  }
+
+  return bestMatch;
+}
+
+export type ClaimRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
+
+export interface ClaimReadinessResult {
+  riskLevel: ClaimRiskLevel;
+  missing: string[];                 // human-readable list of missing elements
+  ruleApplied?: PayerRequirementRule; // removed null
+}
+
+export function evaluateClaimReadiness(
+  item: TreatmentPlanItem,
+  payerId: PayerId
+): ClaimReadinessResult {
+  const rule = findPayerRuleForItem(item, payerId);
+  const missing: string[] = [];
+
+  const dxCount = item.diagnosisCodes?.length || 0;
+  const doc = item.documentation || {};
+
+  if (rule) {
+    if (rule.requiresDxCodes && dxCount === 0) {
+      missing.push('Diagnosis code (ICD-10)');
+    }
+    if (rule.minDxCount && dxCount < rule.minDxCount) {
+      missing.push(`At least ${rule.minDxCount} diagnosis code(s)`);
+    }
+    if (rule.requiresNarrative && !doc.narrativeText) {
+      missing.push('Clinical narrative');
+    }
+    if (rule.requiresXray && !doc.hasXray) {
+      missing.push('Pre-op x-ray');
+    }
+    if (rule.requiresPhoto && !doc.hasPhoto) {
+      missing.push('Intraoral photo');
+    }
+    if (rule.requiresPerioChart && !doc.hasPerioChart) {
+      missing.push('Perio charting');
+    }
+    if (rule.requiresFmxWithin36Months && !doc.hasFmxWithin36Months) {
+      missing.push('FMX/Pano within last 36 months');
+    }
+  } else {
+    // No rule: generic expectations
+    if (!doc.narrativeText && dxCount === 0) {
+      missing.push('Diagnosis code or narrative for medical necessity');
+    }
+  }
+
+  let risk: ClaimRiskLevel = 'LOW';
+
+  if (!item.procedureStatus || item.procedureStatus !== 'COMPLETED') {
+    risk = 'HIGH';
+    missing.unshift('Procedure not marked completed');
+  } else if (missing.length >= 2) {
+    risk = 'HIGH';
+  } else if (missing.length === 1) {
+    risk = 'MEDIUM';
+  }
+
+  return {
+    riskLevel: risk,
+    missing,
+    ruleApplied: rule || undefined
+  };
 }

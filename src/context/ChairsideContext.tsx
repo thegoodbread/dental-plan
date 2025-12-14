@@ -1,8 +1,8 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { ChairsideViewMode, TimelineEvent, QuickActionType } from '../types/charting';
-import { SoapSection, SoapSectionType, ToothNumber, VisitType, NoteEngineProcedureInput } from '../src/domain/dentalTypes';
-import { applyTemplateToSoapSections } from '../src/domain/procedureNoteEngine';
+import { ChairsideViewMode, TimelineEvent, QuickActionType } from '../../types/charting';
+import { SoapSection, SoapSectionType, ToothNumber, VisitType, NoteEngineProcedureInput } from '../domain/dentalTypes';
+import { applyTemplateToSoapSections } from '../domain/procedureNoteEngine';
 
 // Lightweight snapshot for Undo functionality
 interface UndoSnapshot {

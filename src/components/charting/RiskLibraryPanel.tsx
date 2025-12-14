@@ -1,9 +1,8 @@
 
 import React, { useState } from 'react';
 import { Search, Plus, Filter, ShieldAlert, Check } from 'lucide-react';
-import { RISK_LIBRARY } from '../../src/domain/riskLibrary';
-import { RiskCategory, RiskLibraryItem, RiskSeverity, recordRiskEvent } from '../../src/domain/dentalTypes';
-import { useChairside } from '../../context/ChairsideContext';
+import { RISK_LIBRARY } from '../../domain/riskLibrary';
+import { RiskCategory, RiskLibraryItem, RiskSeverity } from '../../domain/dentalTypes';
 
 interface RiskLibraryPanelProps {
   onAssignRisk: (item: RiskLibraryItem) => void;
@@ -26,14 +25,6 @@ export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({
   assignedRiskIds,
   tenantId
 }) => {
-  const { 
-    currentTenantId, 
-    currentPatientId, 
-    currentTreatmentPlanId, 
-    currentNoteId, 
-    currentUserId 
-  } = useChairside();
-
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState<RiskCategory | 'ALL'>('ALL');
 
@@ -46,7 +37,8 @@ export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({
     // 2. Tenant Isolation
     // Show global items (tenantId is null) OR items matching current tenant.
     // Explicitly check undefined to allow null (global) override.
-    const effectiveTenantId = tenantId !== undefined ? tenantId : currentTenantId;
+    // If tenantId prop is not provided, we show all (fallback behavior if not in context)
+    const effectiveTenantId = tenantId;
     if (risk.tenantId && risk.tenantId !== effectiveTenantId) return false;
 
     // 3. User Filter Criteria
@@ -59,20 +51,7 @@ export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({
 
   const handleAddRisk = (risk: RiskLibraryItem) => {
     onAssignRisk(risk);
-    
-    // Audit Log
-    recordRiskEvent({
-      id: Math.random().toString(36).substring(2, 9),
-      tenantId: currentTenantId,
-      patientId: currentPatientId,
-      clinicalNoteId: currentNoteId,
-      treatmentPlanId: currentTreatmentPlanId,
-      riskLibraryItemId: risk.id,
-      eventType: 'RISK_ASSIGNED',
-      occurredAt: new Date().toISOString(),
-      userId: currentUserId,
-      details: 'Risk assigned from RiskLibraryPanel'
-    });
+    // Logging responsibility moved to parent component
   };
 
   const getSeverityBadgeClass = (severity: RiskSeverity) => {
