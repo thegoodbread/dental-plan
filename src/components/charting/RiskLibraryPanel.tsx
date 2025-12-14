@@ -115,10 +115,11 @@ export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({
                     className={`
                         group relative bg-white border rounded-md p-3 shadow-sm transition-all duration-200
                         ${isAssigned 
-                            ? 'border-green-200 bg-green-50/20' 
-                            : 'border-slate-200 hover:border-blue-300 hover:shadow-md'
+                            ? 'border-blue-300 bg-blue-50 ring-1 ring-blue-200 cursor-default' 
+                            : 'border-slate-200 hover:border-blue-300 hover:shadow-md cursor-pointer'
                         }
                     `}
+                    onClick={() => !isAssigned && handleAddRisk(risk)}
                  >
                     <div className="flex justify-between items-start mb-1.5">
                         <span className={`inline-flex px-1.5 py-px rounded text-[9px] font-bold uppercase tracking-wider border ${getSeverityBadgeClass(risk.severity)}`}>
@@ -126,21 +127,20 @@ export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({
                         </span>
                         
                         {isAssigned ? (
-                            <span className="text-green-600 flex items-center gap-1 text-[10px] font-bold uppercase bg-white/50 px-1.5 py-0.5 rounded border border-green-100">
+                            <span className="text-blue-600 flex items-center gap-1 text-[10px] font-bold uppercase bg-white/80 px-1.5 py-0.5 rounded border border-blue-100">
                                 <Check size={10} /> Added
                             </span>
                         ) : (
-                            <button 
-                                onClick={() => handleAddRisk(risk)}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity bg-blue-600 text-white hover:bg-blue-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm flex items-center gap-1 active:scale-95"
+                            <div 
+                                className="opacity-0 group-hover:opacity-100 transition-opacity bg-blue-600 text-white px-2 py-0.5 rounded text-[10px] font-bold shadow-sm flex items-center gap-1"
                             >
                                 <Plus size={10} /> Add
-                            </button>
+                            </div>
                         )}
                     </div>
                     
-                    <h4 className={`font-bold text-xs mb-1 ${isAssigned ? 'text-green-900' : 'text-slate-900'}`}>{risk.title}</h4>
-                    <p className={`text-[11px] leading-tight line-clamp-2 ${isAssigned ? 'text-green-800/70' : 'text-slate-500'}`}>
+                    <h4 className={`font-bold text-xs mb-1 ${isAssigned ? 'text-blue-900' : 'text-slate-900'}`}>{risk.title}</h4>
+                    <p className={`text-[11px] leading-tight line-clamp-2 ${isAssigned ? 'text-blue-800/70' : 'text-slate-500'}`}>
                         {risk.body}
                     </p>
                  </div>

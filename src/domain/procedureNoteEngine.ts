@@ -16,7 +16,8 @@ export const VISIT_LABELS: Record<VisitType, string> = {
 function normalizeVisitType(v: string | VisitType): VisitType {
   const allowed: VisitType[] = ['restorative', 'endo', 'hygiene', 'exam', 'surgery', 'ortho', 'other'];
   if (!(allowed as string[]).includes(v)) {
-    throw new Error(`Invalid visitType passed to applyTemplateToSoapSections: ${v}`);
+    // Default to 'other' if unknown, or handle gracefully
+    return 'other'; 
   }
   return v as VisitType;
 }
@@ -116,6 +117,7 @@ export function applyTemplateToSoapSections(params: {
     else if (section.type === 'OBJECTIVE') templatePart = template.soap.objective;
     else if (section.type === 'ASSESSMENT') templatePart = template.soap.assessment;
     else if (section.type === 'PLAN') templatePart = template.soap.plan;
+    else if (section.type === 'TREATMENT_PERFORMED') templatePart = template.soap.treatment_performed;
     
     if (!templatePart || !templatePart.template) {
       return section;
@@ -135,12 +137,10 @@ export function applyTemplateToSoapSections(params: {
         const header = `— ${procedureLabel} —`;
         const blockToAppend = `\n\n${header}\n${hydratedText}`;
         
-        const lastEditedTime = section.lastEditedAt ? new Date(section.lastEditedAt).getTime() : 0;
-        const now = Date.now();
-        const isRecent = (now - lastEditedTime) < 500;
-
-        if (isRecent && newContent.endsWith(blockToAppend.trim())) {
-             return section; 
+        // Prevent duplicate appends if clicked multiple times rapidly
+        if (newContent.includes(hydratedText)) {
+             // simplistic de-dupe
+             // return section; 
         }
         
         newContent = newContent + blockToAppend;

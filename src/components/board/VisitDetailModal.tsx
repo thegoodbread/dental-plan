@@ -4,6 +4,7 @@ import { Visit, TreatmentPlanItem, VisitStatus } from '../../types';
 import { X, Check, FileText, ChevronRight, AlertTriangle, CheckCircle2, ShieldCheck, Stethoscope, Plus } from 'lucide-react';
 import { markProcedureCompleted, updateProcedureDiagnosisCodes, updateProcedureDocumentationFlags, updateVisitStatus } from '../../services/treatmentPlans';
 import { ClaimPrepModal } from '../claims/ClaimPrepModal';
+import { ChairsideProvider } from '../../context/ChairsideContext';
 
 interface VisitDetailModalProps {
   isOpen: boolean;
@@ -194,13 +195,15 @@ export const VisitDetailModal: React.FC<VisitDetailModalProps> = ({
        </div>
 
        {isClaimPrepOpen && (
-           <ClaimPrepModal 
-              isOpen={isClaimPrepOpen} 
-              onClose={() => setIsClaimPrepOpen(false)}
-              visit={visit}
-              items={visitItems}
-              onUpdate={onUpdate}
-           />
+           <ChairsideProvider>
+               <ClaimPrepModal 
+                  isOpen={isClaimPrepOpen} 
+                  onClose={() => setIsClaimPrepOpen(false)}
+                  visit={visit}
+                  items={visitItems}
+                  onUpdate={onUpdate}
+               />
+           </ChairsideProvider>
        )}
     </div>
   );

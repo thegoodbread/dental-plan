@@ -97,6 +97,11 @@ export const AssignedRiskRow: React.FC<AssignedRiskRowProps> = ({
                 <span className="text-sm font-semibold text-slate-800 leading-tight">
                     {risk.titleSnapshot}
                 </span>
+                {risk.consentCapturedAt && !risk.isExpanded && (
+                    <span className="text-[9px] text-green-600 font-bold bg-green-50 px-1.5 py-0.5 rounded border border-green-100 flex items-center gap-0.5">
+                        <Check size={8} /> Consent
+                    </span>
+                )}
             </div>
             
             <div className={`mt-1 text-xs text-slate-500 leading-relaxed transition-all duration-300 ${risk.isExpanded ? 'whitespace-pre-wrap' : 'truncate'}`}>

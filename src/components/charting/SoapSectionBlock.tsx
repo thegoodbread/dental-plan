@@ -76,6 +76,9 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
       }
   };
 
+  // Logic: AI Refine should only be available if there is content
+  const canUseAi = onAiDraft && !!section.content && !isLocked;
+
   return (
     <div 
         className={`
@@ -111,6 +114,31 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
         
         {/* Actions */}
         <div className="flex items-center gap-2">
+             {/* New Helpers visible in header when NOT editing/locked */}
+             {!isEditing && !isLocked && (
+               <>
+                 {onInsertChartFindings && (
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); onInsertChartFindings(); setIsExpanded(true); }}
+                      className="hidden md:flex items-center gap-1 text-[10px] text-teal-600 hover:text-teal-800 hover:bg-teal-50 px-2 py-1 rounded transition-colors font-medium border border-transparent hover:border-teal-100"
+                      title="Insert clinical findings"
+                    >
+                      <Stethoscope size={10} /> Insert Findings
+                    </button>
+                 )}
+                 {canUseAi && (
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); onAiDraft && onAiDraft(); setIsExpanded(true); }}
+                      className="p-1 text-purple-400 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                      title="Refine with AI"
+                    >
+                      <Wand2 size={14} />
+                    </button>
+                 )}
+                 <div className="w-px h-3 bg-slate-300 mx-1"></div>
+               </>
+             )}
+
              {section.content && (
                  <span className="text-[10px] text-slate-400 font-mono">
                      {new Date(section.lastEditedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
@@ -168,9 +196,9 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
                 {/* Editor Toolbar */}
                 <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-100 overflow-x-auto">
                     <span className="text-[10px] font-bold text-slate-400 uppercase whitespace-nowrap">Tools</span>
-                    {onAiDraft && (
-                        <button onClick={onAiDraft} className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded border border-purple-200 transition-colors whitespace-nowrap">
-                            <Wand2 size={10} /> AI Draft
+                    {canUseAi && (
+                        <button onClick={() => onAiDraft && onAiDraft()} className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded border border-purple-200 transition-colors whitespace-nowrap">
+                            <Wand2 size={10} /> Refine with AI
                         </button>
                     )}
                     {onInsertChartFindings && (

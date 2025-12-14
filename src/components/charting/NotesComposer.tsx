@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useChairside } from '../../context/ChairsideContext';
+import { GoogleGenAI } from "@google/genai";
 import { 
   ArrowLeft, Save, PanelRightClose, PanelRightOpen, ShieldCheck, AlertTriangle, Wand2, Lightbulb, Activity, CheckCircle2, Plus, X, Trash2, Clock, Lock
 } from 'lucide-react';
@@ -12,6 +13,9 @@ import { RISK_LIBRARY } from '../../domain/riskLibrary';
 import { SoapSectionBlock } from './SoapSectionBlock';
 import { RiskLibraryPanel } from './RiskLibraryPanel';
 import { AssignedRiskRow } from './AssignedRiskRow';
+import { composeVisitNote, mapNoteToSections } from '../../domain/NoteComposer';
+import { loadTreatmentPlanWithItems } from '../../services/treatmentPlans';
+import { Visit } from '../../types';
 
 // --- SHARED UTILS & TYPES ---
 
@@ -135,7 +139,7 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
                   )}
                   {!isLocked && onSave && (
                       <button onClick={onSave} className="h-9 px-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-md shadow-sm transition-all">
-                          Save
+                          Save & Regenerate
                       </button>
                   )}
                   {!isLocked && onSign && (
@@ -288,6 +292,10 @@ interface NotesComposerProps {
   activePhaseId?: string | number | null;
   viewMode: 'drawer' | 'page'; // Strict UI Mode
   pendingProcedure?: { label: string; teeth: ToothNumber[] };
+  
+  // New props for overrides
+  onSave?: () => void;
+  onSign?: () => void;
 }
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -298,7 +306,9 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
   activeTreatmentItemId,
   activePhaseId,
   viewMode, 
-  pendingProcedure
+  pendingProcedure,
+  onSave,
+  onSign
 }) => {
   const { 
       setCurrentView, 
@@ -445,10 +455,59 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
       persistRisks(finalList);
   };
 
+  // --- SAVE HANDLER REPLACEMENT (Pure Schema) ---
+  const handleSmartSave = () => {
+      if (isLocked) return;
+
+      // 1. Gather all data
+      // For this implementation, we grab ALL items from the current plan to simulate "Visit" scope
+      // In a real app, we would filter by `visitId`
+      const { items } = loadTreatmentPlanWithItems(currentTreatmentPlanId) || { items: [] };
+      
+      // Mock visit object if not available in context
+      const mockVisit: Visit = {
+          id: 'visit-current',
+          treatmentPlanId: currentTreatmentPlanId,
+          date: new Date().toISOString(),
+          provider: 'Dr. Smith',
+          visitType: 'restorative',
+          attachedProcedureIds: [],
+          createdAt: new Date().toISOString()
+      };
+
+      // 2. Build Risks String
+      const riskBullets = assignedRisks
+          .filter(r => r.isActive)
+          .sort((a,b) => a.sortOrder - b.sortOrder)
+          .map(r => `• ${r.bodySnapshot}`)
+          .join('\n');
+
+      // 3. Compose Note (Deterministic)
+      const generatedNote = composeVisitNote({
+          visit: mockVisit,
+          procedures: items,
+          riskBullets
+      });
+
+      // 4. Update SOAP Sections in Context
+      const newSections = mapNoteToSections(generatedNote);
+      newSections.forEach(s => updateSoapSection(s.id, s.content));
+
+      // 5. Persist
+      if (onSave) onSave(); // Custom override
+      else saveCurrentNote(); // Context save
+  };
+
   const handleFinalize = () => {
       if (isLocked) return;
       if (window.confirm("Sign this clinical note? This will lock the note from further editing.")) {
-          signNote();
+          // Use provided override if available, otherwise default context
+          if (onSign) {
+              onSign();
+          } else {
+              signNote();
+          }
+          
           addTimelineEvent({
             type: 'NOTE',
             title: 'Clinical Note Signed',
@@ -457,6 +516,38 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
           });
           if (viewMode === 'page') setCurrentView('DASHBOARD');
       }
+  };
+
+  // --- HELPER LOGIC FOR AI & CHART FINDINGS ---
+
+  const handleRefineWithAi = async (sectionType: SoapSectionType) => {
+      // Disabled per request for "No AI Narrative Generation" in this flow
+      // Keeping generic placeholder if needed, or alerting
+      alert("AI Generation is disabled for this strict schema mode.");
+  };
+
+  const handleInsertChartFindings = (sectionType: SoapSectionType) => {
+    if (sectionType !== 'OBJECTIVE' || isLocked) return;
+    
+    let textToInsert = "";
+    if (pendingProcedure) {
+        textToInsert += `Scheduled: ${pendingProcedure.label} ${pendingProcedure.teeth.length > 0 ? 'on #' + pendingProcedure.teeth.join(',#') : ''}. `;
+    }
+    if (activeToothRecord) {
+        const conditions = activeToothRecord.conditions.map(c => c.label).join(', ');
+        const procedures = activeToothRecord.procedures.map(p => p.name).join(', ');
+        textToInsert += `Tooth #${activeToothNumber} History: ${conditions || 'None'}; Tx: ${procedures || 'None'}.`;
+    }
+    
+    if (!textToInsert) {
+        textToInsert = "No specific chart findings selected.";
+    }
+
+    const objectiveSection = soapSections.find(s => s.type === 'OBJECTIVE');
+    if (objectiveSection) {
+        const newContent = objectiveSection.content ? `${objectiveSection.content}\n${textToInsert}` : textToInsert;
+        updateSoapSection(objectiveSection.id, newContent);
+    }
   };
 
   // Context Label Logic
@@ -474,22 +565,6 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
         <span className="flex items-center gap-1"><CheckCircle2 size={12}/> {activeToothRecord.procedures.length} procedures</span>
     </div>
   );
-
-  const handleInsertChartFindings = (sectionType: SoapSectionType) => {
-    if (sectionType !== 'OBJECTIVE') return;
-    let textToInsert = "";
-    if (pendingProcedure) {
-        textToInsert += `Scheduled: ${pendingProcedure.label} ${pendingProcedure.teeth.length > 0 ? 'on #' + pendingProcedure.teeth.join(',#') : ''}. `;
-    }
-    if (activeToothRecord) {
-        textToInsert += `Tooth history loaded.`;
-    }
-    const objectiveSection = soapSections.find(s => s.type === 'OBJECTIVE');
-    if (objectiveSection) {
-        const newContent = objectiveSection.content ? `${objectiveSection.content}\n${textToInsert}` : textToInsert;
-        updateSoapSection(objectiveSection.id, newContent);
-    }
-  };
 
   return (
     <div className={`flex flex-col h-full bg-slate-100 font-sans text-slate-900 overflow-hidden`}>
@@ -515,7 +590,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
         isLocked={isLocked}
         contextLabel={contextLabel}
         contextSubLabel={subLabel}
-        onSave={() => saveCurrentNote()}
+        onSave={handleSmartSave}
         onSign={handleFinalize}
         lastSavedAt={lastSavedAt}
         viewMode={viewMode}
@@ -524,6 +599,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
         undoSnapshotProvider={(id) => undoSnapshots[id]}
         onUndo={undoAppend}
         onDismissUndo={dismissUndo}
+        onGenerateAiDraft={handleRefineWithAi}
         onInsertChartFindings={handleInsertChartFindings}
         currentTenantId={currentTenantId}
       />

@@ -236,10 +236,10 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const updateCurrentNoteSectionsFromProcedure = (item: NoteEngineProcedureInput, visitType: VisitType) => {
     if (noteStatus === 'signed') return; // LOCK: No appends allowed
 
+    // Use Deterministic Template Engine
     const { updatedSections } = applyTemplateToSoapSections({
         item,
-        visitType, // Passed directly, required
-        // Explicitly convert string ToothNumber to number if needed by engine logic
+        visitType, 
         selectedTeeth: item.selectedTeeth?.map(t => Number(t)),
         existingSections: soapSections
     });
@@ -251,7 +251,7 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     updatedSections.forEach(newSec => {
         const oldSec = soapSections.find(s => s.id === newSec.id);
         if (oldSec && oldSec.content !== newSec.content) {
-            // Snapshot the OLD content
+            // Snapshot the OLD content for undo
             newSnapshots[newSec.id] = {
                 content: oldSec.content,
                 sourceLabel: item.procedureName,
