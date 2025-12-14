@@ -1,8 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Visit, TreatmentPlanItem } from '../../types';
-import { X, CheckCircle2, AlertTriangle, FileText, Camera, Upload, ArrowLeft, Send } from 'lucide-react';
+import { X, CheckCircle2, AlertTriangle, FileText, Camera, Upload, ArrowLeft, Send, RotateCw } from 'lucide-react';
 import { updateProcedureDocumentationFlags, updateVisitClaimPrepStatus, updateProcedureDiagnosisCodes, updateTreatmentPlanItem } from '../../services/treatmentPlans';
+import { buildClaimNarrativeDraft } from '../../services/clinicalLogic';
+import { DiagnosisCodePicker } from './DiagnosisCodePicker';
 
 interface ClaimPrepModalProps {
   isOpen: boolean;
@@ -18,17 +20,46 @@ export const ClaimPrepModal: React.FC<ClaimPrepModalProps> = ({ isOpen, onClose,
   
   const selectedItem = items.find(i => i.id === selectedItemId);
 
-  // Sync narrative when selection changes
+  // --- Narrative Sync Logic ---
+  // If item has a saved narrative, load it.
+  // If NOT, generate a fresh draft based on current data.
   useEffect(() => {
       if (selectedItem) {
-          setNarrative(selectedItem.documentation?.narrativeText || '');
+          if (selectedItem.documentation?.narrativeText) {
+              setNarrative(selectedItem.documentation.narrativeText);
+          } else {
+              // Auto-generate draft if empty
+              regenerateNarrative(selectedItem);
+          }
       }
-  }, [selectedItemId, selectedItem]);
+  }, [selectedItemId, selectedItem?.id]); // Depend on ID to switch context, not object ref
+
+  const regenerateNarrative = useCallback((item: TreatmentPlanItem) => {
+      const draft = buildClaimNarrativeDraft({
+          procedureName: item.procedureName,
+          procedureCode: item.procedureCode,
+          tooth: item.selectedTeeth?.join(', ') || null,
+          diagnosisCodes: item.diagnosisCodes || [],
+          visitDate: item.performedDate || visit.date
+      });
+      setNarrative(draft);
+  }, [visit.date]);
+
+  const handleManualRegenerate = () => {
+      if (selectedItem) regenerateNarrative(selectedItem);
+  };
 
   const handleNarrativeSave = () => {
       if (!selectedItem) return;
       updateProcedureDocumentationFlags(selectedItem.id, { narrativeText: narrative });
       onUpdate();
+  };
+
+  const handleUpdateDiagnosisCodes = (itemId: string, codes: string[]) => {
+      updateProcedureDiagnosisCodes(itemId, codes);
+      onUpdate();
+      // NOTE: We do NOT auto-regenerate narrative here to preserve user edits.
+      // User can click "Regenerate" if they want to incorporate the new codes.
   };
 
   const toggleFlag = (flag: keyof NonNullable<TreatmentPlanItem['documentation']>) => {
@@ -139,34 +170,29 @@ export const ClaimPrepModal: React.FC<ClaimPrepModalProps> = ({ isOpen, onClose,
                            
                            <div className="grid grid-cols-2 gap-6">
                                <div>
-                                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Diagnosis (ICD-10)</label>
-                                   <div className="flex flex-wrap gap-2 mb-2">
-                                       {(selectedItem.diagnosisCodes || []).map(code => (
-                                           <span key={code} className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-sm font-medium border border-gray-200">{code}</span>
-                                       ))}
-                                   </div>
-                                   <input 
-                                       placeholder="Add code (e.g. K02.9)" 
-                                       className="w-full text-sm border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none"
-                                       onKeyDown={(e) => {
-                                           if (e.key === 'Enter') {
-                                               const val = (e.target as HTMLInputElement).value;
-                                               if (val) {
-                                                   const current = selectedItem.diagnosisCodes || [];
-                                                   updateProcedureDiagnosisCodes(selectedItem.id, [...current, val]);
-                                                   (e.target as HTMLInputElement).value = '';
-                                                   onUpdate();
-                                               }
-                                           }
-                                       }}
+                                   <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Diagnosis (ICD-10)</label>
+                                   <DiagnosisCodePicker 
+                                      value={selectedItem.diagnosisCodes || []}
+                                      onChange={(codes) => handleUpdateDiagnosisCodes(selectedItem.id, codes)}
+                                      procedureCode={selectedItem.procedureCode}
+                                      procedureName={selectedItem.procedureName}
                                    />
                                </div>
                                <div>
-                                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Execution Detail</label>
-                                   <div className="text-sm text-gray-700 p-2 bg-gray-50 rounded-lg border border-gray-100">
-                                       <div>Date: <strong>{selectedItem.performedDate ? new Date(selectedItem.performedDate).toLocaleDateString() : 'Not set'}</strong></div>
-                                       <div>Fee: <strong>${selectedItem.netFee}</strong></div>
-                                       <div>Tooth: <strong>{selectedItem.selectedTeeth?.join(', ') || 'N/A'}</strong></div>
+                                   <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Execution Detail</label>
+                                   <div className="text-sm text-gray-700 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-1">
+                                       <div className="flex justify-between">
+                                           <span className="text-gray-500">Date:</span>
+                                           <span className="font-medium">{selectedItem.performedDate ? new Date(selectedItem.performedDate).toLocaleDateString() : 'Not set'}</span>
+                                       </div>
+                                       <div className="flex justify-between">
+                                           <span className="text-gray-500">Fee:</span>
+                                           <span className="font-medium">${selectedItem.netFee}</span>
+                                       </div>
+                                       <div className="flex justify-between">
+                                           <span className="text-gray-500">Tooth:</span>
+                                           <span className="font-medium">{selectedItem.selectedTeeth?.join(', ') || 'N/A'}</span>
+                                       </div>
                                    </div>
                                </div>
                            </div>
@@ -198,9 +224,27 @@ export const ClaimPrepModal: React.FC<ClaimPrepModalProps> = ({ isOpen, onClose,
                        {/* Narrative Editor */}
                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col">
                            <div className="flex justify-between items-center mb-4">
-                               <h4 className="font-bold text-gray-900">Clinical Narrative</h4>
-                               <span className="text-xs text-gray-400">Required for most major claims</span>
+                               <div>
+                                   <h4 className="font-bold text-gray-900">Clinical Narrative</h4>
+                                   <span className="text-xs text-gray-400">Required for most major claims</span>
+                               </div>
+                               <button 
+                                  onClick={handleManualRegenerate}
+                                  className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded flex items-center gap-1 transition-colors"
+                                  title="Reset narrative based on current diagnosis and details"
+                               >
+                                   <RotateCw size={12} /> Regenerate from current data
+                               </button>
                            </div>
+                           
+                           {/* Hint Banner if auto-generated */}
+                           {!selectedItem.documentation?.narrativeText && narrative && (
+                               <div className="text-xs text-slate-500 bg-slate-50 p-2 rounded mb-2 border border-slate-100 flex items-start gap-2">
+                                   <FileText size={14} className="mt-0.5 text-slate-400" />
+                                   Draft generated from procedure and diagnosis codes. Edit as needed.
+                               </div>
+                           )}
+
                            <textarea 
                                className="w-full h-32 p-3 border border-gray-300 rounded-lg text-sm text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none resize-none mb-3"
                                placeholder="Describe clinical necessity, findings, and procedure details..."

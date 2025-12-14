@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { TreatmentPlan, TreatmentPlanItem, TreatmentPhase, UrgencyLevel, FeeCategory, AddOnKind, Visit, VisitType } from '../../types';
 import { Plus, X, MoreHorizontal, Clock, GripVertical, Edit, Trash2, Library, Calendar, Check, Stethoscope, History as HistoryIcon, ArrowRight } from 'lucide-react';
-import { SEDATION_TYPES, checkAddOnCompatibility, createAddOnItem, ADD_ON_LIBRARY, AddOnDefinition, createVisit, getVisitsForPlan, linkProceduresToVisit } from '../../services/treatmentPlans';
+import { SEDATION_TYPES, checkAddOnCompatibility, createAddOnItem, ADD_ON_LIBRARY, AddOnDefinition, createVisit, getVisitsForPlan, linkProceduresToVisit, getTreatmentPlanById } from '../../services/treatmentPlans';
 import { AddOnsLibraryPanel } from './AddOnsLibraryPanel';
 import { VisitDetailModal } from './VisitDetailModal';
 
@@ -745,11 +745,17 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
 
   // Refresh handler passed to VisitDetailModal
   const handleVisitUpdate = () => {
-      // Re-load the entire plan state from storage to sync with updates made in the modal
-      // Since this board uses local state, we must sync manually or reload
-      // For this MVP, we will just sync items and visits as they are the volatile parts
       loadVisits();
-      window.location.reload(); 
+      
+      // Refresh local state from storage to reflect external updates (e.g. status changes, diagnosis codes)
+      // This replaces the window.location.reload() call
+      const updatedData = getTreatmentPlanById(plan.id);
+      if (updatedData) {
+          setLocalPlan(updatedData);
+          if (updatedData.items) {
+              setLocalItems(updatedData.items);
+          }
+      }
   };
 
   const totalChairTime = useMemo(() => localItems.reduce((sum, item) => sum + estimateChairTime(item), 0), [localItems]);

@@ -310,3 +310,51 @@ export const calculateClinicalMetrics = (items: TreatmentPlanItem[]) => {
     procedureCount: procedureItems.length
   };
 };
+
+// --- CLAIM NARRATIVE GENERATION ---
+
+export interface ClaimContext {
+  procedureName: string;
+  procedureCode: string;
+  tooth?: string | number | null;
+  diagnosisCodes: string[];
+  visitDate?: string;
+  surface?: string;
+}
+
+export function buildClaimNarrativeDraft(ctx: ClaimContext): string {
+  const diagnosisText = ctx.diagnosisCodes.length > 0 
+    ? `diagnosis ${ctx.diagnosisCodes.join(', ')}` 
+    : 'dental pathology';
+  
+  const dateStr = ctx.visitDate 
+    ? new Date(ctx.visitDate).toLocaleDateString() 
+    : 'today';
+
+  const toothStr = ctx.tooth ? ` on tooth #${ctx.tooth}` : '';
+  const surfaceStr = ctx.surface ? `, surface ${ctx.surface}` : '';
+
+  // 1. Initial Statement
+  const sentence1 = `Patient presented with ${diagnosisText}. Completed ${ctx.procedureName}${toothStr}${surfaceStr} on ${dateStr}.`;
+
+  // 2. Necessity Statement (Generalized based on code prefix)
+  let sentence2 = "Treatment was clinically necessary to restore function and prevent disease progression.";
+  
+  const codePrefix = ctx.procedureCode.substring(0, 3);
+  if (codePrefix.startsWith('D3')) { // Endo
+    sentence2 = "Treatment required to resolve pulpal pathology and eliminate infection.";
+  } else if (codePrefix.startsWith('D4')) { // Perio
+    sentence2 = "Therapy required to arrest periodontal disease progression and reduce probing depths.";
+  } else if (codePrefix.startsWith('D7')) { // Surgery
+    sentence2 = "Extraction required due to non-restorable tooth structure or pathology.";
+  } else if (codePrefix.startsWith('D2') && parseInt(codePrefix[1]) > 6) { // Crowns (D27..)
+    sentence2 = "Full coverage restoration required due to extensive decay or fracture compromising structural integrity.";
+  } else if (codePrefix.startsWith('D6')) { // Implant/Bridge
+    sentence2 = "Prosthesis required to replace missing tooth and restore masticatory function.";
+  }
+
+  // 3. Outcome Statement
+  const sentence3 = "Post-operative outcome was stable with no immediate complications.";
+
+  return `${sentence1} ${sentence2} ${sentence3}`;
+}
