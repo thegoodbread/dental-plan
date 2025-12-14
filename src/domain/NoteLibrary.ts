@@ -1,4 +1,5 @@
 
+
 // NoteLibrary.ts
 // Defines templates for deterministic SOAP note generation.
 

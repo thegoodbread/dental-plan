@@ -23,7 +23,7 @@ function renderTokens(text: string, ctx: Record<string, string>): string {
 
 function getContextForItem(item: TreatmentPlanItem): Record<string, string> {
   const tooth = item.selectedTeeth?.join(", ") || "";
-  const surfaces = ""; // Surfaces not explicitly on TreatmentPlanItem in this codebase version, defaulting empty
+  const surfaces = (item.surfaces || []).join("");
   const quadrant = item.selectedQuadrants?.join(", ") || "";
   const arch = item.selectedArches?.join(", ") || "";
   
@@ -40,10 +40,20 @@ export function composeVisitNote({
   visit,
   procedures,
   riskBullets,
+  visitType,
+  chiefComplaint,
+  hpi,
+  radiographicFindings,
+  diagnosisCodes
 }: {
   visit: Visit;
   procedures: TreatmentPlanItem[];
   riskBullets: string;
+  visitType?: string;
+  chiefComplaint?: string;
+  hpi?: string;
+  radiographicFindings?: string;
+  diagnosisCodes?: string[];
 }): GeneratedClinicalNote {
   const subjectiveLines: string[] = [];
   const objectiveLines: string[] = [];
@@ -51,34 +61,45 @@ export function composeVisitNote({
   const treatmentLines: string[] = [];
   const planLines: string[] = [];
 
-  // 1. Visit Header / Chief Complaint
-  // If the visit has manual notes or specific type, we might init here.
-  // For now, schema driven:
-  if (procedures.length === 0) {
-      subjectiveLines.push("Patient presents for visit. No procedures recorded.");
+  // 1. Visit Header / Chief Complaint / HPI
+  if (chiefComplaint) subjectiveLines.push(`Chief Complaint: ${chiefComplaint}.`);
+  if (hpi) subjectiveLines.push(`HPI: ${hpi}`);
+
+  // If no procedures AND no CC, fallback generic
+  if (procedures.length === 0 && !chiefComplaint) {
+      subjectiveLines.push("Patient presents for visit. No procedures recorded today.");
   }
 
   // 2. Loop Procedures
   procedures.forEach(item => {
     const code = item.procedureCode;
-    const template = NOTE_LIBRARY[code] || NOTE_LIBRARY['DEFAULT'] || {
-        subjective: "Patient presents for {{procedure}}.",
-        objective: "Examined area for {{procedure}}.",
-        assessment: "Need for {{procedure}}.",
-        plan: "Performed {{procedure}}."
-    };
-
+    const template = NOTE_LIBRARY[code] || NOTE_LIBRARY['DEFAULT'];
     const ctx = getContextForItem(item);
 
-    if (template.subjective) subjectiveLines.push(renderTokens(template.subjective, ctx));
-    if (template.objective) objectiveLines.push(renderTokens(template.objective, ctx));
-    if (template.assessment) assessmentLines.push(renderTokens(template.assessment, ctx));
-    // Mapping template 'plan' to Treatment Performed section usually, 
-    // but the library has 'plan' which describes the action.
-    if (template.plan) treatmentLines.push(renderTokens(template.plan, ctx));
+    if (template) {
+        if (template.subjective) subjectiveLines.push(renderTokens(template.subjective, ctx));
+        if (template.objective) objectiveLines.push(renderTokens(template.objective, ctx));
+        if (template.assessment) assessmentLines.push(renderTokens(template.assessment, ctx));
+        // Mapping template 'plan' to Treatment Performed section
+        if (template.plan) treatmentLines.push(renderTokens(template.plan, ctx));
+    } else {
+        // Fallback if no template found for code
+        subjectiveLines.push(`Patient presents for ${item.procedureName}.`);
+        treatmentLines.push(`Performed ${item.procedureName}.`);
+    }
   });
 
-  // 3. Risks & Next Steps (Plan Section)
+  // 3. Inject Radiographic Findings into Objective (After procedure objectives)
+  if (radiographicFindings) {
+    objectiveLines.push(`Radiographic findings: ${radiographicFindings}.`);
+  }
+
+  // 4. Inject Diagnoses into Assessment
+  if (diagnosisCodes?.length) {
+    assessmentLines.push(`Associated diagnoses (ICD-10): ${diagnosisCodes.join(", ")}.`);
+  }
+
+  // 5. Risks & Next Steps (Plan Section)
   if (riskBullets) {
       planLines.push("--- Informed Consent & Risks ---");
       planLines.push(riskBullets);
@@ -87,15 +108,34 @@ export function composeVisitNote({
   planLines.push("Next Visit: Continue treatment plan / Recall.");
 
   return {
-    subjective: subjectiveLines.join("\n"),
-    objective: objectiveLines.join("\n"),
-    assessment: assessmentLines.join("\n"),
-    treatmentPerformed: treatmentLines.join("\n"),
+    subjective: subjectiveLines.join("\n\n"),
+    objective: objectiveLines.join("\n\n"),
+    assessment: assessmentLines.join("\n\n"),
+    treatmentPerformed: treatmentLines.join("\n\n"),
     plan: planLines.join("\n")
   };
 }
 
-// Helper to convert GeneratedClinicalNote to SoapSection[]
+// Helper to update EXISTING SoapSection objects while preserving IDs
+export function mapNoteToExistingSections(
+  note: GeneratedClinicalNote,
+  existing: SoapSection[]
+): SoapSection[] {
+  const now = new Date().toISOString();
+  return existing.map(sec => {
+    let content = sec.content;
+    switch (sec.type) {
+      case 'SUBJECTIVE': content = note.subjective; break;
+      case 'OBJECTIVE': content = note.objective; break;
+      case 'ASSESSMENT': content = note.assessment; break;
+      case 'TREATMENT_PERFORMED': content = note.treatmentPerformed; break;
+      case 'PLAN': content = note.plan; break;
+    }
+    return { ...sec, content, lastEditedAt: now };
+  });
+}
+
+// Legacy Helper (Deprecated in favor of mapNoteToExistingSections)
 export function mapNoteToSections(note: GeneratedClinicalNote): SoapSection[] {
     const now = new Date().toISOString();
     return [

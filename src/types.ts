@@ -1,4 +1,5 @@
 
+
 // Enums
 import { AssignedRisk, SoapSection } from './domain/dentalTypes';
 
@@ -111,6 +112,11 @@ export interface Visit {
   assignedRisks?: AssignedRisk[];
   noteStatus?: 'draft' | 'signed';
   noteSignedAt?: string;
+
+  // NEW: Completeness Fields
+  chiefComplaint?: string;
+  hpi?: string;
+  radiographicFindings?: string;
 }
 
 // Entities
@@ -167,6 +173,7 @@ export interface TreatmentPlanItem {
 
   // Selection details
   selectedTeeth?: number[] | null;
+  surfaces?: string[]; // ["M", "O", "D"], etc.
   selectedQuadrants?: ('UR' | 'UL' | 'LL' | 'LR')[] | null;
   selectedArches?: ('UPPER' | 'LOWER')[] | null;
 

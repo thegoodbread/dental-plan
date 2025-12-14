@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useChairside } from '../../context/ChairsideContext';
 import { GoogleGenAI } from "@google/genai";
 import { 
-  ArrowLeft, Save, PanelRightClose, PanelRightOpen, ShieldCheck, AlertTriangle, Wand2, Lightbulb, Activity, CheckCircle2, Plus, X, Trash2, Clock, Lock
+  ArrowLeft, Save, PanelRightClose, PanelRightOpen, ShieldCheck, AlertTriangle, Wand2, Lightbulb, Activity, CheckCircle2, Plus, X, Trash2, Clock, Lock, FileText
 } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -13,9 +13,10 @@ import { RISK_LIBRARY } from '../../domain/riskLibrary';
 import { SoapSectionBlock } from './SoapSectionBlock';
 import { RiskLibraryPanel } from './RiskLibraryPanel';
 import { AssignedRiskRow } from './AssignedRiskRow';
-import { composeVisitNote, mapNoteToSections } from '../../domain/NoteComposer';
+import { composeVisitNote, mapNoteToExistingSections } from '../../domain/NoteComposer';
 import { loadTreatmentPlanWithItems } from '../../services/treatmentPlans';
 import { Visit } from '../../types';
+import { evaluateVisitCompleteness, CompletenessResult } from '../../domain/CompletenessEngine';
 
 // --- SHARED UTILS & TYPES ---
 
@@ -75,6 +76,16 @@ export interface ClinicalNoteEditorProps {
   
   // IDs for context (Risk Library needs tenant)
   currentTenantId: string;
+
+  // Visit Context Inputs
+  hpi: string;
+  onHpiChange: (val: string) => void;
+  radiographicFindings: string;
+  onRadiographicFindingsChange: (val: string) => void;
+  chiefComplaint: string;
+  onChiefComplaintChange: (val: string) => void;
+  
+  completeness: CompletenessResult | null;
 }
 
 export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => {
@@ -86,7 +97,9 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
     viewMode, showRiskPanel, onToggleRiskPanel,
     undoSnapshotProvider, onUndo, onDismissUndo,
     onGenerateAiDraft, onInsertChartFindings,
-    currentTenantId
+    currentTenantId,
+    hpi, onHpiChange, radiographicFindings, onRadiographicFindingsChange, chiefComplaint, onChiefComplaintChange,
+    completeness
   } = props;
 
   const riskSectionRef = useRef<HTMLDivElement>(null);
@@ -115,6 +128,12 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
     }
   };
 
+  const getCompletenessColor = (score: number) => {
+      if (score >= 95) return 'bg-green-100 text-green-800 border-green-200';
+      if (score >= 75) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      return 'bg-red-100 text-red-800 border-red-200';
+  };
+
   return (
     <div className="flex-1 flex overflow-hidden h-full">
         {/* LEFT COLUMN: SOAP Content */}
@@ -129,6 +148,21 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
                       <span className="px-2 py-0.5 bg-slate-100 border border-slate-300 rounded text-xs font-bold text-slate-500 flex items-center gap-1">
                           <Lock size={12} /> SIGNED
                       </span>
+                  )}
+                  {completeness && !isLocked && (
+                      <div className="group relative">
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold border flex items-center gap-1 cursor-help ${getCompletenessColor(completeness.score)}`}>
+                              Score: {completeness.score}%
+                          </span>
+                          {completeness.missing.length > 0 && (
+                              <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-slate-200 shadow-xl rounded-lg p-3 z-50 hidden group-hover:block">
+                                  <div className="text-xs font-bold text-slate-700 mb-2 border-b pb-1">Missing Requirements</div>
+                                  <ul className="list-disc list-inside text-[10px] text-slate-600 space-y-1">
+                                      {completeness.missing.map((m, i) => <li key={i}>{m}</li>)}
+                                  </ul>
+                              </div>
+                          )}
+                      </div>
                   )}
                 </div>
                 <div className="flex items-center gap-3">
@@ -154,6 +188,44 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
                   )}
                 </div>
               </div>
+              
+              {/* Visit Context Inputs */}
+              <div className="bg-white border-b border-slate-200 px-4 py-3 grid grid-cols-1 md:grid-cols-3 gap-4 shadow-sm">
+                  <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Chief Complaint</label>
+                      <input 
+                        type="text" 
+                        value={chiefComplaint} 
+                        onChange={e => onChiefComplaintChange(e.target.value)} 
+                        placeholder="e.g. Tooth hurts on lower right"
+                        className="w-full text-xs p-1.5 border border-slate-300 rounded bg-slate-50 focus:bg-white focus:border-blue-500 outline-none transition-all"
+                        disabled={isLocked}
+                      />
+                  </div>
+                  <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">HPI</label>
+                      <input 
+                        type="text" 
+                        value={hpi} 
+                        onChange={e => onHpiChange(e.target.value)} 
+                        placeholder="Duration, intensity, triggers..."
+                        className="w-full text-xs p-1.5 border border-slate-300 rounded bg-slate-50 focus:bg-white focus:border-blue-500 outline-none transition-all"
+                        disabled={isLocked}
+                      />
+                  </div>
+                  <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Radiographic Findings</label>
+                      <input 
+                        type="text" 
+                        value={radiographicFindings} 
+                        onChange={e => onRadiographicFindingsChange(e.target.value)} 
+                        placeholder="e.g. PARL #30, recurrent decay"
+                        className="w-full text-xs p-1.5 border border-slate-300 rounded bg-slate-50 focus:bg-white focus:border-blue-500 outline-none transition-all"
+                        disabled={isLocked}
+                      />
+                  </div>
+              </div>
+
               <div className="bg-blue-50/50 border-b border-blue-100 px-4 py-2 flex items-center justify-between text-xs text-blue-800">
                 <div className="flex items-center gap-3">
                     <span className="font-bold bg-white px-2 py-0.5 rounded border border-blue-200 shadow-sm">
@@ -296,6 +368,9 @@ interface NotesComposerProps {
   // New props for overrides
   onSave?: () => void;
   onSign?: () => void;
+  // NEW: Optional props for specific context injection if available from parent
+  visitId?: string;
+  chiefComplaint?: string;
 }
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -308,7 +383,9 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
   viewMode, 
   pendingProcedure,
   onSave,
-  onSign
+  onSign,
+  visitId,
+  chiefComplaint: propCC
 }) => {
   const { 
       setCurrentView, 
@@ -332,6 +409,16 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
   const isLocked = noteStatus === 'signed';
   const [assignedRisks, setAssignedRisks] = useState<AssignedRisk[]>([]);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  
+  // Local state for completeness inputs
+  const [hpi, setHpi] = useState('');
+  const [radiographicFindings, setRadiographicFindings] = useState('');
+  const [localChiefComplaint, setLocalChiefComplaint] = useState(propCC || '');
+  const [completeness, setCompleteness] = useState<CompletenessResult | null>(null);
+
+  useEffect(() => {
+      setLocalChiefComplaint(propCC || '');
+  }, [propCC]);
 
   // Load Risks specific to this context
   const buildRiskStorageKey = () => `dental_assigned_risks:${currentPatientId}:${currentNoteId}`;
@@ -459,20 +546,47 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
   const handleSmartSave = () => {
       if (isLocked) return;
 
-      // 1. Gather all data
-      // For this implementation, we grab ALL items from the current plan to simulate "Visit" scope
-      // In a real app, we would filter by `visitId`
+      // 1. Gather data
       const { items } = loadTreatmentPlanWithItems(currentTreatmentPlanId) || { items: [] };
+      const todayDate = new Date().toISOString().split('T')[0];
       
+      // Filter procedures: only explicit visit or completed today
+      let proceduresForNote = items;
+      if (visitId) {
+          proceduresForNote = items.filter(item => 
+              item.performedInVisitId === visitId
+          );
+      } else {
+          // Fallback if no visitId available in context
+          proceduresForNote = items.filter(item => 
+              item.procedureStatus === 'COMPLETED' && item.performedDate && item.performedDate.startsWith(todayDate)
+          );
+      }
+
+      // Prepare Contextual Inputs
+      // Ideally these come from a store or props. 
+      // For CC/HPI, if not passed as prop, we might check if 'SUBJECTIVE' section has content, 
+      // but deterministic generation usually PREPENDS to it.
+      
+      // Extract diagnoses from filtered procedures for Assessment
+      const diagnosisCodes: string[] = [];
+      proceduresForNote.forEach(p => {
+          if (p.diagnosisCodes) diagnosisCodes.push(...p.diagnosisCodes);
+      });
+      const uniqueDx = Array.from(new Set(diagnosisCodes));
+
       // Mock visit object if not available in context
       const mockVisit: Visit = {
-          id: 'visit-current',
+          id: visitId || 'visit-current',
           treatmentPlanId: currentTreatmentPlanId,
           date: new Date().toISOString(),
           provider: 'Dr. Smith',
           visitType: 'restorative',
-          attachedProcedureIds: [],
-          createdAt: new Date().toISOString()
+          attachedProcedureIds: proceduresForNote.map(p => p.id),
+          createdAt: new Date().toISOString(),
+          chiefComplaint: localChiefComplaint,
+          hpi: hpi,
+          radiographicFindings: radiographicFindings
       };
 
       // 2. Build Risks String
@@ -485,16 +599,31 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
       // 3. Compose Note (Deterministic)
       const generatedNote = composeVisitNote({
           visit: mockVisit,
-          procedures: items,
-          riskBullets
+          procedures: proceduresForNote,
+          riskBullets,
+          chiefComplaint: localChiefComplaint,
+          hpi: hpi,
+          radiographicFindings: radiographicFindings,
+          diagnosisCodes: uniqueDx
       });
 
-      // 4. Update SOAP Sections in Context
-      const newSections = mapNoteToSections(generatedNote);
+      // 4. Update SOAP Sections in Context using Mapping that preserves IDs
+      const newSections = mapNoteToExistingSections(generatedNote, soapSections);
+      
+      // Calculate Completeness
+      const completenessResult = evaluateVisitCompleteness(
+          mockVisit, 
+          proceduresForNote, 
+          newSections, 
+          assignedRisks
+      );
+      setCompleteness(completenessResult);
+
+      // Apply updates
       newSections.forEach(s => updateSoapSection(s.id, s.content));
 
       // 5. Persist
-      if (onSave) onSave(); // Custom override
+      if (onSave) onSave(); // Custom override (e.g. saves to Visit record)
       else saveCurrentNote(); // Context save
   };
 
@@ -522,7 +651,6 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
 
   const handleRefineWithAi = async (sectionType: SoapSectionType) => {
       // Disabled per request for "No AI Narrative Generation" in this flow
-      // Keeping generic placeholder if needed, or alerting
       alert("AI Generation is disabled for this strict schema mode.");
   };
 
@@ -602,6 +730,14 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
         onGenerateAiDraft={handleRefineWithAi}
         onInsertChartFindings={handleInsertChartFindings}
         currentTenantId={currentTenantId}
+        // Input bindings
+        hpi={hpi}
+        onHpiChange={setHpi}
+        radiographicFindings={radiographicFindings}
+        onRadiographicFindingsChange={setRadiographicFindings}
+        chiefComplaint={localChiefComplaint}
+        onChiefComplaintChange={setLocalChiefComplaint}
+        completeness={completeness}
       />
     </div>
   );
