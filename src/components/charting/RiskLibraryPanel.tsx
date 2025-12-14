@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { Search, Plus, Filter, ShieldAlert, Check } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Plus, Filter, ShieldAlert, Check, Lightbulb } from 'lucide-react';
 import { RISK_LIBRARY } from '../../domain/riskLibrary';
 import { RiskCategory, RiskLibraryItem, RiskSeverity } from '../../domain/dentalTypes';
 
@@ -8,9 +8,11 @@ interface RiskLibraryPanelProps {
   onAssignRisk: (item: RiskLibraryItem) => void;
   assignedRiskIds: string[]; // List of IDs currently active in the note
   tenantId?: string | null; // Optional: Enforce tenant isolation if provided
+  recommendedCategories?: string[]; // New: Filter based on procedure context
 }
 
-const CATEGORIES: { id: RiskCategory | 'ALL', label: string }[] = [
+const CATEGORIES: { id: RiskCategory | 'ALL' | 'RECOMMENDED', label: string }[] = [
+  { id: 'RECOMMENDED', label: 'Recommended' },
   { id: 'ALL', label: 'All' },
   { id: 'DIRECT_RESTORATION', label: 'Restorative' },
   { id: 'INDIRECT_RESTORATION', label: 'Crowns' },
@@ -23,10 +25,18 @@ const CATEGORIES: { id: RiskCategory | 'ALL', label: string }[] = [
 export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({ 
   onAssignRisk,
   assignedRiskIds,
-  tenantId
+  tenantId,
+  recommendedCategories
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeCategory, setActiveCategory] = useState<RiskCategory | 'ALL'>('ALL');
+  const [activeCategory, setActiveCategory] = useState<string>('ALL');
+
+  // Improvement: Auto-switch to Recommended if present on mount
+  useEffect(() => {
+      if (recommendedCategories && recommendedCategories.length > 0) {
+          setActiveCategory('RECOMMENDED');
+      }
+  }, [recommendedCategories]);
 
   // Governance & Search Filtering
   const filteredRisks = RISK_LIBRARY.filter(risk => {
@@ -35,23 +45,33 @@ export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({
     if (risk.deprecatedAt) return false;
     
     // 2. Tenant Isolation
-    // Show global items (tenantId is null) OR items matching current tenant.
-    // Explicitly check undefined to allow null (global) override.
-    // If tenantId prop is not provided, we show all (fallback behavior if not in context)
     const effectiveTenantId = tenantId;
     if (risk.tenantId && risk.tenantId !== effectiveTenantId) return false;
 
     // 3. User Filter Criteria
     const matchesSearch = risk.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           risk.body.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = activeCategory === 'ALL' || risk.category === activeCategory;
+    
+    let matchesCategory = false;
+    if (activeCategory === 'ALL') {
+        matchesCategory = true;
+    } else if (activeCategory === 'RECOMMENDED') {
+        // Show risks that match the recommended categories
+        if (recommendedCategories && recommendedCategories.length > 0) {
+            matchesCategory = recommendedCategories.includes(risk.category);
+        } else {
+            // If no recommendations but tab selected (shouldn't happen often), show all? Or none?
+            matchesCategory = true; 
+        }
+    } else {
+        matchesCategory = risk.category === activeCategory;
+    }
     
     return matchesSearch && matchesCategory;
   });
 
   const handleAddRisk = (risk: RiskLibraryItem) => {
     onAssignRisk(risk);
-    // Logging responsibility moved to parent component
   };
 
   const getSeverityBadgeClass = (severity: RiskSeverity) => {
@@ -63,6 +83,8 @@ export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({
           default: return 'bg-gray-100 text-gray-700 border-gray-200';
       }
   };
+
+  const hasRecommendations = recommendedCategories && recommendedCategories.length > 0;
 
   return (
     <div className="flex flex-col h-full bg-slate-50">
@@ -89,19 +111,24 @@ export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({
 
         {/* Filter Pills */}
         <div className="flex flex-wrap gap-1.5">
-            {CATEGORIES.map(cat => (
-                <button 
-                    key={cat.id}
-                    onClick={() => setActiveCategory(cat.id)}
-                    className={`px-2 py-1 text-[10px] font-bold rounded border transition-all uppercase tracking-wide ${
-                        activeCategory === cat.id 
-                        ? 'bg-slate-800 text-white border-slate-800 shadow-sm' 
-                        : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                    }`}
-                >
-                    {cat.label}
-                </button>
-            ))}
+            {CATEGORIES.map(cat => {
+                if (cat.id === 'RECOMMENDED' && !hasRecommendations) return null;
+                
+                return (
+                    <button 
+                        key={cat.id}
+                        onClick={() => setActiveCategory(cat.id)}
+                        className={`px-2 py-1 text-[10px] font-bold rounded border transition-all uppercase tracking-wide flex items-center gap-1 ${
+                            activeCategory === cat.id 
+                            ? 'bg-slate-800 text-white border-slate-800 shadow-sm' 
+                            : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                        }`}
+                    >
+                        {cat.id === 'RECOMMENDED' && <Lightbulb size={10} className={activeCategory === 'RECOMMENDED' ? 'text-yellow-300' : 'text-yellow-500'} />}
+                        {cat.label}
+                    </button>
+                );
+            })}
         </div>
       </div>
 
@@ -151,6 +178,9 @@ export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({
              <div className="flex flex-col items-center justify-center py-12 text-slate-400">
                  <Filter size={24} className="mb-2 opacity-20" />
                  <p className="text-xs font-medium">No approved risks found.</p>
+                 {activeCategory === 'RECOMMENDED' && (
+                     <button onClick={() => setActiveCategory('ALL')} className="mt-2 text-xs text-blue-600 hover:underline">View All Risks</button>
+                 )}
              </div>
          )}
          

@@ -1,10 +1,13 @@
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo, useState } from 'react';
 import { Visit, TreatmentPlanItem } from '../../types';
 import { NotesComposer } from '../charting/NotesComposer';
-import { useChairside } from '../../context/ChairsideContext';
+import { useChairside, getIncompleteFactSections } from '../../context/ChairsideContext';
 import { updateVisit } from '../../services/treatmentPlans';
-import { generateSoapSectionsForVisit } from '../../domain/NoteComposer';
+import { generateSoapSectionsForVisit, composeVisitNoteFromAssertions, mapNoteToExistingSections } from '../../domain/NoteComposer';
+import { generateTruthAssertionsForVisit, composeSectionsFromAssertions } from '../../domain/TruthAssertions';
+import { SoapSectionType } from '../../domain/dentalTypes';
+import { FactReviewModal } from '../modals/FactReviewModal';
 
 interface VisitNotesPanelProps {
   visit: Visit;
@@ -17,16 +20,46 @@ export const VisitNotesPanel: React.FC<VisitNotesPanelProps> = ({ visit, items, 
     setSoapSections,
     soapSections,
     signNote,
-    noteStatus
+    noteStatus,
+    setTruthAssertions, 
+    truthAssertions,
+    factReviewStatus
   } = useChairside();
 
   // Guard ref to ensure seeding runs exactly once per mount/update cycle if conditions met
   const seededVisitIdRef = useRef<string | null>(null);
+  
+  // State for review modal
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [incompleteSections, setIncompleteSections] = useState<SoapSectionType[]>([]);
+
+  // Filter items for this visit - MEMOIZED to prevent infinite loops
+  const relevantItems = useMemo(() => 
+    items.filter(i => i.performedInVisitId === visit.id),
+    [items, visit.id]
+  );
 
   // --- SEEDING LOGIC ---
   useEffect(() => {
     // 1. Basic Guards
     if (noteStatus === 'signed') return;
+    
+    // --- Truth Assertions Generation (Guard against infinite updates) ---
+    // Only generate if we have items AND (we haven't generated yet OR it's for a different visit)
+    // We explicitly check truthAssertions.visitId to allow switching between visits without stale state
+    const needsAssertions = relevantItems.length > 0 && 
+        (!truthAssertions || truthAssertions.visitId !== visit.id);
+
+    if (needsAssertions) {
+        const bundle = generateTruthAssertionsForVisit(
+            visit,
+            relevantItems,
+            visit.assignedRisks || []
+        );
+        // Use a timeout to push this to the next tick, avoiding "update while rendering" warnings in some cases
+        setTimeout(() => setTruthAssertions(bundle), 0);
+    }
+
     if (seededVisitIdRef.current === visit.id) return;
     if (soapSections.length === 0) return; // Wait for context to initialize
 
@@ -38,8 +71,6 @@ export const VisitNotesPanel: React.FC<VisitNotesPanelProps> = ({ visit, items, 
 
     // 2. Snapshot Restore (Highest Priority)
     // If we have a valid snapshot and the editor is currently empty (or has irrelevant data), restore it.
-    // Note: We trust the parent (VisitDetailModal) to provide a clean context via initialVisitId,
-    // so if context is empty, it's safe to load.
     if (snapshotHasContent && !contextHasContent) {
         // Bulk update is safer than looping updates
         setSoapSections(visit.soapSections!);
@@ -55,14 +86,12 @@ export const VisitNotesPanel: React.FC<VisitNotesPanelProps> = ({ visit, items, 
     }
 
     // 4. Deterministic Seeding (Only runs if context is empty and no snapshot restored)
-    const proceduresForVisit = items.filter(i => i.performedInVisitId === visit.id);
-    
-    if (proceduresForVisit.length > 0) {
+    if (relevantItems.length > 0) {
         
         // Generate complete SOAP sections deterministically
         const { sections: generatedSections } = generateSoapSectionsForVisit(
             visit,
-            proceduresForVisit,
+            relevantItems,
             visit.assignedRisks || [], 
             soapSections
         );
@@ -72,7 +101,7 @@ export const VisitNotesPanel: React.FC<VisitNotesPanelProps> = ({ visit, items, 
 
         // 5. Persist Seeding State to Visit Record immediately
         // This ensures that even if user navigates away, the "Snapshot" is saved and restored next time.
-        const updatedSeededIds = proceduresForVisit.map(p => p.id);
+        const updatedSeededIds = relevantItems.map(p => p.id);
         
         updateVisit(visit.id, {
             seededProcedureIds: updatedSeededIds,
@@ -90,56 +119,85 @@ export const VisitNotesPanel: React.FC<VisitNotesPanelProps> = ({ visit, items, 
         // This allows the effect to run again if 'items' updates later.
     }
 
-  }, [visit, items, soapSections, noteStatus, onUpdate, setSoapSections]);
+  }, [visit, relevantItems, soapSections, noteStatus, onUpdate, setSoapSections, setTruthAssertions, truthAssertions]);
 
   // Handler to persist current context state to the Visit Record (Manual Save)
   const handleVisitSave = () => {
-      // Re-generate deterministic parts to ensure latest data, then merge with user edits?
-      // Actually, 'Save & Regenerate' typically means "Refresh from data".
-      // If we just want to save what's on screen, that's different.
-      // Based on charting flow, "Save & Regenerate" RE-RUNS generator.
-      
-      const proceduresForVisit = items.filter(i => i.performedInVisitId === visit.id);
-      
+      // Re-run standard generator for safety or rely on context?
+      // Standard behavior: Re-generate text based on current inputs
       const { sections: generatedSections } = generateSoapSectionsForVisit(
           visit,
-          proceduresForVisit,
+          relevantItems,
           visit.assignedRisks || [],
           soapSections
       );
 
+      // V2.5: Apply truth assertions override if present
+      let finalSections = generatedSections;
+      if (truthAssertions && truthAssertions.assertions && truthAssertions.assertions.length > 0) {
+          finalSections = composeSectionsFromAssertions(generatedSections, truthAssertions);
+      }
+
       // Bulk Update Context
-      setSoapSections(generatedSections);
+      setSoapSections(finalSections);
+      
+      // Update assertions
+      const bundle = generateTruthAssertionsForVisit(
+          visit,
+          relevantItems,
+          visit.assignedRisks || []
+      );
+      setTruthAssertions(bundle);
 
       // Persist to Visit Record
-      const noteText = generatedSections.map(s => `${s.title}:\n${s.content || 'N/A'}`).join('\n\n');
+      const noteText = finalSections.map(s => `${s.title}:\n${s.content || 'N/A'}`).join('\n\n');
       
       updateVisit(visit.id, {
-          soapSections: generatedSections,
+          soapSections: finalSections,
           clinicalNote: noteText,
-          seededProcedureIds: proceduresForVisit.map(p => p.id)
+          seededProcedureIds: relevantItems.map(p => p.id)
       });
       
       onUpdate();
   };
 
-  const handleVisitSign = () => {
+  const performSign = () => {
       // 1. Update Context State
       signNote(); 
       
+      let finalSections = soapSections;
+
+      // --- Improvement: Use Truth Assertions if available ---
+      // If the user has been interacting with the Truth Blocks panel, we prefer that authoritative source.
+      if (truthAssertions && truthAssertions.visitId === visit.id && truthAssertions.assertions.length > 0) {
+          // V2.5: Use proper section composition
+          finalSections = composeSectionsFromAssertions(soapSections, truthAssertions);
+      }
+
       // 2. Update Visit Record
-      const noteText = soapSections.map(s => `${s.title}:\n${s.content || 'N/A'}`).join('\n\n');
+      const noteText = finalSections.map(s => `${s.title}:\n${s.content || 'N/A'}`).join('\n\n');
       updateVisit(visit.id, {
-          soapSections, // Save final state
+          soapSections: finalSections, // Save final state
           clinicalNote: noteText,
           noteStatus: 'signed',
           noteSignedAt: new Date().toISOString()
       });
       
       onUpdate();
+      setShowReviewModal(false);
   };
 
-  const relevantItemsCount = items.filter(i => i.performedInVisitId === visit.id).length;
+  const handleVisitSign = () => {
+      // Check for incomplete facts
+      const incomplete = getIncompleteFactSections(truthAssertions, factReviewStatus);
+      
+      if (incomplete.length > 0) {
+          setIncompleteSections(incomplete);
+          setShowReviewModal(true);
+      } else {
+          performSign();
+      }
+  };
 
   return (
     <div className="h-full flex flex-col bg-white">
@@ -152,14 +210,22 @@ export const VisitNotesPanel: React.FC<VisitNotesPanelProps> = ({ visit, items, 
             onSave={handleVisitSave}
             onSign={handleVisitSign}
             // Context label for the header
-            pendingProcedure={relevantItemsCount > 0 ? {
-                label: `${relevantItemsCount} Procedures`,
+            pendingProcedure={relevantItems.length > 0 ? {
+                label: `${relevantItems.length} Procedures`,
                 teeth: [] 
             } : undefined}
             // Pass seeded IDs
             seededProcedureIds={visit.seededProcedureIds}
             visitId={visit.id}
             chiefComplaint={visit.chiefComplaint}
+            procedures={relevantItems} // Pass filtered items for UI
+        />
+        
+        <FactReviewModal 
+            isOpen={showReviewModal}
+            incompleteSections={incompleteSections}
+            onReviewNow={() => setShowReviewModal(false)}
+            onSignAnyway={performSign}
         />
     </div>
   );

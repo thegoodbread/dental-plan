@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { ChairsideViewMode, TimelineEvent, QuickActionType } from '../../types/charting';
 import { SoapSection, SoapSectionType, ToothNumber, VisitType, NoteEngineProcedureInput } from '../domain/dentalTypes';
 import { applyTemplateToSoapSections } from '../domain/procedureNoteEngine';
+import { TruthAssertionsBundle } from '../domain/TruthAssertions';
 
 // Lightweight snapshot for Undo functionality
 interface UndoSnapshot {
@@ -34,6 +35,19 @@ interface ChairsideContextType {
   setSoapSections: (sections: SoapSection[]) => void; // New bulk update
   updateCurrentNoteSectionsFromProcedure: (item: NoteEngineProcedureInput, visitType: VisitType) => void;
   
+  // Truth Assertions (Fact Blocks) - NEW
+  truthAssertions?: TruthAssertionsBundle;
+  setTruthAssertions: (bundle: TruthAssertionsBundle) => void;
+
+  // Inline Truth Blocks (V2.0 & V2.5)
+  // Allows per-section assertion review and selection.
+  factSectionStates: Record<string, boolean>;
+  toggleFactSection: (sectionId: string) => void;
+  
+  // Fact Review State (V2.5)
+  factReviewStatus: Record<string, 'pending' | 'reviewed'>;
+  markSectionFactsReviewed: (sectionType: SoapSectionType) => void;
+
   // Note Status & Persistence
   noteStatus: 'draft' | 'signed';
   saveCurrentNote: () => void;
@@ -70,6 +84,27 @@ const SECTION_LABELS: Record<SoapSectionType, string> = {
   'TREATMENT_PERFORMED': 'Treatment Performed',
   'PLAN': 'Plan / Next Steps'
 };
+
+// Derived selector to identify unreviewed sections
+export function getIncompleteFactSections(
+  truth: TruthAssertionsBundle | undefined,
+  status: Record<string, 'pending' | 'reviewed'>
+): SoapSectionType[] {
+  if (!truth || !truth.assertions || truth.assertions.length === 0) {
+    return [];
+  }
+
+  // Find all sections that contain at least one assertion
+  const relevantSections = new Set<SoapSectionType>();
+  truth.assertions.forEach(a => {
+    // Cast strict type
+    const secType = a.section as SoapSectionType;
+    relevantSections.add(secType);
+  });
+
+  // Return sections that are relevant but not marked as reviewed
+  return Array.from(relevantSections).filter(sec => status[sec] !== 'reviewed');
+}
 
 interface ChairsideProviderProps {
     children: React.ReactNode;
@@ -110,6 +145,29 @@ export const ChairsideProvider: React.FC<ChairsideProviderProps> = ({ children, 
   const [noteStatus, setNoteStatus] = useState<'draft' | 'signed'>('draft');
   const [lastSavedAt, setLastSavedAt] = useState<string | undefined>();
   const [undoSnapshots, setUndoSnapshots] = useState<Record<string, UndoSnapshot>>({});
+  
+  // Truth Assertions State
+  const [truthAssertions, setTruthAssertions] = useState<TruthAssertionsBundle | undefined>(undefined);
+  
+  // Inline Truth Blocks (V2.0)
+  const [factSectionStates, setFactSectionStates] = useState<Record<string, boolean>>({});
+  
+  // Fact Review State (V2.5)
+  const [factReviewStatus, setFactReviewStatus] = useState<Record<string, 'pending' | 'reviewed'>>({});
+
+  const toggleFactSection = (sectionId: string) => {
+    setFactSectionStates(prev => ({
+      ...prev,
+      [sectionId]: !prev[sectionId]
+    }));
+  };
+
+  const markSectionFactsReviewed = (sectionType: SoapSectionType) => {
+    setFactReviewStatus(prev => ({
+      ...prev,
+      [sectionType]: 'reviewed'
+    }));
+  };
   
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -339,6 +397,12 @@ export const ChairsideProvider: React.FC<ChairsideProviderProps> = ({ children, 
       updateSoapSection,
       setSoapSections: setSoapSectionsBulk,
       updateCurrentNoteSectionsFromProcedure,
+      truthAssertions,
+      setTruthAssertions,
+      factSectionStates,
+      toggleFactSection,
+      factReviewStatus,
+      markSectionFactsReviewed,
       saveCurrentNote,
       signNote,
       lastSavedAt,

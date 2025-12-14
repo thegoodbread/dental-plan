@@ -1,7 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { Edit2, Mic, Check, X, Wand2, ChevronRight, Stethoscope, RotateCcw, Lock } from 'lucide-react';
+import { Edit2, Mic, Check, X, Wand2, ChevronRight, Stethoscope, RotateCcw, Lock, CheckSquare, Square, ChevronDown } from 'lucide-react';
 import { SoapSection } from '../../domain/dentalTypes';
+import { TruthAssertion } from '../../domain/TruthAssertions';
+import { useChairside } from '../../context/ChairsideContext';
 
 interface SoapSectionBlockProps {
   section: SoapSection;
@@ -14,6 +16,12 @@ interface SoapSectionBlockProps {
   onUndo?: () => void;
   onDismissUndo?: () => void;
   isLocked?: boolean;
+  
+  // Inline Truth Blocks (V2.0)
+  assertions?: TruthAssertion[];
+  onToggleAssertion?: (id: string) => void;
+  isFactsExpanded?: boolean;
+  onToggleFacts?: () => void;
 }
 
 export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
@@ -26,11 +34,19 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
   undoSnapshot,
   onUndo,
   onDismissUndo,
-  isLocked = false
+  isLocked = false,
+  assertions = [],
+  onToggleAssertion,
+  isFactsExpanded = false,
+  onToggleFacts
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [draftContent, setDraftContent] = useState(section.content);
   const [isExpanded, setIsExpanded] = useState(!!section.content);
+  
+  // V2.5 Review Status
+  const { factReviewStatus, markSectionFactsReviewed } = useChairside();
+  const isReviewed = factReviewStatus[section.type] === 'reviewed';
 
   // Sync draft when prop changes and auto-expand on incoming content
   useEffect(() => {
@@ -75,6 +91,26 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
           toggleExpand();
       }
   };
+  
+  const handleToggleFactPanel = (e?: React.MouseEvent) => {
+      if (e) e.stopPropagation();
+      
+      // V2.5: Mark reviewed when closing the panel (if open), or if it was open.
+      // Logic: If currently expanded (isFactsExpanded), we are about to close it -> mark reviewed.
+      if (isFactsExpanded && !isLocked) {
+          markSectionFactsReviewed(section.type);
+      }
+      
+      if (onToggleFacts) onToggleFacts();
+      if (!isFactsExpanded) setIsExpanded(true); // Open section if opening facts
+  };
+  
+  const handleAssertionToggle = (id: string) => {
+      if (onToggleAssertion) {
+          onToggleAssertion(id);
+          markSectionFactsReviewed(section.type);
+      }
+  };
 
   // Logic: AI Refine should only be available if there is content
   const canUseAi = onAiDraft && !!section.content && !isLocked;
@@ -103,7 +139,15 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
                 <ChevronRight size={14} />
             </div>
             <div className="flex flex-col md:flex-row md:items-center md:gap-2">
-                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">{section.title}</h3>
+                <div className="flex items-center gap-2">
+                    <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">{section.title}</h3>
+                    {/* V2.5 Review Status Dot */}
+                    {assertions.length > 0 && !isLocked && (
+                        isReviewed 
+                        ? <span className="w-2 h-2 rounded-full bg-green-500 ring-1 ring-white shadow-sm" title="Facts Reviewed" />
+                        : <span className="w-2 h-2 rounded-full bg-gray-300 ring-1 ring-white" title="Review Pending" />
+                    )}
+                </div>
                 {contextLabel && (
                     <span className="hidden md:inline text-[9px] text-slate-400 font-medium border-l border-slate-300 pl-2">
                         Applies to: {contextLabel}
@@ -114,6 +158,16 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
         
         {/* Actions */}
         <div className="flex items-center gap-2">
+             {/* Inline Facts Toggle (V2.0) */}
+             {assertions.length > 0 && onToggleFacts && !isLocked && (
+               <button 
+                 onClick={handleToggleFactPanel}
+                 className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold border transition-all mr-2 ${isFactsExpanded ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
+               >
+                 <CheckSquare size={10} /> Facts ({assertions.length})
+               </button>
+             )}
+
              {/* New Helpers visible in header when NOT editing/locked */}
              {!isEditing && !isLocked && (
                <>
@@ -165,6 +219,33 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
       {/* Content Area - Collapsible */}
       {isExpanded && (
           <div className="bg-white">
+            {/* Inline Truth Blocks (V2.0) - Replaces Side Drawer as Primary */}
+            {isFactsExpanded && assertions.length > 0 && !isLocked && (
+              <div className="bg-slate-50 border-b border-slate-200 p-3 animate-in slide-in-from-top-2 duration-200">
+                 <div className="flex justify-between items-center mb-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Facts for this section</span>
+                    <button onClick={handleToggleFactPanel} className="text-slate-400 hover:text-slate-600"><ChevronDown size={14} className="rotate-180" /></button>
+                 </div>
+                 <div className="space-y-1">
+                    {assertions.map(a => (
+                       <div 
+                         key={a.id} 
+                         onClick={() => handleAssertionToggle(a.id)}
+                         className={`flex items-start gap-2 p-2 rounded cursor-pointer transition-colors ${a.checked ? 'bg-white border border-blue-200 shadow-sm' : 'bg-slate-100/50 border border-transparent opacity-60 hover:opacity-100'}`}
+                       >
+                          <div className={`mt-0.5 ${a.checked ? 'text-blue-600' : 'text-slate-400'}`}>
+                             {a.checked ? <CheckSquare size={14} /> : <Square size={14} />}
+                          </div>
+                          <div>
+                             <p className={`text-xs font-medium leading-tight ${a.checked ? 'text-slate-800' : 'text-slate-500 line-through decoration-slate-300'}`}>{a.label}</p>
+                             {a.description && a.checked && <p className="text-[10px] text-slate-500 mt-0.5">{a.description}</p>}
+                          </div>
+                       </div>
+                    ))}
+                 </div>
+              </div>
+            )}
+
             {/* Undo Banner - HIDDEN IF LOCKED */}
             {!isLocked && undoSnapshot && !isEditing && (
                 <div className="bg-blue-50/80 px-4 py-2 flex justify-between items-center text-xs border-b border-blue-100 animate-in slide-in-from-top-2">
@@ -191,6 +272,20 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
                 </div>
             )}
             
+            {/* V2.0: Label for Preview with helpful hint */}
+            {!isEditing && section.content && (
+                <div className="px-4 pt-2">
+                    {assertions.length > 0 && (
+                        <div className="text-[10px] text-gray-400 italic mb-1">
+                            Narrative generated from checked facts.
+                        </div>
+                    )}
+                    <div className="text-[9px] font-bold text-slate-300 uppercase tracking-widest select-none">
+                        Generated Narrative (Preview)
+                    </div>
+                </div>
+            )}
+
             {isEditing ? (
               <div className="p-3 animate-in fade-in duration-150">
                 {/* Editor Toolbar */}
@@ -214,11 +309,12 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
                 </div>
 
                 <textarea
-                  className="w-full min-h-[120px] text-sm text-slate-800 bg-white p-1 outline-none resize-y placeholder:text-slate-300 font-medium"
+                  className="w-full min-h-[140px] text-sm text-slate-800 bg-white p-1 outline-none resize-y placeholder:text-slate-300 font-medium leading-relaxed font-sans"
                   value={draftContent}
                   onChange={(e) => setDraftContent(e.target.value)}
                   placeholder="Type notes here..."
                   autoFocus
+                  title="Edits here override generated text. For correctness, modify facts above instead."
                 />
                 
                 <div className="flex justify-end gap-2 mt-3 pt-2 border-t border-slate-100">
@@ -233,7 +329,7 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
             ) : (
               <div 
                 className={`
-                    p-4 text-sm whitespace-pre-wrap leading-relaxed min-h-[40px] transition-colors
+                    p-4 text-sm whitespace-pre-wrap leading-relaxed min-h-[40px] transition-colors font-medium font-sans
                     ${isLocked 
                         ? 'text-slate-600 bg-slate-50 cursor-default' 
                         : 'text-slate-700 cursor-text hover:bg-slate-50/30'

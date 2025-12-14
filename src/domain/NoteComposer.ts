@@ -1,7 +1,9 @@
+
 import { NOTE_LIBRARY, ProcedureSoapTemplate } from './NoteLibrary';
 import { TreatmentPlanItem, Visit } from '../types';
 import { AssignedRisk, SoapSection, SoapSectionType } from './dentalTypes';
 import { getCodeFamiliesForCode } from './codeFamilies';
+import { TruthAssertionsBundle } from './TruthAssertions';
 
 export interface GeneratedClinicalNote {
   subjective: string;
@@ -32,6 +34,22 @@ function getContextForItem(item: TreatmentPlanItem): Record<string, string> {
     arch,
     procedure: item.procedureName || "Procedure"
   };
+}
+
+// --- Improvement: Helper for micro-labels ---
+function getProcedureShortLabel(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes('crown')) return 'Crown';
+  if (n.includes('composite') || n.includes('resin')) return 'Composite';
+  if (n.includes('root canal') || n.includes('endo')) return 'RCT';
+  if (n.includes('extraction')) return 'Ext';
+  if (n.includes('implant')) return 'Implant';
+  if (n.includes('scaling') || n.includes('srp')) return 'SRP';
+  if (n.includes('prophy')) return 'Prophy';
+  if (n.includes('exam')) return 'Exam';
+  if (n.includes('denture')) return 'Denture';
+  if (n.includes('bridge')) return 'Bridge';
+  return 'Proc';
 }
 
 /**
@@ -74,6 +92,37 @@ export function generateSoapSectionsForVisit(
   const sections = mapNoteToExistingSections(note, existingSections);
 
   return { note, sections };
+}
+
+/**
+ * NEW: Generates a note specifically from a TruthAssertionsBundle.
+ * This is the "Truth Block" path that will eventually replace the direct procedure loop.
+ */
+export function composeVisitNoteFromAssertions(
+  bundle: TruthAssertionsBundle,
+  options?: { chiefComplaint?: string; hpi?: string; radiographicFindings?: string }
+): GeneratedClinicalNote {
+  
+  const getLines = (section: string) => 
+    bundle.assertions
+      .filter(a => a.section === section && a.checked)
+      .sort((a,b) => a.sortOrder - b.sortOrder)
+      .map(a => {
+         // If description is present, append it
+         if (a.description && a.description !== a.label) {
+             return `${a.label}\n${a.description}`;
+         }
+         return a.label;
+      })
+      .join('\n\n');
+
+  return {
+    subjective: getLines('SUBJECTIVE'),
+    objective: getLines('OBJECTIVE'),
+    assessment: getLines('ASSESSMENT'),
+    treatmentPerformed: getLines('TREATMENT_PERFORMED'),
+    plan: getLines('PLAN')
+  };
 }
 
 export function composeVisitNote({
@@ -156,23 +205,39 @@ export function composeVisitNote({
     
     const ctx = getContextForItem(item);
 
-    // Always push non-empty strings
-    if (template.subjective) subjectiveLines.push(renderTokens(template.subjective, ctx));
-    if (template.objective) objectiveLines.push(renderTokens(template.objective, ctx));
-    if (template.assessment) assessmentLines.push(renderTokens(template.assessment, ctx));
+    // --- Improvement: Micro-labels for readability ---
+    let location = '';
+    if (item.selectedTeeth?.length) location = `#${item.selectedTeeth.join(',')}`;
+    else if (item.selectedQuadrants?.length) location = item.selectedQuadrants.join(',');
+    else if (item.selectedArches?.length) location = item.selectedArches.join(',');
+    
+    const shortLabel = getProcedureShortLabel(item.procedureName);
+    const headerLine = `[${shortLabel} ${location}]`.trim().replace(/\[\s+/, '[');
+
+    const appendWithLabel = (target: string[], text: string) => {
+        if (!text) return;
+        // Check if this is the first item or if we need separation
+        // Adding a newline and the micro-label
+        const entry = `${headerLine}\n${text}`;
+        target.push(entry);
+    };
+
+    if (template.subjective) appendWithLabel(subjectiveLines, renderTokens(template.subjective, ctx));
+    if (template.objective) appendWithLabel(objectiveLines, renderTokens(template.objective, ctx));
+    if (template.assessment) appendWithLabel(assessmentLines, renderTokens(template.assessment, ctx));
     // NOTE: 'plan' in template often maps to what was DONE (Treatment Performed)
     // We will put it in Treatment Performed section to align with typical SOAP usage for past visits
-    if (template.plan) treatmentLines.push(renderTokens(template.plan, ctx));
+    if (template.plan) appendWithLabel(treatmentLines, renderTokens(template.plan, ctx));
   });
 
   // 3. Inject Radiographic Findings into Objective
   if (radiographicFindings) {
-    objectiveLines.push(`Radiographic findings: ${radiographicFindings}`);
+    objectiveLines.push(`[Radiographs]\n${radiographicFindings}`);
   }
 
   // 4. Inject Diagnoses into Assessment
   if (diagnosisCodes && diagnosisCodes.length > 0) {
-    assessmentLines.push(`Diagnoses (ICD-10): ${diagnosisCodes.join(", ")}`);
+    assessmentLines.push(`[Diagnoses]\nICD-10: ${diagnosisCodes.join(", ")}`);
   }
 
   // 5. Plan Section (Future / Next Steps / Risks)
@@ -184,6 +249,7 @@ export function composeVisitNote({
   
   planLines.push("Next Visit: Continue treatment plan / Recall.");
 
+  // Join with double newlines for clear separation between blocks
   return {
     subjective: subjectiveLines.join("\n\n").trim(),
     objective: objectiveLines.join("\n\n").trim(),
