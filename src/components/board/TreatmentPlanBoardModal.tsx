@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { TreatmentPlan, TreatmentPlanItem, TreatmentPhase, UrgencyLevel, FeeCategory, AddOnKind, Visit, VisitType } from '../../types';
-import { Plus, X, MoreHorizontal, Clock, GripVertical, Edit, Trash2, Library, Calendar, Check, Stethoscope } from 'lucide-react';
+import { Plus, X, MoreHorizontal, Clock, GripVertical, Edit, Trash2, Library, Calendar, Check, Stethoscope, History as HistoryIcon, ArrowRight } from 'lucide-react';
 import { SEDATION_TYPES, checkAddOnCompatibility, createAddOnItem, ADD_ON_LIBRARY, AddOnDefinition, createVisit, getVisitsForPlan, linkProceduresToVisit } from '../../services/treatmentPlans';
 import { AddOnsLibraryPanel } from './AddOnsLibraryPanel';
 
@@ -275,6 +275,62 @@ const VisitCreationModal: React.FC<{
     );
 };
 
+// --- Existing Visits Modal ---
+const ExistingVisitsModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    visits: Visit[];
+    onSelect: (visit: Visit) => void;
+}> = ({ isOpen, onClose, visits, onSelect }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
+            <div className="bg-white w-full max-w-md rounded-xl shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-bold text-gray-900">Existing Visits</h3>
+                    <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-100"><X size={20}/></button>
+                </div>
+                <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                    {visits.length === 0 ? (
+                        <div className="text-center py-8">
+                            <div className="inline-flex p-3 bg-slate-100 rounded-full mb-3 text-slate-400">
+                                <HistoryIcon size={24} />
+                            </div>
+                            <p className="text-gray-900 font-medium">No visits recorded</p>
+                            <p className="text-gray-500 text-sm mt-1">Start a new visit to track completed procedures.</p>
+                        </div>
+                    ) : (
+                        visits.map(visit => (
+                            <button 
+                                key={visit.id} 
+                                onClick={() => onSelect(visit)}
+                                className="w-full text-left p-3 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-colors group"
+                            >
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <div className="font-bold text-sm text-gray-900 flex items-center gap-2 group-hover:text-blue-700">
+                                            {new Date(visit.date).toLocaleDateString()}
+                                            <span className="text-[10px] font-normal text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 uppercase group-hover:bg-white">{visit.visitType}</span>
+                                        </div>
+                                        <div className="text-xs text-gray-500 mt-0.5">{visit.provider}</div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="text-xs font-semibold bg-gray-50 text-gray-600 px-2 py-1 rounded border border-gray-100 group-hover:bg-blue-100 group-hover:text-blue-700 group-hover:border-blue-200">
+                                            {visit.attachedProcedureIds.length} proc
+                                        </div>
+                                        <ArrowRight size={14} className="text-gray-300 group-hover:text-blue-500" />
+                                    </div>
+                                </div>
+                            </button>
+                        ))
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 // --- Main Board Component ---
 interface TreatmentPlanBoardModalProps {
@@ -308,6 +364,7 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
   // VISIT MODE STATE
   const [activeVisitState, setActiveVisitState] = useState<ActiveVisitState | null>(null);
   const [showVisitModal, setShowVisitModal] = useState(false);
+  const [showExistingVisitsModal, setShowExistingVisitsModal] = useState(false);
   const [existingVisits, setExistingVisits] = useState<Visit[]>([]);
 
   useEffect(() => {
@@ -627,6 +684,10 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
           visitType: type,
           attachedProcedureIds: []
       });
+      
+      // Update local state immediately to enable "Existing Visits" button
+      setExistingVisits(prev => [...prev, newVisit]);
+
       setActiveVisitState({ visit: newVisit, selectedProcedureIds: [] });
       setShowVisitModal(false);
   };
@@ -663,7 +724,7 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
           return item;
       }));
 
-      // Refresh existing visits list
+      // Refresh existing visits list to ensure accuracy
       setExistingVisits(getVisitsForPlan(plan.id));
 
       // Exit Mode
@@ -671,7 +732,21 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
   };
 
   const handleCancelVisitMode = () => {
+      // Ensure state is synced in case a visit was created but canceled
+      setExistingVisits(getVisitsForPlan(plan.id));
       setActiveVisitState(null);
+  };
+
+  const handleResumeVisitFromExisting = (visit: Visit) => {
+      const linkedItemIds = localItems
+          .filter(item => item.performedInVisitId === visit.id)
+          .map(item => item.id);
+
+      setActiveVisitState({
+          visit,
+          selectedProcedureIds: linkedItemIds
+      });
+      setShowExistingVisitsModal(false);
   };
 
   const totalChairTime = useMemo(() => localItems.reduce((sum, item) => sum + estimateChairTime(item), 0), [localItems]);
@@ -695,18 +770,33 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
           
           {/* Header */}
           <header className="shrink-0 px-5 py-3 border-b bg-white/80 backdrop-blur-sm flex items-center justify-between">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-6">
                <div>
                   <h2 className="text-lg font-bold text-gray-900">Treatment Plan Board</h2>
                   <p className="text-xs text-gray-500">{localPlan.caseAlias} - {localPlan.planNumber}</p>
                </div>
                {!activeVisitState && (
-                   <button 
+                  <div className="flex items-center gap-3">
+                    <button
                       onClick={() => setShowVisitModal(true)}
-                      className="ml-4 flex items-center gap-2 px-3 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 shadow-sm transition-colors"
-                   >
-                       <Stethoscope size={14} /> Start Visit
-                   </button>
+                      className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 shadow-sm transition-colors"
+                    >
+                      <Stethoscope size={14} /> Start Visit
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowExistingVisitsModal(true)}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-white text-slate-700 rounded-lg text-xs font-semibold border border-slate-300 hover:bg-slate-50 shadow-sm transition-colors"
+                    >
+                      <HistoryIcon size={14} /> Existing Visits
+                      {existingVisits.length > 0 && (
+                        <span className="ml-0.5 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px] border border-slate-200">
+                          {existingVisits.length}
+                        </span>
+                      )}
+                    </button>
+                  </div>
                )}
             </div>
             
@@ -976,6 +1066,7 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
         <ProcedureEditorModal item={selectedItem} onSave={handleUpdateItem} onClose={closeEditor} onDeleteItem={handleDeleteItem} />
       )}
       <VisitCreationModal isOpen={showVisitModal} onClose={() => setShowVisitModal(false)} onCreate={handleStartVisit} />
+      <ExistingVisitsModal isOpen={showExistingVisitsModal} onClose={() => setShowExistingVisitsModal(false)} visits={existingVisits} onSelect={handleResumeVisitFromExisting} />
     </>
   );
 };

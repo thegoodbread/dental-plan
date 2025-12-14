@@ -53,6 +53,27 @@ export type AddOnKind =
   | 'FOLLOWUP'
   | 'OTHER';
 
+// --- VISIT DOMAIN ---
+
+export type VisitType = 
+  | "exam"
+  | "restorative"
+  | "surgery"
+  | "hygiene"
+  | "emergency"
+  | "consult"
+  | "other";
+
+export interface Visit {
+  id: string;              // UUID
+  treatmentPlanId: string; // Linked Plan
+  date: string;            // ISO Date YYYY-MM-DD
+  provider: string;        // Display name of provider
+  visitType: VisitType;
+  attachedProcedureIds: string[]; // List of completed item IDs
+  createdAt: string;
+}
+
 // Entities
 
 export interface User {
@@ -131,6 +152,9 @@ export interface TreatmentPlanItem {
 
   notes?: string | null;
   sortOrder: number;
+
+  // VISIT LINKAGE
+  performedInVisitId?: string | null; // If set, this procedure is considered "Completed" in that visit
 }
 
 export interface TreatmentPlan {

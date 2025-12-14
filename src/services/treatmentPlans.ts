@@ -1,4 +1,3 @@
-
 import { 
   TreatmentPlan, 
   TreatmentPlanItem, 
@@ -375,7 +374,7 @@ export const getTreatmentPlanById = (id: string): TreatmentPlan | undefined => {
     .filter((i): i is TreatmentPlanItem => !!i);
   
   // Sort items by sortOrder
-  planItems.sort((a, b) => a.sortOrder - b.sortOrder);
+  planItems.sort((a: TreatmentPlanItem, b: TreatmentPlanItem) => a.sortOrder - b.sortOrder);
   
   // Backward compatibility for insurance mode
   if (!plan.insuranceMode) {
@@ -419,7 +418,7 @@ export function loadTreatmentPlanWithItems(
       .filter((i): i is TreatmentPlanItem => !!i);
   } else {
     itemsForPlan = allItems.filter(i => i.treatmentPlanId === planId);
-    itemsForPlan.sort((a,b) => a.sortOrder - b.sortOrder);
+    itemsForPlan.sort((a: TreatmentPlanItem, b: TreatmentPlanItem) => a.sortOrder - b.sortOrder);
   }
   
   // --- BACKWARD COMPATIBILITY & DURATION DEFAULTS ---
@@ -1226,21 +1225,38 @@ export const reorderItemsInPhase = (planId: string, phaseId: string, orderedItem
 };
 
 export const reorderPhases = (planId: string, orderedPhaseIds: string[]): { plan: TreatmentPlan, items: TreatmentPlanItem[] } | null => {
-    const result = loadTreatmentPlanWithItems(planId);
-    if (!result) return null;
-    
-    let { plan, items } = result;
-    if (!plan.phases) return result;
+  const result = loadTreatmentPlanWithItems(planId);
+  if (!result) return null;
 
-    const phaseMap = new Map(plan.phases.map(p => [p.id, p]));
-    plan.phases = orderedPhaseIds.map((id, index) => {
-        const phase = phaseMap.get(id)!;
-        phase.sortOrder = index;
-        return phase;
-    });
+  let { plan, items } = result;
+  if (!plan.phases) return result;
 
-    savePlan(plan);
-    return { plan, items };
+  const currentPhases = plan.phases;
+
+  const phaseMap = new Map<string, TreatmentPhase>();
+  currentPhases.forEach(p => phaseMap.set(p.id, p));
+
+  const reorderedPhases: TreatmentPhase[] = [];
+
+  orderedPhaseIds.forEach((id, index) => {
+    const phase = phaseMap.get(id);
+    if (phase) {
+      phase.sortOrder = index;
+      reorderedPhases.push(phase);
+    }
+  });
+
+  // Append any missing phases
+  currentPhases.forEach((phase) => {
+    if (!orderedPhaseIds.includes(phase.id)) {
+      reorderedPhases.push(phase);
+    }
+  });
+
+  plan.phases = reorderedPhases;
+
+  savePlan(plan);
+  return { plan, items };
 };
 
 export const assignItemToPhase = (planId: string, itemId: string, newPhaseId: string): { plan: TreatmentPlan, items: TreatmentPlanItem[] } | null => {
@@ -1355,6 +1371,32 @@ export const linkProceduresToVisit = (visitId: string, procedureIds: string[]): 
   }
 
   return allVisits[visitIndex];
+};
+
+export const getVisitById = (visitId: string): Visit | null => {
+  const allVisits: Visit[] = JSON.parse(localStorage.getItem(KEY_VISITS) || '[]');
+  return allVisits.find(v => v.id === visitId) || null;
+};
+
+export const updateVisit = (visitId: string, updates: Partial<Omit<Visit, 'id' | 'treatmentPlanId' | 'createdAt'>>): Visit | null => {
+  const allVisits: Visit[] = JSON.parse(localStorage.getItem(KEY_VISITS) || '[]');
+  const index = allVisits.findIndex(v => v.id === visitId);
+  
+  if (index === -1) return null;
+  
+  const current = allVisits[index];
+  
+  // Protect immutable fields
+  const safeUpdates = { ...updates };
+  delete (safeUpdates as any).id;
+  delete (safeUpdates as any).treatmentPlanId;
+  delete (safeUpdates as any).createdAt;
+
+  const updatedVisit = { ...current, ...safeUpdates };
+  allVisits[index] = updatedVisit;
+  
+  localStorage.setItem(KEY_VISITS, JSON.stringify(allVisits));
+  return updatedVisit;
 };
 
 
