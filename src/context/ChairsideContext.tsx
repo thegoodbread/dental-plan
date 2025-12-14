@@ -10,10 +10,6 @@ interface UndoSnapshot {
   sourceLabel: string;
 }
 
-// NOTE LEGAL REQUIREMENT:
-// Once a note is signed, it becomes immutable. All mutation APIs and persistence paths 
-// must treat `noteStatus === 'signed'` as read-only. No autosaves allowed after signing.
-
 interface ChairsideContextType {
   currentView: ChairsideViewMode;
   setCurrentView: (view: ChairsideViewMode) => void;
@@ -35,6 +31,7 @@ interface ChairsideContextType {
   // SOAP State
   soapSections: SoapSection[];
   updateSoapSection: (id: string, content: string) => void;
+  setSoapSections: (sections: SoapSection[]) => void; // New bulk update
   updateCurrentNoteSectionsFromProcedure: (item: NoteEngineProcedureInput, visitType: VisitType) => void;
   
   // Note Status & Persistence
@@ -74,7 +71,12 @@ const SECTION_LABELS: Record<SoapSectionType, string> = {
   'PLAN': 'Plan / Next Steps'
 };
 
-export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+interface ChairsideProviderProps {
+    children: React.ReactNode;
+    initialVisitId?: string; // Allow override for visit-specific contexts
+}
+
+export const ChairsideProvider: React.FC<ChairsideProviderProps> = ({ children, initialVisitId }) => {
   const [currentView, setCurrentView] = useState<ChairsideViewMode>('DASHBOARD');
   const [activeComposer, setActiveComposer] = useState<QuickActionType | null>(null);
   const [selectedTeeth, setSelectedTeeth] = useState<ToothNumber[]>([]);
@@ -86,8 +88,10 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [currentTreatmentPlanId] = useState('plan-demo-A');
   const [currentUserId] = useState('user-dr-smith');
 
-  // Visit-Based Identity (Deterministic)
+  // Visit-Based Identity
+  // If initialVisitId is provided (e.g. from VisitDetailModal), use it to isolate this session's drafts
   const [currentVisitId] = useState(() => {
+      if (initialVisitId) return initialVisitId;
       const today = new Date().toISOString().split('T')[0];
       return `visit-${today}`;
   });
@@ -102,12 +106,11 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   ]);
 
   // SOAP State
-  const [soapSections, setSoapSections] = useState<SoapSection[]>([]);
+  const [soapSections, setSoapSectionsState] = useState<SoapSection[]>([]);
   const [noteStatus, setNoteStatus] = useState<'draft' | 'signed'>('draft');
   const [lastSavedAt, setLastSavedAt] = useState<string | undefined>();
   const [undoSnapshots, setUndoSnapshots] = useState<Record<string, UndoSnapshot>>({});
   
-  // Use ReturnType<typeof setTimeout> for browser/node compatibility
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // --- PERSISTENCE HELPERS ---
@@ -133,8 +136,6 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [buildNoteStorageKey]);
 
   const saveCurrentNoteToStorage = useCallback((sections: SoapSection[], status: 'draft' | 'signed') => {
-    // SECURITY: If the current in-memory state is signed, allow NO writes unless this specific
-    // action is the one transitioning it TO 'signed' (checked via status arg).
     if (noteStatus === 'signed' && status !== 'signed') {
         console.warn("Attempted to modify a signed note. Operation blocked.");
         return;
@@ -162,12 +163,12 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const data = loadCurrentNoteFromStorage();
     
     if (data && data.sections.length > 0) {
-        setSoapSections(data.sections);
+        setSoapSectionsState(data.sections);
         setNoteStatus(data.status);
         if (data.savedAt) setLastSavedAt(data.savedAt);
     } else {
         // Init clean sections
-        setSoapSections(SECTION_ORDER.map(type => ({
+        setSoapSectionsState(SECTION_ORDER.map(type => ({
             id: `s-${type}`,
             type,
             title: SECTION_LABELS[type],
@@ -198,9 +199,7 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setTimeline(prev => [newEvent, ...prev]);
   };
 
-  // Helper to trigger debounce save
   const triggerAutoSave = (sections: SoapSection[], status: 'draft'|'signed') => {
-    // SECURITY: Autosave should never run on signed notes
     if (status === 'signed') return; 
     
     if (autoSaveTimeoutRef.current) {
@@ -208,13 +207,29 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
     autoSaveTimeoutRef.current = setTimeout(() => {
       saveCurrentNoteToStorage(sections, status);
-    }, 5000); // 5 second debounce
+    }, 5000);
   };
 
   const updateSoapSection = (id: string, content: string) => {
-    if (noteStatus === 'signed') return; // LOCK: No manual edits allowed
+    if (noteStatus === 'signed') return;
 
-    // If user manually edits, clear undo snapshot for that section
+    // Use functional update to ensure we always work with the latest state
+    // preventing stale closure issues when called rapidly (e.g. in a loop)
+    setSoapSectionsState(prevSections => {
+        const updated = prevSections.map(s => 
+          s.id === id 
+            ? { ...s, content, lastEditedAt: new Date().toISOString() } 
+            : s
+        );
+        
+        // Side effects (undo snapshot clearing) - conceptually outside the pure state update
+        // but safe enough here for local state. 
+        // Note: undoSnapshots is separate state, so we update it separately below if needed.
+        
+        triggerAutoSave(updated, noteStatus);
+        return updated;
+    });
+
     if (undoSnapshots[id]) {
         setUndoSnapshots(prev => {
             const next = { ...prev };
@@ -222,21 +237,17 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             return next;
         });
     }
+  };
 
-    const updated = soapSections.map(s => 
-      s.id === id 
-        ? { ...s, content, lastEditedAt: new Date().toISOString() } 
-        : s
-    );
-    
-    setSoapSections(updated); // Instant UI update
-    triggerAutoSave(updated, noteStatus);
+  const setSoapSectionsBulk = (newSections: SoapSection[]) => {
+      if (noteStatus === 'signed') return;
+      setSoapSectionsState(newSections);
+      triggerAutoSave(newSections, noteStatus);
   };
 
   const updateCurrentNoteSectionsFromProcedure = (item: NoteEngineProcedureInput, visitType: VisitType) => {
-    if (noteStatus === 'signed') return; // LOCK: No appends allowed
+    if (noteStatus === 'signed') return;
 
-    // Use Deterministic Template Engine
     const { updatedSections } = applyTemplateToSoapSections({
         item,
         visitType, 
@@ -244,14 +255,12 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         existingSections: soapSections
     });
 
-    // Detect changes and store snapshots for Undo
     const newSnapshots = { ...undoSnapshots };
     let hasChanges = false;
 
     updatedSections.forEach(newSec => {
         const oldSec = soapSections.find(s => s.id === newSec.id);
         if (oldSec && oldSec.content !== newSec.content) {
-            // Snapshot the OLD content for undo
             newSnapshots[newSec.id] = {
                 content: oldSec.content,
                 sourceLabel: item.procedureName,
@@ -262,28 +271,25 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     if (hasChanges) {
         setUndoSnapshots(newSnapshots);
-        setSoapSections(updatedSections);
-        // Persist immediately for important state changes
+        setSoapSectionsState(updatedSections);
         saveCurrentNoteToStorage(updatedSections, noteStatus);
     }
   };
 
   const undoAppend = (sectionId: string) => {
-      if (noteStatus === 'signed') return; // LOCK
+      if (noteStatus === 'signed') return;
 
       const snapshot = undoSnapshots[sectionId];
       if (snapshot) {
           const updated = soapSections.map(s => 
               s.id === sectionId ? { ...s, content: snapshot.content, lastEditedAt: new Date().toISOString() } : s
           );
-          setSoapSections(updated);
-          // Remove snapshot after use
+          setSoapSectionsState(updated);
           setUndoSnapshots(prev => {
               const next = { ...prev };
               delete next[sectionId];
               return next;
           });
-          // Save the restored state immediately
           saveCurrentNoteToStorage(updated, noteStatus);
       }
   };
@@ -296,25 +302,18 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       });
   };
 
-  // Manual Save Action
   const saveCurrentNote = () => {
-    if (noteStatus === 'signed') return; // LOCK
+    if (noteStatus === 'signed') return;
     saveCurrentNoteToStorage(soapSections, noteStatus);
   };
 
-  // Sign Action (Finalizes note)
-  // This is the ONLY place a note transitions to 'signed'.
   const signNote = () => {
       setNoteStatus('signed');
-      setUndoSnapshots({}); // Clear undo history
-      
-      // Cancel any pending autosave to ensure clean state
+      setUndoSnapshots({});
       if (autoSaveTimeoutRef.current) {
           clearTimeout(autoSaveTimeoutRef.current);
           autoSaveTimeoutRef.current = null;
       }
-      
-      // Immediate final save with signed status
       saveCurrentNoteToStorage(soapSections, 'signed');
   };
 
@@ -338,6 +337,7 @@ export const ChairsideProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       currentUserId,
       soapSections,
       updateSoapSection,
+      setSoapSections: setSoapSectionsBulk,
       updateCurrentNoteSectionsFromProcedure,
       saveCurrentNote,
       signNote,

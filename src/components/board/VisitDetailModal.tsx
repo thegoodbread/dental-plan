@@ -195,7 +195,8 @@ export const VisitDetailModal: React.FC<VisitDetailModalProps> = ({
        </div>
 
        {isClaimPrepOpen && (
-           <ChairsideProvider>
+           // Provide the specific Visit ID to isolate the note context and avoid collisions
+           <ChairsideProvider initialVisitId={visit.id}>
                <ClaimPrepModal 
                   isOpen={isClaimPrepOpen} 
                   onClose={() => setIsClaimPrepOpen(false)}

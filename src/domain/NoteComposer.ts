@@ -1,10 +1,7 @@
-
-// NoteComposer.ts
-// Pure logic for generating Visit-Level Clinical Notes
-
 import { NOTE_LIBRARY, ProcedureSoapTemplate } from './NoteLibrary';
 import { TreatmentPlanItem, Visit } from '../types';
-import { SoapSection } from './dentalTypes';
+import { AssignedRisk, SoapSection, SoapSectionType } from './dentalTypes';
+import { getCodeFamiliesForCode } from './codeFamilies';
 
 export interface GeneratedClinicalNote {
   subjective: string;
@@ -16,24 +13,67 @@ export interface GeneratedClinicalNote {
 
 // Helper to render tokens
 function renderTokens(text: string, ctx: Record<string, string>): string {
+  if (!text) return "";
   return text.replace(/{{\s*(\w+)\s*}}/g, (match, token) => {
     return ctx[token] || `[${token}]`;
   });
 }
 
 function getContextForItem(item: TreatmentPlanItem): Record<string, string> {
-  const tooth = item.selectedTeeth?.join(", ") || "";
+  const tooth = (item.selectedTeeth || []).join(", ");
   const surfaces = (item.surfaces || []).join("");
-  const quadrant = item.selectedQuadrants?.join(", ") || "";
-  const arch = item.selectedArches?.join(", ") || "";
+  const quadrant = (item.selectedQuadrants || []).join(", ");
+  const arch = (item.selectedArches || []).join(", ");
   
   return {
     tooth,
     surfaces,
     quadrant,
     arch,
-    procedure: item.procedureName
+    procedure: item.procedureName || "Procedure"
   };
+}
+
+/**
+ * Pure, deterministic function to generate SOAP sections for a visit.
+ * Consolidates all logic for text generation.
+ */
+export function generateSoapSectionsForVisit(
+  visit: Visit,
+  procedures: TreatmentPlanItem[],
+  risks: AssignedRisk[],
+  existingSections: SoapSection[]
+): { note: GeneratedClinicalNote; sections: SoapSection[] } {
+  
+  // 1. Build riskBullets string from active risks (sorted for determinism)
+  const riskBullets = risks
+    .filter(r => r.isActive)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map(r => `• ${r.bodySnapshot}`)
+    .join('\n');
+
+  // 2. Collect unique diagnosisCodes from procedures
+  const diagnosisCodes: string[] = [];
+  procedures.forEach(p => {
+      if (p.diagnosisCodes) diagnosisCodes.push(...p.diagnosisCodes);
+  });
+  const uniqueDx = Array.from(new Set(diagnosisCodes)).sort();
+
+  // 3. Compose the note content
+  const note = composeVisitNote({
+      visit,
+      procedures,
+      riskBullets,
+      chiefComplaint: visit.chiefComplaint,
+      hpi: visit.hpi,
+      radiographicFindings: visit.radiographicFindings,
+      diagnosisCodes: uniqueDx
+  });
+
+  // 4. Map content to existing section IDs
+  const sections = mapNoteToExistingSections(note, existingSections);
+
+  return { note, sections };
 }
 
 export function composeVisitNote({
@@ -61,8 +101,23 @@ export function composeVisitNote({
   const treatmentLines: string[] = [];
   const planLines: string[] = [];
 
+  // Sort procedures to ensure deterministic output order
+  // Sort by: Code -> Tooth -> Surfaces -> ID
+  const sortedProcedures = [...procedures].sort((a, b) => {
+    if (a.procedureCode !== b.procedureCode) return a.procedureCode.localeCompare(b.procedureCode);
+    const aTooth = (a.selectedTeeth || []).sort().join(',');
+    const bTooth = (b.selectedTeeth || []).sort().join(',');
+    if (aTooth !== bTooth) return aTooth.localeCompare(bTooth);
+    
+    const aSurf = (a.surfaces || []).sort().join('');
+    const bSurf = (b.surfaces || []).sort().join('');
+    if (aSurf !== bSurf) return aSurf.localeCompare(bSurf);
+
+    return a.id.localeCompare(b.id);
+  });
+
   // 1. Visit Header / Chief Complaint / HPI
-  if (chiefComplaint) subjectiveLines.push(`Chief Complaint: ${chiefComplaint}.`);
+  if (chiefComplaint) subjectiveLines.push(`Chief Complaint: ${chiefComplaint}`);
   if (hpi) subjectiveLines.push(`HPI: ${hpi}`);
 
   // If no procedures AND no CC, fallback generic
@@ -70,49 +125,71 @@ export function composeVisitNote({
       subjectiveLines.push("Patient presents for visit. No procedures recorded today.");
   }
 
-  // 2. Loop Procedures
-  procedures.forEach(item => {
+  // 2. Loop Procedures with Grouping
+  const seenGroups = new Set<string>();
+
+  sortedProcedures.forEach(item => {
+    // Detect Code Family (safe fallback if empty)
+    const families = getCodeFamiliesForCode(item.procedureCode || '');
+    const primaryFamily = families[0] || 'UNCLASSIFIED';
+    
+    const tooth = (item.selectedTeeth || []).sort().join(',');
+    const surfaces = (item.surfaces || []).sort().join('');
+    
+    // Group Key: Family + Code + Tooth + Surfaces
+    // We group identical procedure codes on the same tooth/surface to avoid spam.
+    const groupKey = `${primaryFamily}|${item.procedureCode}|${tooth}|${surfaces}`;
+
+    if (seenGroups.has(groupKey)) {
+        return; // Skip duplicate narrative block for same procedure group
+    }
+    seenGroups.add(groupKey);
+
     const code = item.procedureCode;
-    const template = NOTE_LIBRARY[code] || NOTE_LIBRARY['DEFAULT'];
+    // Strict fallback: use specific code, or DEFAULT if code not found
+    const template: ProcedureSoapTemplate = NOTE_LIBRARY[code] || NOTE_LIBRARY['DEFAULT'] || {
+        subjective: `Patient presents for ${item.procedureName}.`,
+        objective: `${item.procedureName} required.`,
+        assessment: `Need for ${item.procedureName}.`,
+        plan: `Performed ${item.procedureName}.`
+    };
+    
     const ctx = getContextForItem(item);
 
-    if (template) {
-        if (template.subjective) subjectiveLines.push(renderTokens(template.subjective, ctx));
-        if (template.objective) objectiveLines.push(renderTokens(template.objective, ctx));
-        if (template.assessment) assessmentLines.push(renderTokens(template.assessment, ctx));
-        // Mapping template 'plan' to Treatment Performed section
-        if (template.plan) treatmentLines.push(renderTokens(template.plan, ctx));
-    } else {
-        // Fallback if no template found for code
-        subjectiveLines.push(`Patient presents for ${item.procedureName}.`);
-        treatmentLines.push(`Performed ${item.procedureName}.`);
-    }
+    // Always push non-empty strings
+    if (template.subjective) subjectiveLines.push(renderTokens(template.subjective, ctx));
+    if (template.objective) objectiveLines.push(renderTokens(template.objective, ctx));
+    if (template.assessment) assessmentLines.push(renderTokens(template.assessment, ctx));
+    // NOTE: 'plan' in template often maps to what was DONE (Treatment Performed)
+    // We will put it in Treatment Performed section to align with typical SOAP usage for past visits
+    if (template.plan) treatmentLines.push(renderTokens(template.plan, ctx));
   });
 
-  // 3. Inject Radiographic Findings into Objective (After procedure objectives)
+  // 3. Inject Radiographic Findings into Objective
   if (radiographicFindings) {
-    objectiveLines.push(`Radiographic findings: ${radiographicFindings}.`);
+    objectiveLines.push(`Radiographic findings: ${radiographicFindings}`);
   }
 
   // 4. Inject Diagnoses into Assessment
-  if (diagnosisCodes?.length) {
-    assessmentLines.push(`Associated diagnoses (ICD-10): ${diagnosisCodes.join(", ")}.`);
+  if (diagnosisCodes && diagnosisCodes.length > 0) {
+    assessmentLines.push(`Diagnoses (ICD-10): ${diagnosisCodes.join(", ")}`);
   }
 
-  // 5. Risks & Next Steps (Plan Section)
+  // 5. Plan Section (Future / Next Steps / Risks)
+  // This is the "P" in SOAP - typically next visit, referrals, home care, risks.
   if (riskBullets) {
-      planLines.push("--- Informed Consent & Risks ---");
+      planLines.push("Informed Consent & Risks Discussed:");
       planLines.push(riskBullets);
   }
   
   planLines.push("Next Visit: Continue treatment plan / Recall.");
 
   return {
-    subjective: subjectiveLines.join("\n\n"),
-    objective: objectiveLines.join("\n\n"),
-    assessment: assessmentLines.join("\n\n"),
-    treatmentPerformed: treatmentLines.join("\n\n"),
-    plan: planLines.join("\n")
+    subjective: subjectiveLines.join("\n\n").trim(),
+    objective: objectiveLines.join("\n\n").trim(),
+    assessment: assessmentLines.join("\n\n").trim(),
+    treatmentPerformed: treatmentLines.join("\n\n").trim(), 
+    plan: planLines.join("\n\n").trim()
   };
 }
 
@@ -122,27 +199,40 @@ export function mapNoteToExistingSections(
   existing: SoapSection[]
 ): SoapSection[] {
   const now = new Date().toISOString();
+  
+  // Ensure we return a NEW array to trigger React updates
   return existing.map(sec => {
-    let content = sec.content;
+    let newContent = sec.content; // Default to keeping existing
+    
+    // We overwrite content if generating fresh.
+    // Ensure mapping aligns with SoapSectionType enum.
     switch (sec.type) {
-      case 'SUBJECTIVE': content = note.subjective; break;
-      case 'OBJECTIVE': content = note.objective; break;
-      case 'ASSESSMENT': content = note.assessment; break;
-      case 'TREATMENT_PERFORMED': content = note.treatmentPerformed; break;
-      case 'PLAN': content = note.plan; break;
+      case 'SUBJECTIVE': 
+        newContent = note.subjective; 
+        break;
+      case 'OBJECTIVE': 
+        newContent = note.objective; 
+        break;
+      case 'ASSESSMENT': 
+        newContent = note.assessment; 
+        break;
+      case 'TREATMENT_PERFORMED': 
+        newContent = note.treatmentPerformed; 
+        break;
+      case 'PLAN': 
+        newContent = note.plan; 
+        break;
     }
-    return { ...sec, content, lastEditedAt: now };
-  });
-}
+    
+    // Safety check: if undefined/null, make empty string
+    if (newContent === undefined || newContent === null) {
+        newContent = "";
+    }
 
-// Legacy Helper (Deprecated in favor of mapNoteToExistingSections)
-export function mapNoteToSections(note: GeneratedClinicalNote): SoapSection[] {
-    const now = new Date().toISOString();
-    return [
-        { id: 's-sub', type: 'SUBJECTIVE', title: 'Subjective', content: note.subjective, lastEditedAt: now },
-        { id: 's-obj', type: 'OBJECTIVE', title: 'Objective', content: note.objective, lastEditedAt: now },
-        { id: 's-ass', type: 'ASSESSMENT', title: 'Assessment', content: note.assessment, lastEditedAt: now },
-        { id: 's-tx', type: 'TREATMENT_PERFORMED', title: 'Treatment Performed', content: note.treatmentPerformed, lastEditedAt: now },
-        { id: 's-plan', type: 'PLAN', title: 'Plan', content: note.plan, lastEditedAt: now },
-    ];
+    return {
+      ...sec,
+      content: newContent,
+      lastEditedAt: now
+    };
+  });
 }

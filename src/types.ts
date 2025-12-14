@@ -112,6 +112,7 @@ export interface Visit {
   assignedRisks?: AssignedRisk[];
   noteStatus?: 'draft' | 'signed';
   noteSignedAt?: string;
+  seededProcedureIds?: string[]; // IDs of items already merged into SOAP
 
   // NEW: Completeness Fields
   chiefComplaint?: string;

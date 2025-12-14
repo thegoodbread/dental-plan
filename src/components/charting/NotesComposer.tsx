@@ -1,19 +1,18 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useChairside } from '../../context/ChairsideContext';
-import { GoogleGenAI } from "@google/genai";
 import { 
-  ArrowLeft, Save, PanelRightClose, PanelRightOpen, ShieldCheck, AlertTriangle, Wand2, Lightbulb, Activity, CheckCircle2, Plus, X, Trash2, Clock, Lock, FileText, AlertCircle
+  ArrowLeft, Save, PanelRightClose, PanelRightOpen, ShieldCheck, Lightbulb, Activity, CheckCircle2, Plus, Clock, Lock, AlertCircle
 } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
-import { ToothNumber, ToothRecord, SoapSection, AssignedRisk, RiskLibraryItem, SoapSectionType, recordRiskEvent, VisitType } from '../../domain/dentalTypes';
+import { ToothNumber, ToothRecord, SoapSection, AssignedRisk, RiskLibraryItem, SoapSectionType, recordRiskEvent } from '../../domain/dentalTypes';
 import { RISK_LIBRARY } from '../../domain/riskLibrary';
 import { SoapSectionBlock } from './SoapSectionBlock';
 import { RiskLibraryPanel } from './RiskLibraryPanel';
 import { AssignedRiskRow } from './AssignedRiskRow';
-import { composeVisitNote, mapNoteToExistingSections } from '../../domain/NoteComposer';
+import { generateSoapSectionsForVisit } from '../../domain/NoteComposer';
 import { loadTreatmentPlanWithItems } from '../../services/treatmentPlans';
 import { Visit } from '../../types';
 import { evaluateVisitCompleteness, CompletenessResult } from '../../domain/CompletenessEngine';
@@ -74,7 +73,7 @@ export interface ClinicalNoteEditorProps {
   onGenerateAiDraft?: (sectionType: SoapSectionType) => Promise<void>;
   onInsertChartFindings?: (sectionType: SoapSectionType) => void;
   
-  // IDs for context (Risk Library needs tenant)
+  // IDs for context
   currentTenantId: string;
 
   // Visit Context Inputs
@@ -371,6 +370,7 @@ interface NotesComposerProps {
   // NEW: Optional props for specific context injection if available from parent
   visitId?: string;
   chiefComplaint?: string;
+  seededProcedureIds?: string[];
 }
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -385,7 +385,8 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
   onSave,
   onSign,
   visitId,
-  chiefComplaint: propCC
+  chiefComplaint: propCC,
+  seededProcedureIds = []
 }) => {
   const { 
       setCurrentView, 
@@ -397,6 +398,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
       currentUserId,
       soapSections,
       updateSoapSection,
+      setSoapSections,
       saveCurrentNote,
       signNote,
       lastSavedAt,
@@ -567,19 +569,7 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
           );
       }
 
-      // Prepare Contextual Inputs
-      // Ideally these come from a store or props. 
-      // For CC/HPI, if not passed as prop, we might check if 'SUBJECTIVE' section has content, 
-      // but deterministic generation usually PREPENDS to it.
-      
-      // Extract diagnoses from filtered procedures for Assessment
-      const diagnosisCodes: string[] = [];
-      proceduresForNote.forEach(p => {
-          if (p.diagnosisCodes) diagnosisCodes.push(...p.diagnosisCodes);
-      });
-      const uniqueDx = Array.from(new Set(diagnosisCodes));
-
-      // Mock visit object if not available in context
+      // Mock visit object for the generator
       const mockVisit: Visit = {
           id: visitId || 'visit-current',
           treatmentPlanId: currentTreatmentPlanId,
@@ -590,41 +580,30 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
           createdAt: new Date().toISOString(),
           chiefComplaint: localChiefComplaint,
           hpi: hpi,
-          radiographicFindings: radiographicFindings
+          radiographicFindings: radiographicFindings,
+          seededProcedureIds // Pass seed state for context if needed by engine
       };
 
-      // 2. Build Risks String
-      const riskBullets = assignedRisks
-          .filter(r => r.isActive)
-          .sort((a,b) => a.sortOrder - b.sortOrder)
-          .map(r => `• ${r.bodySnapshot}`)
-          .join('\n');
+      // 2. Generate Note using pure function
+      const { sections, note } = generateSoapSectionsForVisit(
+          mockVisit,
+          proceduresForNote,
+          assignedRisks,
+          soapSections
+      );
 
-      // 3. Compose Note (Deterministic)
-      const generatedNote = composeVisitNote({
-          visit: mockVisit,
-          procedures: proceduresForNote,
-          riskBullets,
-          chiefComplaint: localChiefComplaint,
-          hpi: hpi,
-          radiographicFindings: radiographicFindings,
-          diagnosisCodes: uniqueDx
-      });
-
-      // 4. Update SOAP Sections in Context using Mapping that preserves IDs
-      const newSections = mapNoteToExistingSections(generatedNote, soapSections);
-      
-      // Calculate Completeness
+      // 3. Calculate Completeness
       const completenessResult = evaluateVisitCompleteness(
           mockVisit, 
           proceduresForNote, 
-          newSections, 
+          sections, 
           assignedRisks
       );
       setCompleteness(completenessResult);
 
-      // Apply updates
-      newSections.forEach(s => updateSoapSection(s.id, s.content));
+      // 4. Apply updates
+      // Use bulk update to ensure atomicity and prevent stale closures
+      setSoapSections(sections);
 
       // 5. Persist
       if (onSave) onSave(); // Custom override (e.g. saves to Visit record)
