@@ -12,7 +12,9 @@ import {
   FeeCategory,
   PhaseBucketKey,
   AddOnKind,
-  Visit
+  Visit,
+  VisitStatus,
+  ProcedureStatus
 } from '../types';
 import { DEMO_PLANS, DEMO_ITEMS, DEMO_SHARES } from '../mock/seedPlans';
 import { estimateDuration } from './clinicalLogic';
@@ -468,6 +470,13 @@ export function loadTreatmentPlanWithItems(
       item.estimatedDurationValue = value;
       item.estimatedDurationUnit = unit;
     }
+    
+    // Step 3: Back-fill execution/claim fields if missing
+    if (!item.procedureStatus) {
+        item.procedureStatus = 'PLANNED';
+        itemsNeedSave = true;
+    }
+    
     return item;
   });
 
@@ -888,6 +897,8 @@ export const createTreatmentPlanItem = (
     estimatedDurationUnit: unit,
     itemType: 'PROCEDURE', // Default
     linkedItemIds: [],
+    // New Defaults
+    procedureStatus: 'PLANNED',
   };
 
   const computedItem = computeItemPricing(rawItem, feeEntry) as TreatmentPlanItem;
@@ -962,6 +973,8 @@ export const createAddOnItem = (
       grossFee: appliedFee,
       discount: 0,
       netFee: appliedFee,
+      // New Defaults
+      procedureStatus: 'PLANNED',
   };
   
   // Attach to phase
@@ -1333,49 +1346,15 @@ export const createVisit = (visitData: Omit<Visit, 'id' | 'createdAt'>): Visit =
   const newVisit: Visit = {
     ...visitData,
     id: generateId(),
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    status: 'PLANNED',
+    claimPrepStatus: 'NOT_STARTED'
   };
   
   allVisits.push(newVisit);
   localStorage.setItem(KEY_VISITS, JSON.stringify(allVisits));
   
   return newVisit;
-};
-
-export const linkProceduresToVisit = (visitId: string, procedureIds: string[]): Visit | null => {
-  // 1. Update Visit Record
-  const allVisits: Visit[] = JSON.parse(localStorage.getItem(KEY_VISITS) || '[]');
-  const visitIndex = allVisits.findIndex(v => v.id === visitId);
-  if (visitIndex === -1) return null;
-
-  // Merge unique procedure IDs
-  const existingIds = new Set(allVisits[visitIndex].attachedProcedureIds);
-  procedureIds.forEach(id => existingIds.add(id));
-  allVisits[visitIndex].attachedProcedureIds = Array.from(existingIds);
-  localStorage.setItem(KEY_VISITS, JSON.stringify(allVisits));
-
-  // 2. Update TreatmentPlanItems
-  const allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
-  let itemsUpdated = false;
-  
-  const updatedItems = allItems.map(item => {
-    if (procedureIds.includes(item.id)) {
-      itemsUpdated = true;
-      return { ...item, performedInVisitId: visitId };
-    }
-    return item;
-  });
-
-  if (itemsUpdated) {
-    localStorage.setItem(KEY_ITEMS, JSON.stringify(updatedItems));
-  }
-
-  return allVisits[visitIndex];
-};
-
-export const getVisitById = (visitId: string): Visit | null => {
-  const allVisits: Visit[] = JSON.parse(localStorage.getItem(KEY_VISITS) || '[]');
-  return allVisits.find(v => v.id === visitId) || null;
 };
 
 export const updateVisit = (visitId: string, updates: Partial<Omit<Visit, 'id' | 'treatmentPlanId' | 'createdAt'>>): Visit | null => {
@@ -1397,6 +1376,74 @@ export const updateVisit = (visitId: string, updates: Partial<Omit<Visit, 'id' |
   
   localStorage.setItem(KEY_VISITS, JSON.stringify(allVisits));
   return updatedVisit;
+};
+
+export const linkProceduresToVisit = (visitId: string, procedureIds: string[]): Visit | null => {
+  // 1. Update Visit Record
+  const allVisits: Visit[] = JSON.parse(localStorage.getItem(KEY_VISITS) || '[]');
+  const visitIndex = allVisits.findIndex(v => v.id === visitId);
+  if (visitIndex === -1) return null;
+
+  // Merge unique procedure IDs
+  const existingIds = new Set(allVisits[visitIndex].attachedProcedureIds);
+  procedureIds.forEach(id => existingIds.add(id));
+  allVisits[visitIndex].attachedProcedureIds = Array.from(existingIds);
+  localStorage.setItem(KEY_VISITS, JSON.stringify(allVisits));
+
+  // 2. Update TreatmentPlanItems
+  const allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
+  let itemsUpdated = false;
+  
+  const updatedItems = allItems.map(item => {
+    if (procedureIds.includes(item.id)) {
+      itemsUpdated = true;
+      return { 
+          ...item, 
+          performedInVisitId: visitId,
+          // Set execution status if not already set
+          procedureStatus: item.procedureStatus === 'PLANNED' ? 'SCHEDULED' : item.procedureStatus 
+      };
+    }
+    return item;
+  });
+
+  if (itemsUpdated) {
+    localStorage.setItem(KEY_ITEMS, JSON.stringify(updatedItems));
+  }
+
+  return allVisits[visitIndex];
+};
+
+export const markProcedureCompleted = (itemId: string, performedDate: string) => {
+    return updateTreatmentPlanItem(itemId, {
+        procedureStatus: 'COMPLETED',
+        performedDate: performedDate
+    });
+};
+
+export const updateProcedureDiagnosisCodes = (itemId: string, diagnosisCodes: string[]) => {
+    return updateTreatmentPlanItem(itemId, {
+        diagnosisCodes
+    });
+};
+
+export const updateProcedureDocumentationFlags = (itemId: string, docs: Partial<TreatmentPlanItem['documentation']>) => {
+    const allItems: TreatmentPlanItem[] = JSON.parse(localStorage.getItem(KEY_ITEMS) || '[]');
+    const idx = allItems.findIndex(i => i.id === itemId);
+    if (idx === -1) return;
+
+    const currentDocs = allItems[idx].documentation || {};
+    const updatedDocs = { ...currentDocs, ...docs };
+    
+    updateTreatmentPlanItem(itemId, { documentation: updatedDocs });
+};
+
+export const updateVisitStatus = (visitId: string, status: VisitStatus) => {
+    return updateVisit(visitId, { status });
+};
+
+export const updateVisitClaimPrepStatus = (visitId: string, status: 'NOT_STARTED' | 'IN_PROGRESS' | 'READY') => {
+    return updateVisit(visitId, { claimPrepStatus: status });
 };
 
 

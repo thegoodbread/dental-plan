@@ -1,9 +1,9 @@
-
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { TreatmentPlan, TreatmentPlanItem, TreatmentPhase, UrgencyLevel, FeeCategory, AddOnKind, Visit, VisitType } from '../../types';
 import { Plus, X, MoreHorizontal, Clock, GripVertical, Edit, Trash2, Library, Calendar, Check, Stethoscope, History as HistoryIcon, ArrowRight } from 'lucide-react';
 import { SEDATION_TYPES, checkAddOnCompatibility, createAddOnItem, ADD_ON_LIBRARY, AddOnDefinition, createVisit, getVisitsForPlan, linkProceduresToVisit } from '../../services/treatmentPlans';
 import { AddOnsLibraryPanel } from './AddOnsLibraryPanel';
+import { VisitDetailModal } from './VisitDetailModal';
 
 const generateId = () => `id-${Math.random().toString(36).substring(2, 10)}`;
 const PRESET_PHASE_TITLES = ["Monitor Phase", "Foundation & Diagnostics", "Restorative", "Implant & Surgical", "Elective / Cosmetic", "Additional Treatment"];
@@ -280,8 +280,8 @@ const ExistingVisitsModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
     visits: Visit[];
-    onSelect: (visit: Visit) => void;
-}> = ({ isOpen, onClose, visits, onSelect }) => {
+    onOpenDetail: (visit: Visit) => void;
+}> = ({ isOpen, onClose, visits, onOpenDetail }) => {
     if (!isOpen) return null;
 
     return (
@@ -304,7 +304,7 @@ const ExistingVisitsModal: React.FC<{
                         visits.map(visit => (
                             <button 
                                 key={visit.id} 
-                                onClick={() => onSelect(visit)}
+                                onClick={() => onOpenDetail(visit)}
                                 className="w-full text-left p-3 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-colors group"
                             >
                                 <div className="flex justify-between items-start">
@@ -316,6 +316,7 @@ const ExistingVisitsModal: React.FC<{
                                         <div className="text-xs text-gray-500 mt-0.5">{visit.provider}</div>
                                     </div>
                                     <div className="flex items-center gap-2">
+                                        {visit.status === 'COMPLETED' && <Check size={14} className="text-green-500" />}
                                         <div className="text-xs font-semibold bg-gray-50 text-gray-600 px-2 py-1 rounded border border-gray-100 group-hover:bg-blue-100 group-hover:text-blue-700 group-hover:border-blue-200">
                                             {visit.attachedProcedureIds.length} proc
                                         </div>
@@ -365,12 +366,16 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
   const [activeVisitState, setActiveVisitState] = useState<ActiveVisitState | null>(null);
   const [showVisitModal, setShowVisitModal] = useState(false);
   const [showExistingVisitsModal, setShowExistingVisitsModal] = useState(false);
+  const [activeDetailVisit, setActiveDetailVisit] = useState<Visit | null>(null);
   const [existingVisits, setExistingVisits] = useState<Visit[]>([]);
 
-  useEffect(() => {
-      // Load visits for badge rendering
+  const loadVisits = useCallback(() => {
       setExistingVisits(getVisitsForPlan(plan.id));
   }, [plan.id]);
+
+  useEffect(() => {
+      loadVisits();
+  }, [loadVisits]);
 
   const selectedItem = useMemo(() => localItems.find(i => i.id === selectedItemId) || null, [localItems, selectedItemId]);
   const closeEditor = useCallback(() => setSelectedItemId(null), []);
@@ -685,9 +690,7 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
           attachedProcedureIds: []
       });
       
-      // Update local state immediately to enable "Existing Visits" button
       setExistingVisits(prev => [...prev, newVisit]);
-
       setActiveVisitState({ visit: newVisit, selectedProcedureIds: [] });
       setShowVisitModal(false);
   };
@@ -713,40 +716,40 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
           return;
       }
 
-      // Persist Linkage
       linkProceduresToVisit(activeVisitState.visit.id, activeVisitState.selectedProcedureIds);
       
-      // Update local item state to reflect linkage visually immediately
       setLocalItems(prev => prev.map(item => {
           if (activeVisitState.selectedProcedureIds.includes(item.id)) {
-              return { ...item, performedInVisitId: activeVisitState.visit.id };
+              return { 
+                  ...item, 
+                  performedInVisitId: activeVisitState.visit.id,
+                  procedureStatus: item.procedureStatus === 'PLANNED' ? 'SCHEDULED' : item.procedureStatus
+              };
           }
           return item;
       }));
 
-      // Refresh existing visits list to ensure accuracy
-      setExistingVisits(getVisitsForPlan(plan.id));
-
-      // Exit Mode
+      loadVisits();
       setActiveVisitState(null);
   };
 
   const handleCancelVisitMode = () => {
-      // Ensure state is synced in case a visit was created but canceled
-      setExistingVisits(getVisitsForPlan(plan.id));
+      loadVisits();
       setActiveVisitState(null);
   };
 
-  const handleResumeVisitFromExisting = (visit: Visit) => {
-      const linkedItemIds = localItems
-          .filter(item => item.performedInVisitId === visit.id)
-          .map(item => item.id);
-
-      setActiveVisitState({
-          visit,
-          selectedProcedureIds: linkedItemIds
-      });
+  const handleOpenVisitDetail = (visit: Visit) => {
+      setActiveDetailVisit(visit);
       setShowExistingVisitsModal(false);
+  };
+
+  // Refresh handler passed to VisitDetailModal
+  const handleVisitUpdate = () => {
+      // Re-load the entire plan state from storage to sync with updates made in the modal
+      // Since this board uses local state, we must sync manually or reload
+      // For this MVP, we will just sync items and visits as they are the volatile parts
+      loadVisits();
+      window.location.reload(); 
   };
 
   const totalChairTime = useMemo(() => localItems.reduce((sum, item) => sum + estimateChairTime(item), 0), [localItems]);
@@ -990,8 +993,9 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
                                                         <Plus size={12} />
                                                     </button>}
                                                     {visitInfo && (
-                                                        <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded border border-green-200 flex items-center gap-0.5" title={`Performed on ${visitInfo.date}`}>
-                                                            <Check size={8} /> {new Date(visitInfo.date).toLocaleDateString(undefined, {month:'numeric', day:'numeric'})}
+                                                        <span className={`px-1.5 py-0.5 rounded border flex items-center gap-0.5 ${visitInfo.status === 'COMPLETED' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-blue-50 text-blue-600 border-blue-100'}`} title={`Performed on ${visitInfo.date}`}>
+                                                            {visitInfo.status === 'COMPLETED' ? <Check size={8} /> : <Clock size={8} />}
+                                                            {new Date(visitInfo.date).toLocaleDateString(undefined, {month:'numeric', day:'numeric'})}
                                                         </span>
                                                     )}
                                                     {!visitInfo && <span className="font-semibold uppercase">{item.category}</span>}
@@ -1066,7 +1070,21 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
         <ProcedureEditorModal item={selectedItem} onSave={handleUpdateItem} onClose={closeEditor} onDeleteItem={handleDeleteItem} />
       )}
       <VisitCreationModal isOpen={showVisitModal} onClose={() => setShowVisitModal(false)} onCreate={handleStartVisit} />
-      <ExistingVisitsModal isOpen={showExistingVisitsModal} onClose={() => setShowExistingVisitsModal(false)} visits={existingVisits} onSelect={handleResumeVisitFromExisting} />
+      <ExistingVisitsModal 
+        isOpen={showExistingVisitsModal} 
+        onClose={() => setShowExistingVisitsModal(false)} 
+        visits={existingVisits} 
+        onOpenDetail={handleOpenVisitDetail} 
+      />
+      {activeDetailVisit && (
+          <VisitDetailModal 
+            isOpen={!!activeDetailVisit} 
+            onClose={() => setActiveDetailVisit(null)}
+            visit={activeDetailVisit}
+            items={localItems}
+            onUpdate={handleVisitUpdate}
+          />
+      )}
     </>
   );
 };

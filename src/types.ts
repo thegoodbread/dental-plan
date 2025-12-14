@@ -1,7 +1,6 @@
 
-
 // Enums
-import { AssignedRisk } from './src/domain/dentalTypes';
+import { AssignedRisk } from './domain/dentalTypes';
 
 export type UserRole = 'DOCTOR' | 'TREATMENT_COORDINATOR' | 'ADMIN';
 
@@ -32,7 +31,7 @@ export type FeeCategory =
   | 'ORTHO'
   | 'COSMETIC'
   | 'OTHER'
-  | 'SURGICAL'; // Added SURGICAL for grafts etc
+  | 'SURGICAL'; 
 
 export type UrgencyLevel = 'URGENT' | 'SOON' | 'ELECTIVE';
 export type InsuranceMode = 'simple' | 'advanced';
@@ -92,7 +91,7 @@ export type ClaimStatus =
 export interface Visit {
   id: string;              // UUID
   treatmentPlanId: string; // Linked Plan
-  date: string;            // ISO Date YYYY-MM-DD (Legacy, use performedDate/scheduledDate preferentially)
+  date: string;            // ISO Date YYYY-MM-DD
   provider: string;        // Display name of provider
   visitType: VisitType;
   attachedProcedureIds: string[]; // List of completed item IDs

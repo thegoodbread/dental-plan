@@ -16,8 +16,8 @@ import { TreatmentPlanItemsTable } from '../components/TreatmentPlanItemsTable';
 import { PremiumPatientLayout } from '../components/patient/PremiumPatientLayout';
 import { FinancialsTable } from '../components/FinancialsTable';
 import { NumberPadModal } from '../components/NumberPadModal';
-import { TreatmentPlanBoardModal } from '../components/board/TreatmentPlanBoardModal';
-import { AddOnsLibraryPanel } from '../components/board/AddOnsLibraryPanel';
+import { TreatmentPlanBoardModal } from '../src/components/board/TreatmentPlanBoardModal';
+import { AddOnsLibraryPanel } from '../src/components/board/AddOnsLibraryPanel';
 
 type ViewMode = 'CLINICAL' | 'FINANCIAL';
 type SaveStatus = 'IDLE' | 'SAVED';
