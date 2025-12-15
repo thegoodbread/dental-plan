@@ -80,6 +80,8 @@ interface NotesComposerProps {
   chiefComplaint?: string;
   seededProcedureIds?: string[];
   procedures?: TreatmentPlanItem[]; // New: Pass relevant procedures
+  // New Prop for Verify
+  onVerifySecondary?: () => void;
 }
 
 export const NotesComposer: React.FC<NotesComposerProps> = ({ 
@@ -94,7 +96,8 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
   visitId,
   chiefComplaint: propCC,
   seededProcedureIds = [],
-  procedures = []
+  procedures = [],
+  onVerifySecondary
 }) => {
   const { 
       setCurrentView, 
@@ -461,6 +464,8 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
         recommendedRiskCategories={recommendedRiskCategories}
         // V2.0 Inline Facts
         truthAssertions={truthAssertions}
+        // V2.5/V3 Features
+        onVerifySecondary={onVerifySecondary}
       />
 
       {/* SIGNING MODAL */}

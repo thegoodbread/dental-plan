@@ -5,7 +5,7 @@ import { NotesComposer } from '../charting/NotesComposer';
 import { useChairside, getIncompleteFactSections } from '../../context/ChairsideContext';
 import { updateVisit } from '../../services/treatmentPlans';
 import { generateSoapSectionsForVisit, composeVisitNoteFromAssertions, mapNoteToExistingSections } from '../../domain/NoteComposer';
-import { generateTruthAssertionsForVisit, composeSectionsFromAssertions } from '../../domain/TruthAssertions';
+import { generateTruthAssertionsForVisit, composeSectionsFromAssertions, AssertionSlot, TruthAssertionsBundle } from '../../domain/TruthAssertions';
 import { SoapSectionType } from '../../domain/dentalTypes';
 import { FactReviewModal } from '../modals/FactReviewModal';
 
@@ -13,6 +13,38 @@ interface VisitNotesPanelProps {
   visit: Visit;
   items: TreatmentPlanItem[]; // All plan items, we filter for this visit
   onUpdate: () => void;
+}
+
+// Pure helper to compute incomplete sections for verification
+function computeIncompleteSections(
+  truth: TruthAssertionsBundle,
+  factReviewStatus: Record<string, 'pending' | 'reviewed'>,
+  evaluateSlotCompleteness: (truth: TruthAssertionsBundle, section: SoapSectionType) => Record<AssertionSlot, 'complete' | 'empty' | 'not_required'>
+): { section: SoapSectionType; missingSlots: AssertionSlot[] }[] {
+  // Identify relevant sections (those with any assertions)
+  const relevantSections = Array.from(new Set(truth.assertions.map(a => a.section as SoapSectionType)));
+  const incomplete: { section: SoapSectionType; missingSlots: AssertionSlot[] }[] = [];
+
+  relevantSections.forEach(section => {
+      // 1. Check general review status
+      // (Optional: could add a hard check for review status here)
+
+      // 2. Check slots
+      const completeness = evaluateSlotCompleteness(truth, section);
+      const missingSlots: AssertionSlot[] = [];
+      
+      (Object.keys(completeness) as AssertionSlot[]).forEach(slot => {
+          if (completeness[slot] === 'empty') {
+              missingSlots.push(slot);
+          }
+      });
+
+      if (factReviewStatus[section] !== 'reviewed' || missingSlots.length > 0) {
+          incomplete.push({ section, missingSlots });
+      }
+  });
+
+  return incomplete;
 }
 
 export const VisitNotesPanel: React.FC<VisitNotesPanelProps> = ({ visit, items, onUpdate }) => {
@@ -23,7 +55,11 @@ export const VisitNotesPanel: React.FC<VisitNotesPanelProps> = ({ visit, items, 
     noteStatus,
     setTruthAssertions, 
     truthAssertions,
-    factReviewStatus
+    factReviewStatus,
+    evaluateSlotCompleteness,
+    toggleFactSection,
+    factSectionStates,
+    noteCompleteness
   } = useChairside();
 
   // Guard ref to ensure seeding runs exactly once per mount/update cycle if conditions met
@@ -31,7 +67,7 @@ export const VisitNotesPanel: React.FC<VisitNotesPanelProps> = ({ visit, items, 
   
   // State for review modal
   const [showReviewModal, setShowReviewModal] = useState(false);
-  const [incompleteSections, setIncompleteSections] = useState<SoapSectionType[]>([]);
+  const [incompleteSections, setIncompleteSections] = useState<{ section: SoapSectionType; missingSlots: AssertionSlot[] }[]>([]);
 
   // Filter items for this visit - MEMOIZED to prevent infinite loops
   const relevantItems = useMemo(() => 
@@ -187,9 +223,26 @@ export const VisitNotesPanel: React.FC<VisitNotesPanelProps> = ({ visit, items, 
       setShowReviewModal(false);
   };
 
+  // Verify without signing
+  const handleVerifySecondary = () => {
+      if (!truthAssertions) return;
+      const incomplete = computeIncompleteSections(truthAssertions, factReviewStatus, evaluateSlotCompleteness);
+      if (incomplete.length > 0) {
+          setIncompleteSections(incomplete);
+          setShowReviewModal(true);
+      } else {
+          // Could optionally toast success here
+      }
+  };
+
   const handleVisitSign = () => {
-      // Check for incomplete facts
-      const incomplete = getIncompleteFactSections(truthAssertions, factReviewStatus);
+      // Check for incomplete facts (V2.5 + V3 Slot Logic)
+      if (!truthAssertions) {
+          performSign();
+          return;
+      }
+
+      const incomplete = computeIncompleteSections(truthAssertions, factReviewStatus, evaluateSlotCompleteness);
       
       if (incomplete.length > 0) {
           setIncompleteSections(incomplete);
@@ -197,6 +250,28 @@ export const VisitNotesPanel: React.FC<VisitNotesPanelProps> = ({ visit, items, 
       } else {
           performSign();
       }
+  };
+
+  const handleJumpToSection = (section: SoapSectionType, slot?: AssertionSlot) => {
+      // 1. Ensure Facts are expanded for this section in Context
+      // Find ID for this section type (e.g. 's-SUBJECTIVE')
+      const sectionObj = soapSections.find(s => s.type === section);
+      if (sectionObj && !factSectionStates[sectionObj.id]) {
+          toggleFactSection(sectionObj.id);
+      }
+
+      // 2. Scroll into view via DOM (Wait for render)
+      setTimeout(() => {
+          const elementId = slot ? `slot-${section}-${slot}` : `section-${section}`;
+          const el = document.getElementById(elementId);
+          if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } else if (slot) {
+              // Fallback to section if slot not found
+              const secEl = document.getElementById(`section-${section}`);
+              if (secEl) secEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+      }, 150);
   };
 
   return (
@@ -209,6 +284,7 @@ export const VisitNotesPanel: React.FC<VisitNotesPanelProps> = ({ visit, items, 
             // Overrides to ensure we save to the Visit entity
             onSave={handleVisitSave}
             onSign={handleVisitSign}
+            onVerifySecondary={handleVerifySecondary}
             // Context label for the header
             pendingProcedure={relevantItems.length > 0 ? {
                 label: `${relevantItems.length} Procedures`,
@@ -226,6 +302,8 @@ export const VisitNotesPanel: React.FC<VisitNotesPanelProps> = ({ visit, items, 
             incompleteSections={incompleteSections}
             onReviewNow={() => setShowReviewModal(false)}
             onSignAnyway={performSign}
+            onJumpToSection={handleJumpToSection}
+            completenessPercent={noteCompleteness?.percent}
         />
     </div>
   );

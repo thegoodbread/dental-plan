@@ -92,6 +92,8 @@ export interface ClinicalNoteEditorProps {
   
   // Truth Assertions (V2.0)
   truthAssertions?: TruthAssertionsBundle;
+  // V2.5/V3
+  onVerifySecondary?: () => void;
 }
 
 export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => {
@@ -108,11 +110,12 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
     completeness,
     relevantProcedures = [],
     recommendedRiskCategories,
-    truthAssertions
+    truthAssertions,
+    onVerifySecondary
   } = props;
 
   // Consume context for V2.0 features
-  const { setTruthAssertions, factSectionStates, toggleFactSection } = useChairside();
+  const { setTruthAssertions, factSectionStates, toggleFactSection, noteCompleteness } = useChairside();
 
   const riskSectionRef = useRef<HTMLDivElement>(null);
   const activeRisks = assignedRisks.filter(r => r.isActive).sort((a, b) => a.sortOrder - b.sortOrder);
@@ -144,8 +147,9 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
   };
 
   const getCompletenessColor = (score: number) => {
-      if (score >= 90) return 'bg-green-100 text-green-800 border-green-200';
-      return 'bg-amber-100 text-amber-800 border-amber-200';
+      if (score >= 80) return 'bg-green-100 text-green-800 border-green-200';
+      if (score > 0) return 'bg-amber-100 text-amber-800 border-amber-200';
+      return 'bg-gray-100 text-gray-500 border-gray-200';
   };
 
   // V2.0 Inline Facts Toggle Handler
@@ -161,6 +165,8 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
           assertions: updatedAssertions
       });
   };
+
+  const noteCompletenessPercent = noteCompleteness?.percent ?? 0;
 
   return (
     <div className="flex-1 flex overflow-hidden h-full">
@@ -180,21 +186,13 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
                     )}
                     </div>
                     <div className="flex items-center gap-3">
-                        {/* Improvement: Completeness Badge */}
-                        {completeness && !isLocked && (
-                            <div className="group relative">
-                                <span className={`px-2 py-1 rounded text-xs font-bold border flex items-center gap-1 cursor-help transition-colors ${getCompletenessColor(completeness.score)}`}>
+                        {/* Note Completeness Badge */}
+                        {!isLocked && (
+                            <div className="group relative" title="Based on required truth slots across all SOAP sections.">
+                                <span className={`px-2 py-1 rounded text-xs font-bold border flex items-center gap-1 cursor-help transition-colors ${getCompletenessColor(noteCompletenessPercent)}`}>
                                     <Activity size={12} />
-                                    {completeness.score}% Complete
+                                    {noteCompletenessPercent}% Complete
                                 </span>
-                                {completeness.missing.length > 0 && (
-                                    <div className="absolute top-full right-0 mt-2 w-72 bg-white border border-slate-200 shadow-xl rounded-lg p-3 z-50 hidden group-hover:block animate-in fade-in slide-in-from-top-1">
-                                        <div className="text-xs font-bold text-slate-700 mb-2 border-b pb-1">Missing Requirements</div>
-                                        <ul className="list-disc list-inside text-[10px] text-slate-600 space-y-1">
-                                            {completeness.missing.map((m, i) => <li key={i}>{m}</li>)}
-                                        </ul>
-                                    </div>
-                                )}
                             </div>
                         )}
 
@@ -205,7 +203,7 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
                         )}
                         {!isLocked && (
                             <button 
-                                onClick={() => setShowTruthBlocks(!showTruthBlocks)}
+                                onClick={onVerifySecondary}
                                 className={`h-9 px-3 border border-slate-300 rounded-md shadow-sm transition-all flex items-center gap-2 text-sm font-semibold ${showTruthBlocks ? 'bg-blue-50 text-blue-700 border-blue-300' : 'bg-white text-slate-700 hover:bg-slate-50'}`}
                                 title="Toggle Fact Verification Drawer"
                             >

@@ -48,6 +48,23 @@ export interface TruthAssertionsBundle {
 const makeId = (prefix: string, ...parts: string[]) => 
   `${prefix}_${parts.join('_').replace(/[^a-zA-Z0-9]/g, '')}`;
 
+export function createManualAssertion(
+  section: AssertionSection,
+  slot: AssertionSlot,
+  text: string
+): TruthAssertion {
+  return {
+    id: makeId('manual', section, slot, Math.random().toString(36).substr(2, 5)),
+    section,
+    slot,
+    label: text,
+    source: 'manual',
+    checked: true,
+    sortOrder: 999, // Append to end of slot
+    description: 'Manually added fact'
+  };
+}
+
 /**
  * Pure function to generate a bundle of truth assertions from visit data.
  * This effectively "deconstructs" the visit into atomic facts.
@@ -178,7 +195,7 @@ export function generateTruthAssertionsForVisit(
 }
 
 // V3 Slot Sorting Order
-const SLOT_ORDER: AssertionSlot[] = [
+export const SLOT_ORDER: AssertionSlot[] = [
   'CC',
   'HPI',
   'CLINICAL_FINDING',
@@ -190,9 +207,22 @@ const SLOT_ORDER: AssertionSlot[] = [
   'MISC'
 ];
 
+export const SLOT_LABELS: Record<AssertionSlot, string> = {
+  'CC': 'Chief Complaint',
+  'HPI': 'History of Present Illness',
+  'CLINICAL_FINDING': 'Clinical Findings',
+  'RADIOGRAPHIC': 'Radiographic Findings',
+  'DIAGNOSIS': 'Diagnosis',
+  'INTERVENTION': 'Interventions',
+  'RISK': 'Risks & Consent',
+  'PLAN': 'Plan',
+  'MISC': 'Miscellaneous'
+};
+
 // Inline Truth Blocks (V2.5 + V3 Slot Support)
 // Converts checked truth assertions into final SOAP content.
 // Runs AFTER deterministic generation.
+// Visually respects slot order by grouping output paragraphs.
 export function composeSectionsFromAssertions(
   generatedSections: SoapSection[],
   truth: TruthAssertionsBundle
@@ -202,30 +232,39 @@ export function composeSectionsFromAssertions(
   const now = new Date().toISOString();
 
   return generatedSections.map(sec => {
-    const relevant = truth.assertions
-      .filter(a => a.section === sec.type && a.checked)
-      .sort((a, b) => {
-        // V3: Sort by Slot first, then by existing SortOrder
-        const slotA = SLOT_ORDER.indexOf(a.slot || 'MISC');
-        const slotB = SLOT_ORDER.indexOf(b.slot || 'MISC');
-        if (slotA !== slotB) return slotA - slotB;
-        
-        return a.sortOrder - b.sortOrder;
-      });
+    const relevant = truth.assertions.filter(a => a.section === sec.type && a.checked);
 
     if (relevant.length === 0) {
       return sec; // fallback to generated narrative
     }
 
-    // Render sentences or labels
-    const body = relevant
-      .map(a => {
-          if (a.sentence) return a.sentence;
-          if (a.description && a.description !== a.label) return `${a.label} - ${a.description}`;
-          return a.label;
-      })
-      .filter(Boolean)
-      .join('\n'); // Single newline for list-like effect, or \n\n for paragraphs
+    // Group by slot
+    const bySlot: Record<string, string[]> = {};
+    
+    relevant.forEach(a => {
+      const slot = a.slot || 'MISC';
+      if (!bySlot[slot]) bySlot[slot] = [];
+      
+      let text = a.label;
+      if (a.sentence) text = a.sentence;
+      else if (a.description && a.description !== a.label) text = `${a.label} - ${a.description}`;
+      
+      bySlot[slot].push(text);
+    });
+
+    // Assemble paragraphs based on SLOT_ORDER
+    const paragraphs: string[] = [];
+    
+    SLOT_ORDER.forEach(slot => {
+        const lines = bySlot[slot];
+        if (lines && lines.length > 0) {
+            // Join items within a slot with newlines
+            paragraphs.push(lines.join('\n'));
+        }
+    });
+
+    // Join slots with double newlines for paragraph separation
+    const body = paragraphs.join('\n\n');
 
     return {
       ...sec,
@@ -233,4 +272,162 @@ export function composeSectionsFromAssertions(
       lastEditedAt: now
     };
   });
+}
+
+// Completeness Engine V1
+// Determines if slots are "complete", "empty" (required but missing), or "not_required".
+export function evaluateSlotCompleteness(
+  truth: TruthAssertionsBundle | undefined,
+  section: SoapSectionType
+): Record<AssertionSlot, 'complete' | 'empty' | 'not_required'> {
+  // Default all to not_required
+  const result: Record<AssertionSlot, 'complete' | 'empty' | 'not_required'> = {
+    'CC': 'not_required',
+    'HPI': 'not_required',
+    'CLINICAL_FINDING': 'not_required',
+    'RADIOGRAPHIC': 'not_required',
+    'DIAGNOSIS': 'not_required',
+    'INTERVENTION': 'not_required',
+    'RISK': 'not_required',
+    'PLAN': 'not_required',
+    'MISC': 'not_required'
+  };
+
+  if (!truth || !truth.assertions) return result;
+
+  const allAssertions = truth.assertions;
+  const sectionAssertions = allAssertions.filter(a => a.section === section);
+  
+  // Context Inference
+  const hasProcedures = allAssertions.some(a => a.source === 'procedure');
+  const hasDiagnoses = allAssertions.some(a => a.slot === 'DIAGNOSIS');
+  const hasRisks = allAssertions.some(a => a.slot === 'RISK');
+
+  const checkSlot = (slot: AssertionSlot, required: boolean) => {
+    if (!required) {
+      result[slot] = 'not_required';
+      return;
+    }
+    
+    // It's required. Is it populated and checked?
+    const slotAssertions = sectionAssertions.filter(a => a.slot === slot);
+    if (slotAssertions.length === 0) {
+      // Required but no assertions generated/available
+      result[slot] = 'empty';
+    } else {
+      const hasChecked = slotAssertions.some(a => a.checked);
+      result[slot] = hasChecked ? 'complete' : 'empty';
+    }
+  };
+
+  // Logic per Section
+  if (section === 'SUBJECTIVE') {
+    checkSlot('CC', hasProcedures || sectionAssertions.some(a => a.slot === 'CC'));
+    // HPI required if CC exists OR procedures exist
+    checkSlot('HPI', hasProcedures || sectionAssertions.some(a => a.slot === 'CC'));
+  }
+
+  if (section === 'OBJECTIVE') {
+    checkSlot('CLINICAL_FINDING', hasDiagnoses || hasProcedures);
+    // Radiographic required if visit has findings (implied if assertion exists)
+    const hasRadioAssertion = sectionAssertions.some(a => a.slot === 'RADIOGRAPHIC');
+    checkSlot('RADIOGRAPHIC', hasRadioAssertion);
+  }
+
+  if (section === 'ASSESSMENT') {
+    checkSlot('DIAGNOSIS', hasProcedures);
+  }
+
+  if (section === 'TREATMENT_PERFORMED') {
+    checkSlot('INTERVENTION', hasProcedures);
+  }
+
+  if (section === 'PLAN') {
+    checkSlot('RISK', hasProcedures); // Simplified rule: any procedure implies risk discussion
+    checkSlot('PLAN', true); // Plan always required
+  }
+
+  return result;
+}
+
+// Section Completeness Helper
+export type SectionCompleteness = 'complete' | 'partial' | 'empty';
+
+export function getSectionCompletenessFromSlots(
+  perSlot: Record<AssertionSlot, 'complete' | 'empty' | 'not_required'>
+): SectionCompleteness {
+  const relevantSlots = Object.values(perSlot).filter(status => status !== 'not_required');
+  
+  if (relevantSlots.length === 0) return 'empty'; // Or 'complete'? Instructions said empty.
+  
+  // If ANY relevant slot is empty, it's partial.
+  if (relevantSlots.includes('empty')) return 'partial';
+  
+  // All relevant slots must be complete
+  return 'complete';
+}
+
+// Note-Level Completeness Summary
+export interface NoteCompletenessSummary {
+  requiredSlots: number;    // total slots that are required across all sections
+  completedSlots: number;   // how many of those are complete
+  percent: number;          // 0–100, rounded to nearest integer
+  perSection: Record<SoapSectionType, {
+    requiredSlots: number;
+    completedSlots: number;
+    percent: number;
+  }>;
+}
+
+// Pure function to calculate note-level completeness from assertions bundle
+export function getNoteCompleteness(truth: TruthAssertionsBundle | undefined): NoteCompletenessSummary {
+  const sectionOrder: SoapSectionType[] = ['SUBJECTIVE', 'OBJECTIVE', 'ASSESSMENT', 'TREATMENT_PERFORMED', 'PLAN'];
+  
+  const summary: NoteCompletenessSummary = {
+    requiredSlots: 0,
+    completedSlots: 0,
+    percent: 0,
+    perSection: {
+      'SUBJECTIVE': { requiredSlots: 0, completedSlots: 0, percent: 0 },
+      'OBJECTIVE': { requiredSlots: 0, completedSlots: 0, percent: 0 },
+      'ASSESSMENT': { requiredSlots: 0, completedSlots: 0, percent: 0 },
+      'TREATMENT_PERFORMED': { requiredSlots: 0, completedSlots: 0, percent: 0 },
+      'PLAN': { requiredSlots: 0, completedSlots: 0, percent: 0 }
+    }
+  };
+
+  if (!truth) return summary;
+
+  sectionOrder.forEach(section => {
+    const slotMap = evaluateSlotCompleteness(truth, section);
+    let secReq = 0;
+    let secComp = 0;
+
+    Object.values(slotMap).forEach(status => {
+      if (status !== 'not_required') {
+        secReq++;
+        if (status === 'complete') {
+          secComp++;
+        }
+      }
+    });
+
+    summary.perSection[section] = {
+      requiredSlots: secReq,
+      completedSlots: secComp,
+      percent: secReq === 0 ? 100 : Math.round((secComp / secReq) * 100)
+    };
+
+    summary.requiredSlots += secReq;
+    summary.completedSlots += secComp;
+  });
+
+  if (summary.requiredSlots > 0) {
+    summary.percent = Math.round((summary.completedSlots / summary.requiredSlots) * 100);
+  } else {
+    // If nothing required, consider it 0% started (or 100% complete? Ambiguous, sticking to 0 for "Not Started")
+    summary.percent = 0;
+  }
+
+  return summary;
 }

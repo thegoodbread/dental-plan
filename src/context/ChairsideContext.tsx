@@ -3,7 +3,17 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { ChairsideViewMode, TimelineEvent, QuickActionType } from '../../types/charting';
 import { SoapSection, SoapSectionType, ToothNumber, VisitType, NoteEngineProcedureInput } from '../domain/dentalTypes';
 import { applyTemplateToSoapSections } from '../domain/procedureNoteEngine';
-import { TruthAssertionsBundle } from '../domain/TruthAssertions';
+import { 
+  TruthAssertionsBundle, 
+  evaluateSlotCompleteness as evaluateSlotCompletenessDomain, 
+  AssertionSlot, 
+  SectionCompleteness, 
+  getSectionCompletenessFromSlots,
+  NoteCompletenessSummary,
+  getNoteCompleteness,
+  createManualAssertion,
+  AssertionSection
+} from '../domain/TruthAssertions';
 
 // Lightweight snapshot for Undo functionality
 interface UndoSnapshot {
@@ -38,6 +48,8 @@ interface ChairsideContextType {
   // Truth Assertions (Fact Blocks) - NEW
   truthAssertions?: TruthAssertionsBundle;
   setTruthAssertions: (bundle: TruthAssertionsBundle) => void;
+  addManualAssertion: (section: AssertionSection, slot: AssertionSlot, text: string) => void;
+  removeAssertion: (id: string) => void;
 
   // Inline Truth Blocks (V2.0 & V2.5)
   // Allows per-section assertion review and selection.
@@ -47,6 +59,11 @@ interface ChairsideContextType {
   // Fact Review State (V2.5)
   factReviewStatus: Record<string, 'pending' | 'reviewed'>;
   markSectionFactsReviewed: (sectionType: SoapSectionType) => void;
+  
+  // Slot Completeness (V1)
+  evaluateSlotCompleteness: (truth: TruthAssertionsBundle, section: SoapSectionType) => Record<AssertionSlot, 'complete' | 'empty' | 'not_required'>;
+  getSectionCompleteness: (section: SoapSectionType) => SectionCompleteness;
+  noteCompleteness: NoteCompletenessSummary | null;
 
   // Note Status & Persistence
   noteStatus: 'draft' | 'signed';
@@ -155,6 +172,12 @@ export const ChairsideProvider: React.FC<ChairsideProviderProps> = ({ children, 
   // Fact Review State (V2.5)
   const [factReviewStatus, setFactReviewStatus] = useState<Record<string, 'pending' | 'reviewed'>>({});
 
+  // Computed Completeness (V3)
+  const noteCompleteness = useMemo(
+    () => getNoteCompleteness(truthAssertions),
+    [truthAssertions]
+  );
+
   const toggleFactSection = (sectionId: string) => {
     setFactSectionStates(prev => ({
       ...prev,
@@ -167,6 +190,34 @@ export const ChairsideProvider: React.FC<ChairsideProviderProps> = ({ children, 
       ...prev,
       [sectionType]: 'reviewed'
     }));
+  };
+  
+  // Proxy to domain logic
+  const evaluateSlotCompleteness = (truth: TruthAssertionsBundle, section: SoapSectionType) => {
+      return evaluateSlotCompletenessDomain(truth, section);
+  };
+
+  const getSectionCompleteness = (section: SoapSectionType): SectionCompleteness => {
+    if (!truthAssertions) return 'empty';
+    const slotMap = evaluateSlotCompletenessDomain(truthAssertions, section);
+    return getSectionCompletenessFromSlots(slotMap);
+  };
+
+  const addManualAssertion = (section: AssertionSection, slot: AssertionSlot, text: string) => {
+    if (!truthAssertions) return;
+    const newAssertion = createManualAssertion(section, slot, text);
+    setTruthAssertions({
+      ...truthAssertions,
+      assertions: [...truthAssertions.assertions, newAssertion]
+    });
+  };
+
+  const removeAssertion = (id: string) => {
+    if (!truthAssertions) return;
+    setTruthAssertions({
+      ...truthAssertions,
+      assertions: truthAssertions.assertions.filter(a => a.id !== id)
+    });
   };
   
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -399,10 +450,15 @@ export const ChairsideProvider: React.FC<ChairsideProviderProps> = ({ children, 
       updateCurrentNoteSectionsFromProcedure,
       truthAssertions,
       setTruthAssertions,
+      addManualAssertion,
+      removeAssertion,
       factSectionStates,
       toggleFactSection,
       factReviewStatus,
       markSectionFactsReviewed,
+      evaluateSlotCompleteness,
+      getSectionCompleteness,
+      noteCompleteness,
       saveCurrentNote,
       signNote,
       lastSavedAt,

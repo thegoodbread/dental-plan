@@ -2,7 +2,7 @@
 import React from 'react';
 import { useChairside } from '../../context/ChairsideContext';
 import { CheckSquare, Square, FileText } from 'lucide-react';
-import { TruthAssertion, AssertionSection } from '../../domain/TruthAssertions';
+import { TruthAssertion, AssertionSection, SLOT_ORDER, SLOT_LABELS } from '../../domain/TruthAssertions';
 
 const SECTIONS: { id: AssertionSection; label: string }[] = [
   { id: 'SUBJECTIVE', label: 'Subjective' },
@@ -40,10 +40,21 @@ export const TruthBlocksPanel: React.FC = () => {
     });
   };
 
-  const groupedAssertions = SECTIONS.map(section => ({
-    ...section,
-    items: truthAssertions.assertions.filter(a => a.section === section.id)
-  })).filter(g => g.items.length > 0);
+  const groupedAssertions = SECTIONS.map(section => {
+    const items = truthAssertions.assertions.filter(a => a.section === section.id);
+    // Sort items by SLOT_ORDER
+    items.sort((a, b) => {
+        const slotAIndex = SLOT_ORDER.indexOf(a.slot || 'MISC');
+        const slotBIndex = SLOT_ORDER.indexOf(b.slot || 'MISC');
+        if (slotAIndex !== slotBIndex) return slotAIndex - slotBIndex;
+        return a.sortOrder - b.sortOrder;
+    });
+    
+    return {
+        ...section,
+        items
+    };
+  }).filter(g => g.items.length > 0);
 
   return (
     <div className="flex flex-col h-full bg-slate-50">
@@ -52,8 +63,8 @@ export const TruthBlocksPanel: React.FC = () => {
           <CheckSquare size={16} className="text-blue-600" />
           Verify Facts
         </h3>
-        <p className="text-xs text-slate-500 mt-1">
-          Review generated facts. Unchecked items will be excluded from the final note.
+        <p className="text-xs text-slate-500 mt-1 leading-snug">
+          Checked items appear under their slots in the note. Unchecked items will be excluded from the final narrative.
         </p>
       </div>
 
@@ -69,7 +80,7 @@ export const TruthBlocksPanel: React.FC = () => {
                   key={assertion.id}
                   onClick={() => handleToggle(assertion.id)}
                   className={`
-                    p-3 rounded-lg border cursor-pointer transition-all duration-200 flex gap-3 select-none
+                    p-3 rounded-lg border cursor-pointer transition-all duration-200 flex gap-3 select-none relative
                     ${assertion.checked 
                       ? 'bg-white border-blue-200 shadow-sm' 
                       : 'bg-slate-100 border-transparent opacity-60'
@@ -81,9 +92,16 @@ export const TruthBlocksPanel: React.FC = () => {
                     {assertion.checked ? <CheckSquare size={16} /> : <Square size={16} />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className={`text-xs font-medium leading-snug break-words ${assertion.checked ? 'text-slate-800' : 'text-slate-500 line-through decoration-slate-300'}`}>
-                      {assertion.label}
-                    </p>
+                    <div className="flex justify-between items-start gap-2 mb-1">
+                        <span className={`text-xs font-medium leading-snug break-words ${assertion.checked ? 'text-slate-800' : 'text-slate-500 line-through decoration-slate-300'}`}>
+                            {assertion.label}
+                        </span>
+                        {assertion.slot && (
+                            <span className="shrink-0 text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-wide">
+                                {SLOT_LABELS[assertion.slot] || assertion.slot}
+                            </span>
+                        )}
+                    </div>
                     {assertion.description && assertion.checked && (
                       <p className="text-[10px] text-slate-500 mt-1 leading-relaxed break-words">
                         {assertion.description}
