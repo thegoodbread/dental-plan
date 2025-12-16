@@ -65,6 +65,16 @@ export interface Patient {
   updatedAt: string;
 }
 
+// --- PROVIDER DOMAIN ---
+
+export interface Provider {
+  id: string;
+  fullName: string;
+  npi: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // --- VISIT DOMAIN ---
 
 export type VisitType = 
@@ -104,7 +114,8 @@ export interface Visit {
   id: string;              // UUID
   treatmentPlanId: string; // Linked Plan
   date: string;            // ISO Date YYYY-MM-DD
-  provider: string;        // Display name of provider
+  provider: string;        // Display name of provider (Legacy/Display)
+  providerId?: string;     // Link to Provider Entity (Required for new visits)
   visitType: VisitType;
   attachedProcedureIds: string[]; // List of completed item IDs
   createdAt: string;

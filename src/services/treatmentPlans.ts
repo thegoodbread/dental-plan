@@ -16,7 +16,8 @@ import {
   Visit,
   VisitStatus,
   ProcedureStatus,
-  Patient
+  Patient,
+  Provider
 } from '../types';
 import { DEMO_PLANS, DEMO_ITEMS, DEMO_SHARES, DEMO_PATIENTS } from '../mock/seedPlans';
 import { estimateDuration } from './clinicalLogic';
@@ -29,6 +30,7 @@ const KEY_SHARES = 'dental_shares_v7';
 const KEY_LOGS = 'dental_logs_v7';
 const KEY_VISITS = 'dental_visits_v1';
 const KEY_PATIENTS = 'dental_patients_v1';
+const KEY_PROVIDERS = 'dental_providers_v1';
 
 // --- UTILS ---
 const generateId = () => `id-${Math.random().toString(36).substring(2, 10)}`;
@@ -186,6 +188,33 @@ export const upsertPatient = (patient: Patient): void => {
   localStorage.setItem(KEY_PATIENTS, JSON.stringify(patients));
 };
 
+// --- PROVIDER PERSISTENCE ---
+
+export const DEMO_PROVIDERS: Provider[] = [
+  { id: 'prov_smith', fullName: 'Dr. Sarah Smith', npi: '1234567890', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'prov_lee', fullName: 'Dr. David Lee', npi: '9876543210', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'prov_rdh', fullName: 'Sarah Jones (RDH)', npi: '1122334455', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+];
+
+export const getProviders = (): Provider[] => {
+  return JSON.parse(localStorage.getItem(KEY_PROVIDERS) || '[]');
+};
+
+export const getProviderById = (id: string): Provider | undefined => {
+  return getProviders().find(p => p.id === id);
+};
+
+export const upsertProvider = (provider: Provider): void => {
+  const providers = getProviders();
+  const index = providers.findIndex(p => p.id === provider.id);
+  if (index >= 0) {
+    providers[index] = provider;
+  } else {
+    providers.push(provider);
+  }
+  localStorage.setItem(KEY_PROVIDERS, JSON.stringify(providers));
+};
+
 // --- INITIALIZATION ---
 
 export const initServices = () => {
@@ -208,6 +237,12 @@ export const initServices = () => {
   const hasPatients = localStorage.getItem(KEY_PATIENTS);
   if (!hasPatients) {
      localStorage.setItem(KEY_PATIENTS, JSON.stringify(DEMO_PATIENTS));
+  }
+
+  // Provider Seeding
+  const hasProviders = localStorage.getItem(KEY_PROVIDERS);
+  if (!hasProviders) {
+    localStorage.setItem(KEY_PROVIDERS, JSON.stringify(DEMO_PROVIDERS));
   }
 
   // Backward-Compat Migration: Ensure all plans have a patientId
@@ -242,6 +277,35 @@ export const initServices = () => {
   if (plansUpdated) {
     localStorage.setItem(KEY_PLANS, JSON.stringify(plans));
   }
+
+  // Visit Migration: Ensure all visits have providerId
+  const visits: Visit[] = JSON.parse(localStorage.getItem(KEY_VISITS) || '[]');
+  const providers = getProviders();
+  let visitsUpdated = false;
+  let providersUpdated = false;
+
+  visits.forEach((v: Visit) => {
+    if (!v.providerId && v.provider) {
+        // Find or create
+        let p = providers.find(p => p.fullName === v.provider);
+        if (!p) {
+            p = {
+                id: `prov_${Math.random().toString(36).substr(2,9)}`,
+                fullName: v.provider,
+                npi: '0000000000', // Fallback NPI for legacy visits
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            providers.push(p);
+            providersUpdated = true;
+        }
+        v.providerId = p.id;
+        visitsUpdated = true;
+    }
+  });
+
+  if (providersUpdated) localStorage.setItem(KEY_PROVIDERS, JSON.stringify(providers));
+  if (visitsUpdated) localStorage.setItem(KEY_VISITS, JSON.stringify(visits));
 };
 
 // --- FEE SCHEDULE ---

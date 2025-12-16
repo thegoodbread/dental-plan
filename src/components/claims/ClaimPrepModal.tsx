@@ -2,10 +2,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Visit, TreatmentPlanItem } from '../../types';
 import { CheckCircle2, AlertTriangle, FileText, ArrowLeft, RotateCw, Stethoscope } from 'lucide-react';
-import { updateProcedureDocumentationFlags, updateVisitClaimPrepStatus, updateProcedureDiagnosisCodes } from '../../services/treatmentPlans';
+import { updateProcedureDocumentationFlags, updateVisitClaimPrepStatus, updateProcedureDiagnosisCodes, getProviderById } from '../../services/treatmentPlans';
 import { buildClaimNarrativeDraft, evaluateClaimReadiness, ClaimReadinessResult, PayerId } from '../../services/clinicalLogic';
 import { DiagnosisCodePicker } from './DiagnosisCodePicker';
 import { VisitNotesPanel } from '../visits/VisitNotesPanel';
+import { computeDocumentationReadiness, ReadinessInput } from '../../domain/ClaimReadinessEngine';
 
 interface ClaimPrepModalProps {
   isOpen: boolean;
@@ -26,8 +27,15 @@ export const ClaimPrepModal: React.FC<ClaimPrepModalProps> = ({ isOpen, onClose,
   const payerId: PayerId = (visit as any).payerId || 'GENERIC';
 
   const getReadiness = useCallback((item: TreatmentPlanItem): ClaimReadinessResult => {
+      // Use Provider info for engine check
+      const provider = visit.providerId ? getProviderById(visit.providerId) : undefined;
+      
+      // We pass the provider NPI if available to the engine indirectly via payer rules logic if needed
+      // But mainly we want to construct the full ReadinessInput for the engine.
+      // The current `evaluateClaimReadiness` is the V1 logic.
+      // The new V2 engine `computeDocumentationReadiness` is used for the overall status.
       return evaluateClaimReadiness(item, payerId);
-  }, [payerId]);
+  }, [payerId, visit.providerId]);
 
   const isItemReady = useCallback((item: TreatmentPlanItem) => {
       const result = getReadiness(item);
@@ -88,6 +96,40 @@ export const ClaimPrepModal: React.FC<ClaimPrepModalProps> = ({ isOpen, onClose,
   };
 
   const visitRiskSummary = useMemo(() => {
+      // Use the V2 Engine for comprehensive check including Provider NPI
+      const provider = visit.providerId ? getProviderById(visit.providerId) : undefined;
+      
+      const input: ReadinessInput = {
+          procedures: items.map(p => ({
+              id: p.id,
+              cdtCode: p.procedureCode,
+              label: p.procedureName,
+              tooth: p.selectedTeeth?.join(','),
+              surfaces: p.surfaces,
+              quadrant: p.selectedQuadrants?.[0],
+              isCompleted: p.procedureStatus === 'COMPLETED'
+          })),
+          diagnoses: items.flatMap(p => (p.diagnosisCodes || []).map(code => ({ procedureId: p.id, icd10: code }))),
+          evidence: items.flatMap(p => {
+              const ev = [];
+              if (p.documentation?.hasXray) ev.push({ procedureId: p.id, type: 'pre_op_xray', attached: true });
+              if (p.documentation?.hasPerioChart) ev.push({ procedureId: p.id, type: 'perio_charting', attached: true });
+              return ev;
+          }),
+          risksAndConsentComplete: true, // simplified
+          provider: {
+              npi: provider?.npi // Pass NPI to engine
+          },
+          serviceDate: visit.date,
+          // Patient info mocked as present for now, would come from patient record
+          patient: { dob: '1980-01-01', memberId: '12345' } 
+      };
+
+      const engineResult = computeDocumentationReadiness(input);
+      
+      // Map V2 engine result to UI summary counts
+      // For now we still use V1 loop for the badges on the left, but we can display global blockers here
+      
       let low = 0, med = 0, high = 0;
       const missingCounts: Record<string, number> = {};
 
@@ -101,6 +143,12 @@ export const ClaimPrepModal: React.FC<ClaimPrepModalProps> = ({ isOpen, onClose,
               missingCounts[m] = (missingCounts[m] || 0) + 1;
           });
       });
+      
+      // If NPI missing, consider it a global High risk factor
+      if (engineResult.items.some(i => i.kind === 'admin' && i.adminKey === 'missing_npi')) {
+          high += items.length; // Affects all
+          low = 0;
+      }
 
       let topMissingLabel: string | null = null;
       let topMissingCount = 0;
@@ -111,8 +159,8 @@ export const ClaimPrepModal: React.FC<ClaimPrepModalProps> = ({ isOpen, onClose,
           }
       });
 
-      return { low, med, high, topMissingLabel };
-  }, [items, getReadiness]);
+      return { low, med, high, topMissingLabel, adminBlockers: engineResult.items.filter(i => i.kind === 'admin') };
+  }, [items, getReadiness, visit.providerId, visit.date]);
 
   const selectedReadiness = useMemo(() => selectedItem ? getReadiness(selectedItem) : null, [selectedItem, getReadiness]);
 
@@ -150,7 +198,7 @@ export const ClaimPrepModal: React.FC<ClaimPrepModalProps> = ({ isOpen, onClose,
                        </button>
                        <button 
                            onClick={handleMarkVisitReady}
-                           disabled={!allItemsReady || visit.claimPrepStatus === 'READY'}
+                           disabled={!allItemsReady || visit.claimPrepStatus === 'READY' || visitRiskSummary.adminBlockers.length > 0}
                            className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg text-sm hover:bg-green-700 shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                        >
                            <CheckCircle2 size={16} /> Mark Ready
@@ -193,7 +241,9 @@ export const ClaimPrepModal: React.FC<ClaimPrepModalProps> = ({ isOpen, onClose,
                             Visit Risk Overview
                           </p>
                           <p className="text-xs text-slate-600">
-                            {visitRiskSummary.high > 0
+                            {visitRiskSummary.adminBlockers.length > 0 
+                              ? `Blocker: ${visitRiskSummary.adminBlockers[0].label} (Admin)`
+                              : visitRiskSummary.high > 0
                               ? 'Some procedures have a high denial risk. Resolve missing items before submitting.'
                               : visitRiskSummary.med > 0
                               ? 'A few procedures have medium denial risk. Check requirements before submission.'

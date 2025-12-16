@@ -1,7 +1,8 @@
+
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
-import { TreatmentPlan, TreatmentPlanItem, TreatmentPhase, UrgencyLevel, FeeCategory, AddOnKind, Visit, VisitType } from '../../types';
+import { TreatmentPlan, TreatmentPlanItem, TreatmentPhase, UrgencyLevel, FeeCategory, AddOnKind, Visit, VisitType, Provider } from '../../types';
 import { Plus, X, MoreHorizontal, Clock, GripVertical, Edit, Trash2, Library, Calendar, Check, Stethoscope, History as HistoryIcon, ArrowRight } from 'lucide-react';
-import { SEDATION_TYPES, checkAddOnCompatibility, createAddOnItem, ADD_ON_LIBRARY, AddOnDefinition, createVisit, getVisitsForPlan, linkProceduresToVisit, getTreatmentPlanById } from '../../services/treatmentPlans';
+import { SEDATION_TYPES, checkAddOnCompatibility, createAddOnItem, ADD_ON_LIBRARY, AddOnDefinition, createVisit, getVisitsForPlan, linkProceduresToVisit, getTreatmentPlanById, getProviders, getProviderById } from '../../services/treatmentPlans';
 import { AddOnsLibraryPanel } from './AddOnsLibraryPanel';
 import { VisitDetailModal } from './VisitDetailModal';
 
@@ -230,13 +231,30 @@ const ProcedureEditorModal: React.FC<{
 const VisitCreationModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
-    onCreate: (date: string, provider: string, type: VisitType) => void;
+    onCreate: (date: string, providerId: string, type: VisitType) => void;
 }> = ({ isOpen, onClose, onCreate }) => {
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-    const [provider, setProvider] = useState('Dr. Smith');
+    const [providerId, setProviderId] = useState('');
+    const [providers, setProviders] = useState<Provider[]>([]);
     const [type, setType] = useState<VisitType>('restorative');
 
+    useEffect(() => {
+        if (isOpen) {
+            const list = getProviders();
+            setProviders(list);
+            if (list.length > 0) setProviderId(list[0].id);
+        }
+    }, [isOpen]);
+
     if (!isOpen) return null;
+
+    const handleSubmit = () => {
+        if (!providerId) {
+            alert('Please select a provider');
+            return;
+        }
+        onCreate(date, providerId, type);
+    };
 
     return (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
@@ -249,10 +267,10 @@ const VisitCreationModal: React.FC<{
                     </div>
                     <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Provider</label>
-                        <select value={provider} onChange={e => setProvider(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg text-sm">
-                            <option value="Dr. Smith">Dr. Smith</option>
-                            <option value="Dr. Lee">Dr. Lee</option>
-                            <option value="Sarah (RDH)">Sarah (RDH)</option>
+                        <select value={providerId} onChange={e => setProviderId(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg text-sm">
+                            {providers.map(p => (
+                                <option key={p.id} value={p.id}>{p.fullName}</option>
+                            ))}
                         </select>
                     </div>
                     <div>
@@ -268,7 +286,7 @@ const VisitCreationModal: React.FC<{
                 </div>
                 <div className="mt-6 flex justify-end gap-3">
                     <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
-                    <button onClick={() => onCreate(date, provider, type)} className="px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm">Start Visit</button>
+                    <button onClick={handleSubmit} className="px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm">Start Visit</button>
                 </div>
             </div>
         </div>
@@ -681,11 +699,13 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
   
   // --- VISIT MODE HANDLERS ---
 
-  const handleStartVisit = (date: string, provider: string, type: VisitType) => {
+  const handleStartVisit = (date: string, providerId: string, type: VisitType) => {
+      const provider = getProviderById(providerId);
       const newVisit = createVisit({
           treatmentPlanId: plan.id,
           date,
-          provider,
+          providerId: providerId,
+          provider: provider?.fullName || 'Unknown', // Legacy/Display
           visitType: type,
           attachedProcedureIds: []
       });
