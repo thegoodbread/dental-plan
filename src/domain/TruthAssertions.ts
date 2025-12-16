@@ -431,3 +431,18 @@ export function getNoteCompleteness(truth: TruthAssertionsBundle | undefined): N
 
   return summary;
 }
+
+export function getNextMissingSlot(truth: TruthAssertionsBundle | undefined): { section: SoapSectionType, slot: AssertionSlot } | null {
+  if (!truth) return null;
+  const sectionOrder: SoapSectionType[] = ['SUBJECTIVE', 'OBJECTIVE', 'ASSESSMENT', 'TREATMENT_PERFORMED', 'PLAN'];
+  
+  for (const section of sectionOrder) {
+    const slotMap = evaluateSlotCompleteness(truth, section);
+    for (const slot of SLOT_ORDER) {
+      if (slotMap[slot] === 'empty') {
+        return { section, slot };
+      }
+    }
+  }
+  return null;
+}

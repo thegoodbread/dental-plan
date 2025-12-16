@@ -1,50 +1,18 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
-  ArrowLeft, Save, PanelRightClose, PanelRightOpen, ShieldCheck, Lightbulb, Activity, CheckCircle2, Plus, Clock, Lock, AlertCircle, ChevronDown, ChevronRight, FileText, CheckSquare
+  ArrowLeft, Save, ShieldCheck, Activity, Clock, Lock, CheckSquare, ArrowRight, FileCheck, Layout
 } from 'lucide-react';
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
-import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
-import { ToothNumber, ToothRecord, SoapSection, AssignedRisk, RiskLibraryItem, SoapSectionType, recordRiskEvent } from '../../domain/dentalTypes';
-import { RISK_LIBRARY } from '../../domain/riskLibrary';
+import { SoapSection, AssignedRisk, RiskLibraryItem, SoapSectionType } from '../../domain/dentalTypes';
 import { SoapSectionBlock } from './SoapSectionBlock';
 import { RiskLibraryPanel } from './RiskLibraryPanel';
-import { AssignedRiskRow } from './AssignedRiskRow';
-import { generateSoapSectionsForVisit } from '../../domain/NoteComposer';
-import { loadTreatmentPlanWithItems } from '../../services/treatmentPlans';
+import { ClinicalSubmissionPreview } from './ClinicalSubmissionPreview';
 import { Visit, TreatmentPlanItem } from '../../types';
-import { evaluateVisitCompleteness, CompletenessResult } from '../../domain/CompletenessEngine';
-import { TruthBlocksPanel } from './TruthBlocksPanel';
-import { TruthAssertionsBundle } from '../../domain/TruthAssertions';
+import { CompletenessResult } from '../../domain/CompletenessEngine';
+import { TruthAssertionsBundle, getNoteCompleteness, getNextMissingSlot } from '../../domain/TruthAssertions';
 import { useChairside } from '../../context/ChairsideContext';
 
-// --- SHARED UTILS & TYPES ---
-
-const QUICK_ACTION_TO_CODES: Record<string, string[]> = {
-  'Composite': ['D2391', 'D2392', 'D2393'],
-  'Crown': ['D2740', 'D2950'],
-  'Extraction': ['D7140', 'D7210'],
-  'Root Canal': ['D3310', 'D3320', 'D3330'],
-  'Implant': ['D6010'],
-  'Exam': ['D0150', 'D0120'],
-  'Perio': ['D4341', 'D4910']
-};
-
-function getSuggestedRiskIdsForProcedures(codes: string[]): string[] {
-  const normalizedCodes = new Set(codes.map(c => c.toUpperCase()));
-  const suggestions = new Set<string>();
-
-  RISK_LIBRARY.forEach(risk => {
-    if (risk.procedureCodes && risk.procedureCodes.some(code => normalizedCodes.has(code))) {
-      suggestions.add(risk.id);
-    }
-  });
-
-  return Array.from(suggestions);
-}
-
-// Reusable Pure UI Component
 export interface ClinicalNoteEditorProps {
   soapSections: SoapSection[];
   onUpdateSoapSection: (id: string, content: string) => void;
@@ -68,17 +36,14 @@ export interface ClinicalNoteEditorProps {
   showRiskPanel?: boolean;
   onToggleRiskPanel?: () => void;
   
-  // Optional features
   undoSnapshotProvider?: (sectionId: string) => { sourceLabel: string } | undefined;
   onUndo?: (sectionId: string) => void;
   onDismissUndo?: (sectionId: string) => void;
   onGenerateAiDraft?: (sectionType: SoapSectionType) => Promise<void>;
   onInsertChartFindings?: (sectionType: SoapSectionType) => void;
   
-  // IDs for context
   currentTenantId: string;
 
-  // Visit Context Inputs
   hpi: string;
   onHpiChange: (val: string) => void;
   radiographicFindings: string;
@@ -90,67 +55,24 @@ export interface ClinicalNoteEditorProps {
   relevantProcedures?: TreatmentPlanItem[]; 
   recommendedRiskCategories?: string[]; 
   
-  // Truth Assertions (V2.0)
   truthAssertions?: TruthAssertionsBundle;
-  // V2.5/V3
   onVerifySecondary?: () => void;
 }
 
 export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => {
   const {
-    soapSections, onUpdateSoapSection,
-    assignedRisks, onAssignRisk, onRemoveRisk, onToggleRiskExpand, onUpdateConsent, onReorderRisks, suggestedRiskIds,
-    isLocked, contextLabel, contextSubLabel,
+    soapSections,
+    assignedRisks, onAssignRisk, 
+    isLocked,
     onSave, onSign, lastSavedAt,
-    viewMode, showRiskPanel, onToggleRiskPanel,
-    undoSnapshotProvider, onUndo, onDismissUndo,
-    onGenerateAiDraft, onInsertChartFindings,
-    currentTenantId,
-    hpi, onHpiChange, radiographicFindings, onRadiographicFindingsChange, chiefComplaint, onChiefComplaintChange,
-    completeness,
+    viewMode,
     relevantProcedures = [],
     recommendedRiskCategories,
     truthAssertions,
-    onVerifySecondary
+    currentTenantId,
   } = props;
 
-  // Consume context for V2.0 features
-  const { setTruthAssertions, factSectionStates, toggleFactSection, noteCompleteness } = useChairside();
-
-  const riskSectionRef = useRef<HTMLDivElement>(null);
-  const activeRisks = assignedRisks.filter(r => r.isActive).sort((a, b) => a.sortOrder - b.sortOrder);
-  const [showProcedures, setShowProcedures] = useState(false);
-  
-  const [showTruthBlocks, setShowTruthBlocks] = useState(false);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor)
-  );
-
-  const displayedSections = soapSections.filter(s => {
-      if (viewMode === 'drawer') {
-          return ['SUBJECTIVE', 'OBJECTIVE', 'ASSESSMENT', 'PLAN'].includes(s.type);
-      }
-      return true; 
-  });
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    if (isLocked) return;
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = activeRisks.findIndex((r) => r.id === active.id);
-    const newIndex = activeRisks.findIndex((r) => r.id === over.id);
-    if (oldIndex !== -1 && newIndex !== -1) {
-        onReorderRisks(oldIndex, newIndex);
-    }
-  };
-
-  const getCompletenessColor = (score: number) => {
-      if (score >= 80) return 'bg-green-100 text-green-800 border-green-200';
-      if (score > 0) return 'bg-amber-100 text-amber-800 border-amber-200';
-      return 'bg-gray-100 text-gray-500 border-gray-200';
-  };
+  const { setTruthAssertions, toggleFactSection, noteCompleteness, setCurrentView } = useChairside();
 
   // V2.0 Inline Facts Toggle Handler
   const handleToggleAssertion = (id: string) => {
@@ -168,276 +90,143 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
 
   const noteCompletenessPercent = noteCompleteness?.percent ?? 0;
 
+  // --- Navigation Guidance Logic ---
+  const handleFixNext = () => {
+      const next = getNextMissingSlot(truthAssertions);
+      if (next) {
+          const slotId = `slot-${next.section}-${next.slot}`;
+          const el = document.getElementById(slotId);
+          if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              // Optional: flash highlight logic here
+          } else {
+              // Ensure section is expanded if not found?
+              // The updated SoapSectionBlock defaults to expanded, but context toggle might be needed.
+              // For MVP, we assume expansion or simple scroll.
+          }
+      }
+  };
+
+  const displayedSections = soapSections.filter(s => {
+      return ['SUBJECTIVE', 'OBJECTIVE', 'ASSESSMENT', 'PLAN', 'TREATMENT_PERFORMED'].includes(s.type);
+  });
+
+  // Calculate top risk categories for context
+  const activeRiskIds = useMemo(() => assignedRisks.map(r => r.riskLibraryItemId), [assignedRisks]);
+
   return (
-    <div className="flex-1 flex overflow-hidden h-full">
-        {/* LEFT COLUMN: SOAP Content */}
-        <div className="flex-1 overflow-y-auto relative bg-slate-100 custom-scrollbar">
-          {/* HEADER IN PAGE MODE */}
-          {viewMode === 'page' && (
-            <>
-              <div className="bg-white border-b border-slate-300 px-4 py-2.5 shadow-sm z-30 sticky top-0 flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                    <h2 className="text-lg font-bold text-slate-800">Clinical Note Editor</h2>
-                    {isLocked && (
-                        <span className="px-2 py-0.5 bg-slate-100 border border-slate-300 rounded text-xs font-bold text-slate-500 flex items-center gap-1">
-                            <Lock size={12} /> SIGNED
-                        </span>
-                    )}
-                    </div>
-                    <div className="flex items-center gap-3">
-                        {/* Note Completeness Badge */}
-                        {!isLocked && (
-                            <div className="group relative" title="Based on required truth slots across all SOAP sections.">
-                                <span className={`px-2 py-1 rounded text-xs font-bold border flex items-center gap-1 cursor-help transition-colors ${getCompletenessColor(noteCompletenessPercent)}`}>
-                                    <Activity size={12} />
-                                    {noteCompletenessPercent}% Complete
-                                </span>
-                            </div>
-                        )}
-
-                        {lastSavedAt && (
-                            <span className="text-[10px] text-slate-400 font-medium mr-2 flex items-center gap-1">
-                                <Clock size={10} /> Saved {new Date(lastSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                        )}
-                        {!isLocked && (
-                            <button 
-                                onClick={onVerifySecondary}
-                                className={`h-9 px-3 border border-slate-300 rounded-md shadow-sm transition-all flex items-center gap-2 text-sm font-semibold ${showTruthBlocks ? 'bg-blue-50 text-blue-700 border-blue-300' : 'bg-white text-slate-700 hover:bg-slate-50'}`}
-                                title="Toggle Fact Verification Drawer"
-                            >
-                                <CheckSquare size={16} />
-                                <span className="hidden md:inline">Verify (Secondary)</span>
-                            </button>
-                        )}
-                        {!isLocked && onSave && (
-                            <button onClick={onSave} className="h-9 px-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-md shadow-sm transition-all">
-                                Regenerate
-                            </button>
-                        )}
-                        {!isLocked && onSign && (
-                            <button onClick={onSign} className="h-9 px-4 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-md shadow-sm flex items-center gap-2 transition-all">
-                                <Save size={16} /> Sign
-                            </button>
-                        )}
-                        {onToggleRiskPanel && (
-                            <button onClick={onToggleRiskPanel} className={`p-2 rounded-md border transition-all hidden md:flex ${showRiskPanel ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'}`} title={showRiskPanel ? "Hide Library" : "Show Library"}>
-                                {showRiskPanel ? <PanelRightOpen size={18} /> : <PanelRightClose size={18} />}
-                            </button>
-                        )}
-                    </div>
-                </div>
-
-                {/* Improvement: Procedure Chips */}
-                {relevantProcedures.length > 0 && (
-                    <div className="pt-1">
-                        <button 
-                            onClick={() => setShowProcedures(!showProcedures)} 
-                            className="flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors mb-2"
-                        >
-                            {showProcedures ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
-                            <span>{relevantProcedures.length} Procedures Included</span>
-                        </button>
-                        
-                        {showProcedures && (
-                            <div className="flex flex-wrap gap-2 pb-2 animate-in slide-in-from-top-1 fade-in duration-200">
-                                {relevantProcedures.map(proc => (
-                                    <div key={proc.id} className="inline-flex items-center gap-1.5 px-2 py-1 bg-slate-100 border border-slate-200 rounded text-[11px] text-slate-700 font-medium">
-                                        <FileText size={10} className="text-slate-400" />
-                                        <span>{proc.procedureCode}</span>
-                                        <span className="text-slate-400">|</span>
-                                        <span className="truncate max-w-[150px]">{proc.procedureName}</span>
-                                        {proc.selectedTeeth && proc.selectedTeeth.length > 0 && (
-                                            <span className="bg-white px-1 rounded text-slate-500 border border-slate-100">#{proc.selectedTeeth.join(',')}</span>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+    <div className="flex flex-col h-full bg-slate-100 overflow-hidden font-sans text-slate-900">
+        {/* TOP BAR: Claim Readiness & Actions */}
+        <div className="bg-white border-b border-slate-200 px-4 py-2.5 flex items-center justify-between shadow-sm shrink-0 z-40">
+            <div className="flex items-center gap-4">
+                {viewMode === 'page' && (
+                    <button onClick={() => setCurrentView('DASHBOARD')} className="p-1.5 -ml-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"><ArrowLeft size={18} /></button>
                 )}
-              </div>
-              
-              {/* Visit Context Inputs */}
-              <div className="bg-white border-b border-slate-200 px-4 py-3 grid grid-cols-1 md:grid-cols-3 gap-4 shadow-sm">
-                  <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Chief Complaint</label>
-                      <input 
-                        type="text" 
-                        value={chiefComplaint} 
-                        onChange={e => onChiefComplaintChange(e.target.value)} 
-                        placeholder="e.g. Tooth hurts on lower right"
-                        className="w-full text-xs p-1.5 border border-slate-300 rounded bg-slate-50 focus:bg-white focus:border-blue-500 outline-none transition-all"
-                        disabled={isLocked}
-                      />
-                  </div>
-                  <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">HPI</label>
-                      <input 
-                        type="text" 
-                        value={hpi} 
-                        onChange={e => onHpiChange(e.target.value)} 
-                        placeholder="Duration, intensity, triggers..."
-                        className="w-full text-xs p-1.5 border border-slate-300 rounded bg-slate-50 focus:bg-white focus:border-blue-500 outline-none transition-all"
-                        disabled={isLocked}
-                      />
-                  </div>
-                  <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Radiographic Findings</label>
-                      <input 
-                        type="text" 
-                        value={radiographicFindings} 
-                        onChange={e => onRadiographicFindingsChange(e.target.value)} 
-                        placeholder="e.g. PARL #30, recurrent decay"
-                        className="w-full text-xs p-1.5 border border-slate-300 rounded bg-slate-50 focus:bg-white focus:border-blue-500 outline-none transition-all"
-                        disabled={isLocked}
-                      />
-                  </div>
-              </div>
-
-              <div className="bg-blue-50/50 border-b border-blue-100 px-4 py-2 flex items-center justify-between text-xs text-blue-800">
-                <div className="flex items-center gap-3">
-                    <span className="font-bold bg-white px-2 py-0.5 rounded border border-blue-200 shadow-sm">
-                        {contextLabel}
-                    </span>
-                    {contextSubLabel}
-                </div>
-                <div className="flex items-center gap-1 font-medium">
-                    <ShieldCheck size={12} className={activeRisks.length > 0 ? "text-green-600" : "text-slate-400"} />
-                    <span>{activeRisks.length} active risks</span>
-                </div>
-              </div>
-            </>
-          )}
-
-          <div className={`mx-auto p-4 space-y-4 pb-20 ${viewMode === 'page' ? 'max-w-4xl' : 'max-w-full'}`}>
-            {displayedSections.map(section => {
-                // Filter assertions for this section
-                const sectionAssertions = truthAssertions?.assertions.filter(a => a.section === section.type) || [];
-                
-                return (
-                    <SoapSectionBlock 
-                        key={section.id} 
-                        section={section}
-                        contextLabel={contextLabel}
-                        onSave={onUpdateSoapSection}
-                        onDictate={isLocked ? undefined : () => alert("Dictation placeholder")}
-                        onAiDraft={isLocked || !onGenerateAiDraft ? undefined : () => onGenerateAiDraft(section.type)}
-                        onInsertChartFindings={isLocked || !onInsertChartFindings ? undefined : (section.type === 'OBJECTIVE' ? () => onInsertChartFindings('OBJECTIVE') : undefined)}
-                        undoSnapshot={undoSnapshotProvider ? undoSnapshotProvider(section.id) : undefined}
-                        onUndo={onUndo ? () => onUndo(section.id) : undefined}
-                        onDismissUndo={onDismissUndo ? () => onDismissUndo(section.id) : undefined}
-                        isLocked={isLocked}
-                        // V2.0 Inline Facts
-                        assertions={sectionAssertions}
-                        onToggleAssertion={handleToggleAssertion}
-                        isFactsExpanded={factSectionStates[section.id]}
-                        onToggleFacts={() => toggleFactSection(section.id)}
-                    />
-                );
-            })}
-
-            {/* --- IN-FLOW RISKS SECTION --- */}
-            <div ref={riskSectionRef} className="pt-2">
-                <div className="flex items-center gap-3 mb-2 px-1">
-                    <div className="h-px bg-slate-300 flex-1"></div>
-                    <div className="flex items-center gap-2 text-slate-500">
-                        <ShieldCheck size={14} />
-                        <span className="text-[10px] font-bold uppercase tracking-widest">Informed Consent & Risks</span>
+                <div>
+                    <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                        Claim Studio 
+                        {isLocked && <span className="bg-slate-100 text-slate-500 text-[10px] px-2 py-0.5 rounded border">LOCKED</span>}
+                    </h2>
+                    {/* Readiness Bar */}
+                    <div className="flex items-center gap-2 mt-0.5">
+                        <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div 
+                                className={`h-full transition-all duration-500 ${noteCompletenessPercent === 100 ? 'bg-green-500' : 'bg-blue-500'}`} 
+                                style={{ width: `${noteCompletenessPercent}%` }} 
+                            />
+                        </div>
+                        <span className={`text-[10px] font-bold ${noteCompletenessPercent === 100 ? 'text-green-600' : 'text-slate-500'}`}>
+                            {noteCompletenessPercent}% Ready
+                        </span>
                     </div>
-                    <div className="h-px bg-slate-300 flex-1"></div>
-                </div>
-
-                <div className="bg-slate-50 rounded-lg border border-slate-200 p-3 shadow-inner">
-                    {/* SUGGESTED RISKS */}
-                    {suggestedRiskIds.length > 0 && !isLocked && (
-                        <div className="mb-4">
-                            <div className="flex items-center gap-1.5 mb-2 text-[10px] font-bold text-amber-600 uppercase tracking-wider">
-                                <Lightbulb size={12} /> Recommended based on procedures
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                                {suggestedRiskIds.map(riskId => {
-                                    const risk = RISK_LIBRARY.find(r => r.id === riskId);
-                                    if (!risk) return null;
-                                    if (activeRisks.some(ar => ar.riskLibraryItemId === riskId)) return null;
-                                    return (
-                                        <button
-                                            key={risk.id}
-                                            onClick={() => onAssignRisk(risk)}
-                                            className="flex items-center gap-1 px-3 py-1.5 bg-white border border-amber-200 text-amber-900 text-xs rounded-full shadow-sm hover:bg-amber-50 hover:border-amber-300 transition-colors group"
-                                        >
-                                            <span className="font-medium">{risk.title}</span>
-                                            <span className="text-amber-500 group-hover:text-amber-700 bg-amber-50 group-hover:bg-amber-100 rounded-full w-4 h-4 flex items-center justify-center text-[10px] ml-1">
-                                                <Plus size={8} strokeWidth={3} />
-                                            </span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ASSIGNED RISKS LIST */}
-                    {activeRisks.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-4 text-slate-400">
-                            <p className="text-xs italic">No risks assigned.</p>
-                        </div>
-                    ) : (
-                        viewMode === 'drawer' || isLocked ? (
-                            <div className="space-y-2">
-                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Assigned</div>
-                                {activeRisks.map(risk => (
-                                    <AssignedRiskRow 
-                                        key={risk.id}
-                                        risk={risk}
-                                        onToggleExpand={onToggleRiskExpand}
-                                        onRemove={isLocked ? () => {} : onRemoveRisk}
-                                        onUpdateConsent={isLocked ? () => {} : onUpdateConsent}
-                                    />
-                                ))}
-                            </div>
-                        ) : (
-                            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                                <SortableContext items={activeRisks.map(r => r.id)} strategy={verticalListSortingStrategy}>
-                                    <div className="space-y-1">
-                                        {activeRisks.map(risk => (
-                                            <AssignedRiskRow 
-                                                key={risk.id}
-                                                risk={risk}
-                                                onToggleExpand={onToggleRiskExpand}
-                                                onRemove={onRemoveRisk}
-                                                onUpdateConsent={onUpdateConsent}
-                                            />
-                                        ))}
-                                    </div>
-                                </SortableContext>
-                            </DndContext>
-                        )
-                    )}
                 </div>
             </div>
-          </div>
+
+            <div className="flex items-center gap-3">
+                {!isLocked && noteCompletenessPercent < 100 && (
+                    <button 
+                        onClick={handleFixNext}
+                        className="h-8 px-3 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 hover:bg-blue-100 flex items-center gap-1.5 transition-colors"
+                    >
+                        Fix Next <ArrowRight size={12} />
+                    </button>
+                )}
+                
+                <div className="h-6 w-px bg-slate-200 mx-1"></div>
+
+                {!isLocked && onSave && (
+                    <button onClick={onSave} className="h-8 px-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg shadow-sm transition-all">
+                        Save Draft
+                    </button>
+                )}
+                {!isLocked && onSign && (
+                    <button onClick={onSign} className="h-8 px-4 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-2 transition-all">
+                        <Save size={14} /> Sign Note
+                    </button>
+                )}
+            </div>
         </div>
 
-        {/* TRUTH BLOCKS PANEL (Conditionally Shown) */}
-        {showTruthBlocks && (
-            <div className="shrink-0 bg-white border-l border-slate-300 shadow-xl z-20 w-[300px] flex flex-col animate-in slide-in-from-right duration-200">
-               <TruthBlocksPanel />
+        {/* 3-COLUMN LAYOUT */}
+        <div className="flex-1 flex overflow-hidden">
+            
+            {/* LEFT RAIL: SOAP Truth Builder */}
+            <div className="w-[320px] bg-slate-50 border-r border-slate-200 flex flex-col shrink-0 z-30">
+                <div className="p-3 border-b border-slate-200 bg-white/50 backdrop-blur-sm sticky top-0 z-10 flex justify-between items-center">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                        <CheckSquare size={12} /> Truth Builder
+                    </span>
+                </div>
+                <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
+                    {displayedSections.map(section => {
+                        const sectionAssertions = truthAssertions?.assertions.filter(a => a.section === section.type) || [];
+                        return (
+                            <SoapSectionBlock 
+                                key={section.id} 
+                                section={section}
+                                isLocked={isLocked}
+                                assertions={sectionAssertions}
+                                onToggleAssertion={handleToggleAssertion}
+                                isFactsExpanded={true} // Always expanded in builder mode essentially
+                                onToggleFacts={() => toggleFactSection(section.id)}
+                            />
+                        );
+                    })}
+                </div>
             </div>
-        )}
 
-        {/* RIGHT COLUMN: RISK LIBRARY */}
-        {viewMode === 'page' && showRiskPanel && !isLocked && !showTruthBlocks && (
-          <div className={`shrink-0 bg-white border-l border-slate-300 shadow-xl z-20 w-[320px] md:w-[380px] h-full flex flex-col`}>
-             <RiskLibraryPanel 
-                assignedRiskIds={activeRisks.map(r => r.riskLibraryItemId)}
-                onAssignRisk={onAssignRisk}
-                tenantId={currentTenantId}
-                recommendedCategories={recommendedRiskCategories}
-             />
-          </div>
-        )}
+            {/* CENTER RAIL: Submission Preview */}
+            <div className="flex-1 bg-slate-200/50 overflow-y-auto p-8 relative flex justify-center">
+                {/* PDF Container */}
+                <ClinicalSubmissionPreview 
+                    truth={truthAssertions} 
+                    providerName="Dr. Smith"
+                />
+            </div>
+
+            {/* RIGHT RAIL: Libraries */}
+            <div className="w-[300px] bg-white border-l border-slate-200 flex flex-col shrink-0 z-30">
+                {/* Simple Tab Header */}
+                <div className="flex border-b border-slate-100">
+                    <button className="flex-1 py-3 text-xs font-bold text-blue-600 border-b-2 border-blue-600 bg-blue-50/50">
+                        Risk Library
+                    </button>
+                    <button className="flex-1 py-3 text-xs font-bold text-slate-400 hover:text-slate-600 border-b-2 border-transparent">
+                        Findings
+                    </button>
+                </div>
+                
+                <div className="flex-1 overflow-hidden relative">
+                    <RiskLibraryPanel 
+                        assignedRiskIds={activeRiskIds}
+                        onAssignRisk={onAssignRisk}
+                        tenantId={currentTenantId}
+                        recommendedCategories={recommendedRiskCategories}
+                    />
+                </div>
+            </div>
+
+        </div>
     </div>
   );
 };
