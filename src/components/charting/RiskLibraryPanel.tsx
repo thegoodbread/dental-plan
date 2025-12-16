@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Filter, ShieldAlert, Check, Lightbulb } from 'lucide-react';
+import { Search, Plus, Filter, ShieldAlert, Check, Lightbulb, Target } from 'lucide-react';
 import { RISK_LIBRARY } from '../../domain/riskLibrary';
 import { RiskCategory, RiskLibraryItem, RiskSeverity } from '../../domain/dentalTypes';
 
@@ -31,24 +31,19 @@ export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('ALL');
 
-  // Improvement: Auto-switch to Recommended if present on mount
   useEffect(() => {
       if (recommendedCategories && recommendedCategories.length > 0) {
           setActiveCategory('RECOMMENDED');
       }
   }, [recommendedCategories]);
 
-  // Governance & Search Filtering
   const filteredRisks = RISK_LIBRARY.filter(risk => {
-    // 1. Governance Checks
     if (!risk.isApprovedForProduction) return false;
     if (risk.deprecatedAt) return false;
     
-    // 2. Tenant Isolation
     const effectiveTenantId = tenantId;
     if (risk.tenantId && risk.tenantId !== effectiveTenantId) return false;
 
-    // 3. User Filter Criteria
     const matchesSearch = risk.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           risk.body.toLowerCase().includes(searchTerm.toLowerCase());
     
@@ -56,11 +51,9 @@ export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({
     if (activeCategory === 'ALL') {
         matchesCategory = true;
     } else if (activeCategory === 'RECOMMENDED') {
-        // Show risks that match the recommended categories
         if (recommendedCategories && recommendedCategories.length > 0) {
             matchesCategory = recommendedCategories.includes(risk.category);
         } else {
-            // If no recommendations but tab selected (shouldn't happen often), show all? Or none?
             matchesCategory = true; 
         }
     } else {
@@ -94,7 +87,10 @@ export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({
             <div className="bg-slate-100 p-1.5 rounded-md text-slate-500">
                 <ShieldAlert size={16} />
             </div>
-            <h3 className="font-bold text-slate-800 text-sm tracking-tight">Risk Library</h3>
+            <div>
+                <h3 className="font-bold text-slate-800 text-sm tracking-tight">Risk Library</h3>
+                <p className="text-[10px] text-slate-400">Drag or click to add evidence</p>
+            </div>
         </div>
         
         {/* Search */}
@@ -148,28 +144,38 @@ export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({
                     `}
                     onClick={() => !isAssigned && handleAddRisk(risk)}
                  >
-                    <div className="flex justify-between items-start mb-1.5">
+                    <div className="flex justify-between items-start mb-2">
                         <span className={`inline-flex px-1.5 py-px rounded text-[9px] font-bold uppercase tracking-wider border ${getSeverityBadgeClass(risk.severity)}`}>
                             {risk.severity.replace('_', ' ')}
                         </span>
                         
-                        {isAssigned ? (
-                            <span className="text-blue-600 flex items-center gap-1 text-[10px] font-bold uppercase bg-white/80 px-1.5 py-0.5 rounded border border-blue-100">
-                                <Check size={10} /> Added
-                            </span>
-                        ) : (
-                            <div 
-                                className="opacity-0 group-hover:opacity-100 transition-opacity bg-blue-600 text-white px-2 py-0.5 rounded text-[10px] font-bold shadow-sm flex items-center gap-1"
-                            >
-                                <Plus size={10} /> Add
-                            </div>
-                        )}
+                        {/* Target Slot Indicator */}
+                        <div className="flex items-center gap-1 text-[9px] text-slate-400 font-medium">
+                            <Target size={10} />
+                            <span>Target: Plan / Risks</span>
+                        </div>
                     </div>
                     
                     <h4 className={`font-bold text-xs mb-1 ${isAssigned ? 'text-blue-900' : 'text-slate-900'}`}>{risk.title}</h4>
                     <p className={`text-[11px] leading-tight line-clamp-2 ${isAssigned ? 'text-blue-800/70' : 'text-slate-500'}`}>
                         {risk.body}
                     </p>
+
+                    {/* Add Action (Hover) */}
+                    {!isAssigned && (
+                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="bg-blue-600 text-white px-2 py-0.5 rounded text-[10px] font-bold shadow-sm flex items-center gap-1">
+                                <Plus size={10} /> Add
+                            </div>
+                        </div>
+                    )}
+                    {isAssigned && (
+                        <div className="absolute top-2 right-2">
+                            <div className="text-blue-600 bg-white/80 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1 text-[10px] font-bold">
+                                <Check size={10} /> Added
+                            </div>
+                        </div>
+                    )}
                  </div>
              );
          })}
@@ -184,10 +190,9 @@ export const RiskLibraryPanel: React.FC<RiskLibraryPanelProps> = ({
              </div>
          )}
          
-         {/* Universal Consent Safeguard Footer */}
          <div className="pt-4 mt-2 border-t border-slate-200">
             <p className="text-[10px] text-slate-400 italic text-center leading-relaxed">
-              The risks listed above include common and clinically relevant possibilities, but they are not exhaustive. Only approved library items are shown.
+              Adding evidence here automatically populates the corresponding slot in the Claim Structure (Left) and Output (Center).
             </p>
          </div>
       </div>
