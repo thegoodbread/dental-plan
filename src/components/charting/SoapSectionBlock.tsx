@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Edit2, Check, X, ChevronRight, Lock, CheckSquare, Square, AlertTriangle, AlertCircle, Plus, Trash2, Maximize2 } from 'lucide-react';
+import { Edit2, Check, X, ChevronRight, Lock, CheckSquare, Square, AlertTriangle, AlertCircle, Plus, Trash2, Maximize2, ChevronDown } from 'lucide-react';
 import { SoapSection } from '../../domain/dentalTypes';
 import { TruthAssertion, SLOT_ORDER, SLOT_LABELS, AssertionSlot, AssertionSection } from '../../domain/TruthAssertions';
 import { useChairside } from '../../context/ChairsideContext';
@@ -8,7 +8,6 @@ import { useChairside } from '../../context/ChairsideContext';
 interface SoapSectionBlockProps {
   section: SoapSection;
   isLocked?: boolean;
-  
   // Inline Truth Blocks (V2.0)
   assertions?: TruthAssertion[];
   onToggleAssertion?: (id: string) => void;
@@ -26,30 +25,35 @@ const TruthBlockCard: React.FC<{
   return (
     <div 
       className={`
-        group flex items-start gap-2.5 p-2.5 rounded-md border transition-all select-none
+        group flex items-start gap-3 p-3 rounded-lg border transition-all select-none
         ${assertion.checked 
-          ? 'bg-blue-50/50 border-blue-200 shadow-sm' 
-          : 'bg-white border-slate-100 opacity-70 hover:opacity-100 hover:border-slate-200'
+          ? 'bg-white border-blue-200 shadow-sm' 
+          : 'bg-slate-50/50 border-transparent opacity-60 hover:opacity-100 hover:border-slate-200 hover:bg-white'
         }
         ${isLocked ? 'cursor-default' : 'cursor-pointer'}
       `}
       onClick={!isLocked ? () => onToggle(assertion.id) : undefined}
     >
-      <div className={`mt-0.5 shrink-0 ${assertion.checked ? 'text-blue-600' : 'text-slate-300'}`}>
-        {assertion.checked ? <CheckSquare size={14} /> : <Square size={14} />}
+      <div className={`mt-0.5 shrink-0 transition-colors ${assertion.checked ? 'text-blue-600' : 'text-slate-300 group-hover:text-slate-400'}`}>
+        {assertion.checked ? <CheckSquare size={16} /> : <Square size={16} />}
       </div>
       
       <div className="flex-1 min-w-0">
-        <p className={`text-xs leading-snug ${assertion.checked ? 'text-slate-900 font-medium' : 'text-slate-500'}`}>
+        <p className={`text-sm leading-snug ${assertion.checked ? 'text-slate-900 font-medium' : 'text-slate-500'}`}>
           {assertion.label}
         </p>
         
         {/* Metadata Tags */}
         {assertion.source !== 'manual' && assertion.checked && (
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 mt-1.5">
              {assertion.code && (
-                <span className="text-[9px] font-mono text-slate-400 bg-slate-50 px-1 rounded">
+                <span className="text-[10px] font-mono text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
                    {assertion.code}
+                </span>
+             )}
+             {assertion.source === 'risk' && (
+                <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 uppercase tracking-wide">
+                   Risk
                 </span>
              )}
           </div>
@@ -60,10 +64,10 @@ const TruthBlockCard: React.FC<{
       {!isLocked && assertion.source === 'manual' && onDelete && (
         <button 
           onClick={(e) => { e.stopPropagation(); onDelete(assertion.id); }}
-          className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+          className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-all"
           title="Remove fact"
         >
-          <Trash2 size={12} />
+          <Trash2 size={14} />
         </button>
       )}
     </div>
@@ -86,11 +90,11 @@ const QuickAddInput: React.FC<{
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex items-center gap-2 mt-2 px-1">
+    <form onSubmit={handleSubmit} className="flex items-center gap-2 mt-2">
       <div className="relative flex-1">
         <input 
           type="text"
-          className="w-full text-xs p-1.5 pl-2 border border-dashed border-slate-300 rounded bg-transparent hover:bg-white hover:border-blue-300 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none transition-all placeholder:text-slate-400"
+          className="w-full text-xs p-2 pl-3 border border-dashed border-slate-300 rounded-md bg-white/50 hover:bg-white hover:border-blue-300 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none transition-all placeholder:text-slate-400"
           placeholder={placeholder}
           value={value}
           onChange={e => setValue(e.target.value)}
@@ -98,9 +102,9 @@ const QuickAddInput: React.FC<{
         <button 
           type="submit"
           disabled={!value.trim()}
-          className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-0 transition-opacity"
+          className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-0 transition-opacity"
         >
-          <Plus size={12} />
+          <Plus size={14} />
         </button>
       </div>
     </form>
@@ -153,6 +157,8 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
       const completeness = slotCompleteness[slot];
       
       // Hide completely optional empty slots to reduce noise
+      // BUT keep them if they are adjacent to active content to allow expansion later? 
+      // For now, strict: hide optional empty.
       if (completeness === 'not_required' && slotAssertions.length === 0) {
           return null;
       }
@@ -161,39 +167,49 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
       const isComplete = completeness === 'complete';
 
       return (
-          <div key={slot} id={`slot-${section.type}-${slot}`} className="py-3 border-l-2 border-slate-100 pl-3 ml-1 scroll-mt-24 group/slot">
+          <div 
+            key={slot} 
+            id={`slot-${section.type}-${slot}`} 
+            className={`
+                mb-4 pb-1 scroll-mt-32 transition-all duration-500
+                ${isMissing ? 'ring-2 ring-red-100 rounded-lg p-2 bg-red-50/30' : ''}
+            `}
+          >
               {/* Slot Header */}
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-2 px-1">
                   <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{SLOT_LABELS[slot]}</span>
-                      {isMissing && <span className="w-1.5 h-1.5 rounded-full bg-red-500" title="Required" />}
-                      {isComplete && <span className="w-1.5 h-1.5 rounded-full bg-green-500" title="Complete" />}
+                      <span className={`text-[10px] font-bold uppercase tracking-wider ${isMissing ? 'text-red-600' : 'text-slate-500'}`}>
+                          {SLOT_LABELS[slot]}
+                      </span>
+                      {isMissing && <AlertCircle size={10} className="text-red-500" />}
+                      {isComplete && <Check size={12} className="text-green-500" strokeWidth={3} />}
                   </div>
                   {/* Status Text */}
                   <div className="text-[9px]">
-                      {isMissing && <span className="text-red-500 font-bold">Missing</span>}
-                      {isComplete && <span className="text-green-600 font-medium">Complete</span>}
+                      {isMissing && <span className="text-red-500 font-bold bg-white px-1.5 py-0.5 rounded border border-red-100">REQUIRED</span>}
                       {completeness === 'not_required' && <span className="text-slate-300">Optional</span>}
                   </div>
               </div>
 
               {/* Slot Content */}
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                   {slotAssertions.length > 0 ? (
-                      slotAssertions.map(a => (
-                          <TruthBlockCard 
-                            key={a.id} 
-                            assertion={a} 
-                            onToggle={handleAssertionToggle} 
-                            onDelete={removeAssertion}
-                            isLocked={isLocked}
-                          />
-                      ))
+                      <div className="flex flex-col gap-2">
+                          {slotAssertions.map(a => (
+                              <TruthBlockCard 
+                                key={a.id} 
+                                assertion={a} 
+                                onToggle={handleAssertionToggle} 
+                                onDelete={removeAssertion}
+                                isLocked={isLocked}
+                              />
+                          ))}
+                      </div>
                   ) : (
                       isMissing && (
-                          <div className="text-[10px] text-red-600 bg-red-50 border border-red-100 rounded px-2 py-1.5 flex items-start gap-1.5">
-                              <AlertCircle size={10} className="mt-0.5 shrink-0" />
-                              <span>Required slot. Add details below.</span>
+                          <div className="text-xs text-red-600 bg-white border border-dashed border-red-300 rounded-lg p-3 text-center cursor-default">
+                              <span className="font-semibold block mb-1">Missing Information</span>
+                              <span className="text-[10px] text-red-400">Add a fact or use the Quick Add below</span>
                           </div>
                       )
                   )}
@@ -201,7 +217,7 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
                   {/* Quick Add */}
                   {!isLocked && (
                       <QuickAddInput 
-                        placeholder={`Add ${SLOT_LABELS[slot]}...`}
+                        placeholder={`+ Add ${SLOT_LABELS[slot]}...`}
                         onAdd={(text) => addManualAssertion(section.type as AssertionSection, slot, text)}
                       />
                   )}
@@ -213,13 +229,17 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
   return (
     <div 
         id={`section-${section.type}`}
-        className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden mb-3 transition-all duration-200"
+        className="mb-4 last:mb-20 scroll-mt-24"
     >
-      {/* Section Header */}
+      {/* Section Header - Sticky within Rail */}
       <div 
         className={`
-            px-3 py-2 cursor-pointer select-none transition-colors border-b flex items-center justify-between
-            ${isExpanded ? 'bg-slate-50 border-slate-200' : 'bg-white border-transparent hover:bg-slate-50'}
+            sticky top-0 z-10 
+            px-3 py-2.5 cursor-pointer select-none transition-colors border-y flex items-center justify-between
+            ${isExpanded 
+                ? 'bg-slate-100/95 backdrop-blur-sm border-slate-200 shadow-sm' 
+                : 'bg-white border-transparent hover:bg-slate-50'
+            }
         `}
         onClick={handleHeaderClick}
       >
@@ -236,7 +256,7 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
                 <div className={`px-1.5 py-0.5 rounded text-[9px] font-bold border flex items-center gap-1 ${
                     sectionCompleteness === 'complete' ? 'bg-green-50 text-green-700 border-green-200' :
                     sectionCompleteness === 'partial' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                    'bg-slate-100 text-slate-400 border-slate-200'
+                    'bg-slate-50 text-slate-400 border-slate-200'
                 }`}>
                     {sectionCompleteness === 'complete' && <Check size={8} strokeWidth={4} />}
                     {sectionCompleteness === 'complete' ? 'Done' : `${completenessStats.complete}/${completenessStats.required}`}
@@ -247,7 +267,7 @@ export const SoapSectionBlock: React.FC<SoapSectionBlockProps> = ({
 
       {/* Builder Body */}
       {isExpanded && (
-          <div className="p-3 bg-white">
+          <div className="p-3 bg-slate-50/50 min-h-[50px]">
              {SLOT_ORDER.map(slot => renderSlot(slot))}
           </div>
       )}
