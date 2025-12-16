@@ -1,5 +1,4 @@
 
-// Enums
 import { AssignedRisk, SoapSection } from './domain/dentalTypes';
 
 export type UserRole = 'DOCTOR' | 'TREATMENT_COORDINATOR' | 'ADMIN';
@@ -38,6 +37,14 @@ export type InsuranceMode = 'simple' | 'advanced';
 export type FeeScheduleType = 'standard' | 'membership';
 export type PhaseBucketKey = 'FOUNDATION' | 'RESTORATIVE' | 'IMPLANT' | 'ELECTIVE' | 'OTHER';
 
+export const PHASE_BUCKET_LABELS: Record<PhaseBucketKey, string> = {
+  FOUNDATION: 'Foundation',
+  RESTORATIVE: 'Restorative',
+  IMPLANT: 'Implant',
+  ELECTIVE: 'Elective',
+  OTHER: 'Other'
+};
+
 export type ItemType = 'PROCEDURE' | 'ADDON'; 
 
 export type AddOnKind =
@@ -65,16 +72,6 @@ export interface Patient {
   updatedAt: string;
 }
 
-// --- PROVIDER DOMAIN ---
-
-export interface Provider {
-  id: string;
-  fullName: string;
-  npi: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 // --- VISIT DOMAIN ---
 
 export type VisitType = 
@@ -84,6 +81,8 @@ export type VisitType =
   | "hygiene"
   | "emergency"
   | "consult"
+  | "ortho"
+  | "endo"
   | "other";
 
 export type ProcedureStatus =
@@ -114,8 +113,8 @@ export interface Visit {
   id: string;              // UUID
   treatmentPlanId: string; // Linked Plan
   date: string;            // ISO Date YYYY-MM-DD
-  provider: string;        // Display name of provider (Legacy/Display)
-  providerId?: string;     // Link to Provider Entity (Required for new visits)
+  provider: string;        // Display name of provider
+  providerId?: string;     // Link to Provider entity
   visitType: VisitType;
   attachedProcedureIds: string[]; // List of completed item IDs
   createdAt: string;
@@ -127,19 +126,17 @@ export interface Visit {
   claimPrepStatus?: 'NOT_STARTED' | 'IN_PROGRESS' | 'READY';
   claimId?: string;
   notes?: string;
-
-  // VISIT NOTES (SOAP)
-  clinicalNote?: string; // Final consolidated text
-  soapSections?: SoapSection[];
-  assignedRisks?: AssignedRisk[];
-  noteStatus?: 'draft' | 'signed';
-  noteSignedAt?: string;
-  seededProcedureIds?: string[]; // IDs of items already merged into SOAP
-
-  // NEW: Completeness Fields
+  
+  // Clinical Snapshot Data (V2)
   chiefComplaint?: string;
   hpi?: string;
   radiographicFindings?: string;
+  soapSections?: SoapSection[];
+  seededProcedureIds?: string[];
+  assignedRisks?: AssignedRisk[];
+  clinicalNote?: string;
+  noteStatus?: 'draft' | 'signed';
+  noteSignedAt?: string;
 }
 
 // Entities
@@ -149,6 +146,14 @@ export interface User {
   role: UserRole;
   name: string;
   email: string;
+}
+
+export interface Provider {
+  id: string;
+  fullName: string;
+  npi: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface FeeScheduleEntry {
@@ -196,7 +201,7 @@ export interface TreatmentPlanItem {
 
   // Selection details
   selectedTeeth?: number[] | null;
-  surfaces?: string[]; // ["M", "O", "D"], etc.
+  surfaces?: string[]; // ["M", "O", "D"]
   selectedQuadrants?: ('UR' | 'UL' | 'LL' | 'LR')[] | null;
   selectedArches?: ('UPPER' | 'LOWER')[] | null;
 
@@ -206,9 +211,11 @@ export interface TreatmentPlanItem {
   estimatedDurationValue?: number | null;
   estimatedDurationUnit?: 'days' | 'weeks' | 'months' | null;
   phaseId?: string | null;
+  phaseLocked?: boolean;
 
   // Pricing
   baseFee: number;
+  membershipFee?: number | null;
   units: number;
   grossFee: number;
   discount: number;
@@ -250,7 +257,7 @@ export interface TreatmentPlanItem {
 
 export interface TreatmentPlan {
   id: string;
-  patientId?: string; // NEW: Link to Patient
+  patientId?: string;
   caseAlias?: string;
   planNumber: string;
   title: string;

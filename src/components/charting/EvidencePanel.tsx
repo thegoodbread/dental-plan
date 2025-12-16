@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Camera, FileImage, Upload, CheckCircle2, AlertCircle, AlertTriangle, Plus } from 'lucide-react';
-import { MissingItem } from '../../domain/ClaimReadinessEngine';
+import { MissingItem, EvidenceMissingItem } from '../../domain/ClaimReadinessEngine';
 
 interface EvidencePanelProps {
   missingEvidence: MissingItem[];
@@ -18,10 +18,10 @@ const EVIDENCE_LABELS: Record<string, string> = {
 };
 
 export const EvidencePanel: React.FC<EvidencePanelProps> = ({ missingEvidence, onAttach }) => {
-  const evidenceBlockers = missingEvidence.filter((m): m is Extract<MissingItem, { kind: 'evidence' }> => 
+  const evidenceBlockers = missingEvidence.filter((m): m is EvidenceMissingItem => 
       m.kind === 'evidence' && m.severity === 'blocker'
   );
-  const evidenceWarnings = missingEvidence.filter((m): m is Extract<MissingItem, { kind: 'evidence' }> => 
+  const evidenceWarnings = missingEvidence.filter((m): m is EvidenceMissingItem => 
       m.kind === 'evidence' && m.severity === 'warning'
   );
 

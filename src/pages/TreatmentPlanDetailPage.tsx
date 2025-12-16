@@ -8,16 +8,16 @@ import {
 import { 
   loadTreatmentPlanWithItems, updateTreatmentPlan, createShareLink,
   createTreatmentPlanItem, updateTreatmentPlanItem, deleteTreatmentPlanItem,
-  savePlanAndItems
+  savePlanAndItems, setPlanPricingMode
 } from '../services/treatmentPlans';
 import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, TreatmentPlanStatus, InsuranceMode, FeeScheduleType, AddOnKind } from '../types';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { TreatmentPlanItemsTable } from '../components/TreatmentPlanItemsTable';
-import { PremiumPatientLayout } from '../src/components/patient/PremiumPatientLayout';
+import { PremiumPatientLayout } from '../components/patient/PremiumPatientLayout';
 import { FinancialsTable } from '../components/FinancialsTable';
 import { NumberPadModal } from '../components/NumberPadModal';
-import { TreatmentPlanBoardModal } from '../src/components/board/TreatmentPlanBoardModal';
-import { AddOnsLibraryPanel } from '../src/components/board/AddOnsLibraryPanel';
+import { TreatmentPlanBoardModal } from '../components/board/TreatmentPlanBoardModal';
+import { AddOnsLibraryPanel } from '../components/board/AddOnsLibraryPanel';
 
 const { useParams, useNavigate } = ReactRouterDOM;
 
@@ -169,10 +169,10 @@ export const TreatmentPlanDetailPage: React.FC = () => {
   
   const handlePricingModeChange = (newType: FeeScheduleType) => {
     if (!plan || plan.feeScheduleType === newType) return;
-    const updatedPlan = updateTreatmentPlan(plan.id, { feeScheduleType: newType });
-    if (updatedPlan) {
-      setPlan(updatedPlan);
-      setItems(updatedPlan.items || []);
+    const result = setPlanPricingMode(plan.id, newType);
+    if (result) {
+        setPlan(result.plan);
+        setItems(result.items);
     }
   };
 

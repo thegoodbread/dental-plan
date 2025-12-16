@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { TreatmentPlanItem } from '../types';
 import { Check, X, Calculator } from 'lucide-react';
@@ -17,7 +18,6 @@ const formatNumberInput = (value: number | null | undefined): string => {
 };
 
 // Define sub-components OUTSIDE the main component to prevent re-creation on every render.
-// This was the cause of the input focus loss issue.
 const InputControl = ({ value, onChange, placeholder = "0.00", disabled = false, isPercentage = false }: { value: string, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void, placeholder?: string, disabled?: boolean, isPercentage?: boolean }) => (
   <div className="relative grow">
     <input 
@@ -62,7 +62,6 @@ export const FinancialsItemRow: React.FC<FinancialsItemRowProps> = ({ item, onUp
   }>({ isOpen: false, field: null, title: '', isPercentage: false });
 
   // Sync with parent prop changes only if not actively editing.
-  // This is key to preventing the component from resetting during an edit.
   useEffect(() => {
     if (!isDirty) {
       setCoveragePercent(formatNumberInput(item.coveragePercent));

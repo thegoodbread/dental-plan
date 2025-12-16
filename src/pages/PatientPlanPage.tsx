@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import * as ReactRouterDOM from 'react-router-dom';
 import { getPlanByShareToken } from '../services/treatmentPlans'; 
 import { TreatmentPlan, TreatmentPlanItem } from '../types';
-import { PremiumPatientLayout } from '../src/components/patient/PremiumPatientLayout';
+import { PremiumPatientLayout } from '../components/patient/PremiumPatientLayout';
 
 const { useParams } = ReactRouterDOM;
 

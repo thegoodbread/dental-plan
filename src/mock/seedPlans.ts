@@ -1,5 +1,5 @@
 
-import { TreatmentPlan, TreatmentPlanItem, ShareLink, FeeUnitType, UrgencyLevel, FeeCategory, FeeScheduleType, ItemType, Patient } from '../types';
+import { TreatmentPlan, TreatmentPlanItem, ShareLink, FeeUnitType, UrgencyLevel, FeeCategory, FeeScheduleType, ItemType, Patient, TreatmentPhase } from '../types';
 
 // Helper to create IDs
 const id = (prefix: string) => `${prefix}-${Math.random().toString(36).substr(2, 5)}`;
@@ -37,6 +37,7 @@ const itemsA: TreatmentPlanItem[] = [
     unitType: 'PER_TOOTH',
     selectedTeeth: [3],
     baseFee: 220,
+    membershipFee: 180,
     grossFee: 220,
     netFee: 220,
     urgency: 'SOON',
@@ -54,6 +55,7 @@ const itemsA: TreatmentPlanItem[] = [
     unitType: 'PER_TOOTH',
     selectedTeeth: [11],
     baseFee: 1200,
+    membershipFee: 950,
     grossFee: 1200,
     netFee: 1200,
     urgency: 'URGENT',
@@ -71,6 +73,7 @@ const itemsA: TreatmentPlanItem[] = [
     unitType: 'PER_TOOTH',
     selectedTeeth: [19],
     baseFee: 1200,
+    membershipFee: 900,
     grossFee: 1200,
     netFee: 1200,
     urgency: 'URGENT',
@@ -88,6 +91,7 @@ const itemsA: TreatmentPlanItem[] = [
     unitType: 'PER_TOOTH',
     selectedTeeth: [30],
     baseFee: 2100,
+    membershipFee: 1750,
     grossFee: 2100,
     netFee: 2100,
     urgency: 'SOON',
@@ -133,6 +137,7 @@ const itemsB: TreatmentPlanItem[] = [
     selectedQuadrants: ['UR', 'UL'],
     units: 2,
     baseFee: 250,
+    membershipFee: 200,
     grossFee: 500,
     netFee: 500,
     urgency: 'URGENT',
@@ -151,6 +156,7 @@ const itemsB: TreatmentPlanItem[] = [
     selectedQuadrants: ['LL'],
     units: 1,
     baseFee: 250,
+    membershipFee: 200,
     grossFee: 250,
     netFee: 250,
     urgency: 'SOON',
@@ -167,6 +173,7 @@ const itemsB: TreatmentPlanItem[] = [
     category: 'PERIO',
     unitType: 'PER_PROCEDURE',
     baseFee: 150,
+    membershipFee: 120,
     grossFee: 150,
     netFee: 150,
     urgency: 'ELECTIVE',
@@ -212,6 +219,7 @@ const itemsC: TreatmentPlanItem[] = [
     selectedArches: ['UPPER'],
     units: 1,
     baseFee: 1800,
+    membershipFee: 1500,
     grossFee: 1800,
     netFee: 1800,
     urgency: 'SOON',
@@ -230,6 +238,7 @@ const itemsC: TreatmentPlanItem[] = [
     selectedTeeth: [3, 14],
     units: 2,
     baseFee: 200,
+    membershipFee: 160,
     grossFee: 400,
     netFee: 400,
     urgency: 'URGENT',
@@ -260,7 +269,7 @@ export const PLAN_C: TreatmentPlan = {
 };
 
 
-// --- PLAN D: Mixed Real-World (Taylor) ---
+// --- PLAN D: Mixed Real-World (Taylor) - MEMBERSHIP EXAMPLE ---
 const planD_Id = 'plan_demo_D';
 const itemsD: TreatmentPlanItem[] = [
   // 1. URGENT: Infection/Pain
@@ -275,11 +284,13 @@ const itemsD: TreatmentPlanItem[] = [
     unitType: 'PER_TOOTH',
     selectedTeeth: [19], // Lower left molar
     baseFee: 1200,
+    membershipFee: 900,
     grossFee: 1200,
-    netFee: 1200,
+    netFee: 900, // Membership active
     urgency: 'URGENT',
     estimatedVisits: 2,
-    sortOrder: 1
+    sortOrder: 1,
+    phaseId: 'phase-D-1'
   },
   {
     ...ITEM_DEFAULTS,
@@ -292,11 +303,13 @@ const itemsD: TreatmentPlanItem[] = [
     unitType: 'PER_TOOTH',
     selectedTeeth: [3], // Upper right molar
     baseFee: 1200,
+    membershipFee: 950,
     grossFee: 1200,
-    netFee: 1200,
+    netFee: 950, // Membership active
     urgency: 'URGENT',
     estimatedVisits: 2,
-    sortOrder: 2
+    sortOrder: 2,
+    phaseId: 'phase-D-1'
   },
   
   // 2. SOON: Perio / Foundation
@@ -312,11 +325,13 @@ const itemsD: TreatmentPlanItem[] = [
     selectedQuadrants: ['UR', 'UL'],
     units: 2,
     baseFee: 250,
+    membershipFee: 200,
     grossFee: 500,
-    netFee: 500,
+    netFee: 400, // Membership active
     urgency: 'SOON', // Foundation work
     estimatedVisits: 2,
-    sortOrder: 3
+    sortOrder: 3,
+    phaseId: 'phase-D-2'
   },
 
   // 3. ELECTIVE / FUTURE: Implant & Nightguard
@@ -331,11 +346,13 @@ const itemsD: TreatmentPlanItem[] = [
     unitType: 'PER_TOOTH',
     selectedTeeth: [30],
     baseFee: 2100,
+    membershipFee: 1750,
     grossFee: 2100,
-    netFee: 2100,
+    netFee: 1750, // Membership active
     urgency: 'SOON',
     estimatedVisits: 3,
-    sortOrder: 4
+    sortOrder: 4,
+    phaseId: 'phase-D-3'
   },
   {
     ...ITEM_DEFAULTS,
@@ -349,12 +366,54 @@ const itemsD: TreatmentPlanItem[] = [
     selectedArches: ['UPPER'],
     units: 1,
     baseFee: 650,
+    membershipFee: 550,
     grossFee: 650,
-    netFee: 650,
+    netFee: 550, // Membership active
     urgency: 'ELECTIVE',
     estimatedVisits: 2,
-    sortOrder: 5
+    sortOrder: 5,
+    phaseId: 'phase-D-3'
   }
+];
+
+// Defined Phases with Duration
+const phasesD: TreatmentPhase[] = [
+    {
+        id: 'phase-D-1',
+        planId: planD_Id,
+        bucketKey: 'FOUNDATION',
+        title: 'Phase 1: Infection Control',
+        description: 'Addressing pain and active infection to stabilize your oral health.',
+        sortOrder: 0,
+        itemIds: [itemsD[0].id, itemsD[1].id],
+        estimatedDurationValue: 2,
+        estimatedDurationUnit: 'weeks',
+        estimatedVisits: 2
+    },
+    {
+        id: 'phase-D-2',
+        planId: planD_Id,
+        bucketKey: 'RESTORATIVE',
+        title: 'Phase 2: Gum Health',
+        description: 'Deep cleaning to treat periodontal disease and prevent bone loss.',
+        sortOrder: 1,
+        itemIds: [itemsD[2].id],
+        estimatedDurationValue: 4,
+        estimatedDurationUnit: 'weeks',
+        estimatedVisits: 2
+    },
+    {
+        id: 'phase-D-3',
+        planId: planD_Id,
+        bucketKey: 'IMPLANT',
+        title: 'Phase 3: Reconstruction',
+        description: 'Replacing missing teeth and protecting your bite.',
+        sortOrder: 2,
+        itemIds: [itemsD[3].id, itemsD[4].id],
+        estimatedDurationValue: 6,
+        estimatedDurationUnit: 'months',
+        estimatedVisits: 4
+    }
 ];
 
 export const PLAN_D: TreatmentPlan = {
@@ -362,19 +421,21 @@ export const PLAN_D: TreatmentPlan = {
   patientId: 'pat_taylor',
   caseAlias: 'Patient-9102',
   planNumber: 'TP-DEMO-COMPLEX',
-  title: 'Comprehensive Rehab',
+  title: 'Comprehensive Rehab (Member)',
   status: 'PRESENTED',
   insuranceMode: 'simple',
-  feeScheduleType: 'standard',
-  totalFee: 5650,
-  estimatedInsurance: 2000,
+  // MEMBERSHIP CONFIGURATION
+  feeScheduleType: 'membership',
+  totalFee: 4550, // Corrected total based on membership fees
+  estimatedInsurance: 1500,
   clinicDiscount: 0,
-  membershipSavings: 0,
-  patientPortion: 3650,
+  membershipSavings: 850, // Explicit savings
+  patientPortion: 3050,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
   itemIds: itemsD.map(i => i.id),
   items: itemsD,
+  phases: phasesD, // Explicit phases with metrics
   explanationForPatient: "This comprehensive plan addresses your immediate pain (Tooth #19), stabilizes your gum health to prevent further bone loss, and replaces your missing tooth (#30). We have also included a nightguard to protect your investment from grinding."
 };
 

@@ -1,11 +1,14 @@
 
 import React from 'react';
-import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import * as ReactRouterDOM from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { TreatmentPlansPage } from './pages/TreatmentPlansPage';
 import { TreatmentPlanDetailPage } from './pages/TreatmentPlanDetailPage';
 import { PatientPlanPage } from './pages/PatientPlanPage';
+import { ChairsideChartingPage } from './pages/ChairsideChartingPage'; // Ensure this is imported
 import { PatientListPage } from './pages/PatientListPage';
+
+const { HashRouter: Router, Routes, Route, Navigate } = ReactRouterDOM;
 
 const AppContent: React.FC = () => {
   // Check for ?token=XYZ immediately on load
@@ -21,6 +24,7 @@ const AppContent: React.FC = () => {
       <Routes>
         <Route path="/" element={<TreatmentPlansPage />} />
         <Route path="/plan/:id" element={<TreatmentPlanDetailPage />} />
+        <Route path="/charting/:id" element={<ChairsideChartingPage />} />
         <Route path="/p/:token" element={<PatientPlanPage />} />
         <Route path="/patients" element={<PatientListPage />} />
         <Route path="/settings" element={<div className="p-8 text-gray-500">Settings not implemented in this demo.</div>} />

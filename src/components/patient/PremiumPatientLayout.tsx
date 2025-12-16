@@ -112,7 +112,10 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
         onHoverItem={handleItemHover}
       />
 
-      <WhyItMattersSection items={items} />
+      <WhyItMattersSection 
+        items={items} 
+        explanation={plan.explanationForPatient}
+      />
 
       <SummaryMetricsSection 
         visitCount={metrics.visitCount}
@@ -120,7 +123,7 @@ export const PremiumPatientLayout: React.FC<PremiumPatientLayoutProps> = ({ plan
         procedureCount={items.length}
       />
       
-      <RiskConsentSection />
+      <RiskConsentSection assignedRisks={plan.assignedRisks || []} />
 
       <PaymentEstimatorSection 
         plan={plan}

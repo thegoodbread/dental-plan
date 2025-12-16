@@ -1,7 +1,9 @@
 
 import React, { useState } from 'react';
 import { LayoutDashboard, Users, FileText, Settings, LogOut, Menu, X, Activity } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import * as ReactRouterDOM from 'react-router-dom';
+
+const { Link, useLocation } = ReactRouterDOM;
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
@@ -15,6 +17,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
     { icon: FileText, label: 'Treatment Plans', path: '/' }, // Reuse root for demo
+    { icon: Activity, label: 'Chairside', path: '/charting/new' },
     { icon: Users, label: 'Patients', path: '/patients' },
   ];
 

@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { useChairside } from '../../context/ChairsideContext';
-import { QuickActionType } from '../../../types/charting';
+import { QuickActionType } from '../../types/charting';
 import { ClipboardList, Camera, FileText, Syringe, Crown, Activity, StickyNote, Scissors, PenTool, Star, Zap } from 'lucide-react';
 
 const QuickButton: React.FC<{ 

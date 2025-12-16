@@ -1,15 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
-import { ChairsideProvider, useChairside } from '../src/context/ChairsideContext';
-import { QuickActions } from '../src/components/charting/QuickActions';
-import { Timeline } from '../src/components/charting/Timeline';
-import { ContextPane } from '../src/components/charting/ContextPane';
-import { PerioChart } from '../src/components/charting/PerioChart';
-import { NotesComposer } from '../src/components/charting/NotesComposer';
-import { RadiographViewer } from '../src/components/charting/RadiographViewer';
-import { QuickNoteDrawer } from '../src/components/charting/QuickNoteDrawer';
+import { ChairsideProvider, useChairside } from '../context/ChairsideContext';
+import { QuickActions } from '../components/charting/QuickActions';
+import { Timeline } from '../components/charting/Timeline';
+import { ContextPane } from '../components/charting/ContextPane';
+import { PerioChart } from '../components/charting/PerioChart';
+import { NotesComposer } from '../components/charting/NotesComposer';
+import { RadiographViewer } from '../components/charting/RadiographViewer';
+import { QuickNoteDrawer } from '../components/charting/QuickNoteDrawer';
 import * as ReactRouterDOM from 'react-router-dom';
-import { PatientChart, ToothRecord, ToothNumber, mockPatientChart } from '../src/domain/dentalTypes';
+import { PatientChart, ToothRecord, ToothNumber, mockPatientChart } from '../domain/dentalTypes';
 
 const { useParams } = ReactRouterDOM;
 

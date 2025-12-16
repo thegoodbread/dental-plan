@@ -9,9 +9,7 @@ interface VisualCostBreakdownBarProps {
   patientPortion: number;
 }
 
-const formatValue = (value: number) => {
-    return value.toLocaleString('en-US', { minimumFractionDigits: 2 });
-}
+const formatValue = (value: number) => value.toLocaleString('en-US', { minimumFractionDigits: 2 });
 
 export const VisualCostBreakdownBar: React.FC<VisualCostBreakdownBarProps> = ({
   totalFee,
@@ -20,9 +18,7 @@ export const VisualCostBreakdownBar: React.FC<VisualCostBreakdownBarProps> = ({
   insuranceCoverage,
   patientPortion,
 }) => {
-  if (totalFee <= 0.005) {
-    return null;
-  }
+  if (totalFee <= 0.005) return null;
 
   const isEmphasized = totalFee > 0 && (patientPortion / totalFee) < 0.75;
 
@@ -41,7 +37,6 @@ export const VisualCostBreakdownBar: React.FC<VisualCostBreakdownBarProps> = ({
         {segments.map(({ key, value, color, label }) => {
           const isPatientSegment = key === 'patient';
           const animationClass = isPatientSegment && isEmphasized ? 'animated-emphasis' : '';
-          
           return (
             <div
               key={key}
@@ -55,18 +50,12 @@ export const VisualCostBreakdownBar: React.FC<VisualCostBreakdownBarProps> = ({
 
       <div className="mt-4 flex flex-wrap justify-center gap-x-6 gap-y-3">
         {segments.map(({ key, value, color, label }) => {
-          // Patient portion always shown if >= 0, others only if > 0
           if (value < 0.01 && key !== 'patient') return null;
-
           return (
             <div key={key} className="flex items-center gap-2 text-xs sm:text-sm">
               <span className={`w-3 h-3 rounded-full ${color} shrink-0`}></span>
               <span className="text-gray-600 font-medium">{label}</span>
-              <span className="font-bold text-gray-800">
-                {key !== 'patient' 
-                  ? `-$${formatValue(value)}` 
-                  : `$${formatValue(value)}`}
-              </span>
+              <span className="font-bold text-gray-800">{key !== 'patient' ? `-$${formatValue(value)}` : `$${formatValue(value)}`}</span>
             </div>
           );
         })}

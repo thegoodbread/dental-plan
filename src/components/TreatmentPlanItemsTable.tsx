@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, UrgencyLevel, AddOnKind } from '../types';
+import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, UrgencyLevel, AddOnKind, FeeScheduleType } from '../types';
 import { TreatmentPlanItemRow } from './TreatmentPlanItemRow';
 import { ProcedurePickerModal } from './procedures/ProcedurePickerModal';
 import { SedationManagerModal } from './SedationManagerModal';
@@ -197,6 +197,7 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
                     <React.Fragment key={item.id}>
                         <TreatmentPlanItemRow
                             item={item}
+                            feeScheduleType={plan.feeScheduleType}
                             onUpdate={onUpdateItem}
                             onDelete={onDeleteItem}
                             onAddSedation={handleAddSedationClick} 
@@ -215,6 +216,7 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
                                 <TreatmentPlanItemRow
                                     key={addon.id}
                                     item={addon}
+                                    feeScheduleType={plan.feeScheduleType}
                                     onUpdate={onUpdateItem}
                                     onDelete={onDeleteItem}
                                     isAddOn={true}
@@ -249,7 +251,8 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
             {items.map((item) => (
                <MobileItemCard 
                  key={item.id} 
-                 item={item} 
+                 item={item}
+                 feeScheduleType={plan.feeScheduleType}
                  onUpdate={onUpdateItem} 
                  onDelete={onDeleteItem} 
                />
@@ -352,9 +355,10 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
 // Internal Mobile Card Component
 const MobileItemCard: React.FC<{
   item: TreatmentPlanItem;
+  feeScheduleType?: FeeScheduleType;
   onUpdate: (id: string, updates: Partial<TreatmentPlanItem>) => void;
   onDelete: (id: string) => void;
-}> = ({ item, onUpdate, onDelete }) => {
+}> = ({ item, feeScheduleType = 'standard', onUpdate, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [baseFee, setBaseFee] = useState(item.baseFee);

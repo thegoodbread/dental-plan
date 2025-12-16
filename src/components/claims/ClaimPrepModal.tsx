@@ -2,11 +2,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Visit, TreatmentPlanItem } from '../../types';
 import { CheckCircle2, AlertTriangle, FileText, ArrowLeft, RotateCw, Stethoscope } from 'lucide-react';
-import { updateProcedureDocumentationFlags, updateVisitClaimPrepStatus, updateProcedureDiagnosisCodes, getProviderById } from '../../services/treatmentPlans';
+import { updateProcedureDocumentationFlags, updateVisitClaimPrepStatus, updateProcedureDiagnosisCodes, getProviderById, canAdvanceVisitToClaimReady, getReadinessInputForVisit } from '../../services/treatmentPlans';
 import { buildClaimNarrativeDraft, evaluateClaimReadiness, ClaimReadinessResult, PayerId } from '../../services/clinicalLogic';
 import { DiagnosisCodePicker } from './DiagnosisCodePicker';
 import { VisitNotesPanel } from '../visits/VisitNotesPanel';
-import { computeDocumentationReadiness, ReadinessInput } from '../../domain/ClaimReadinessEngine';
+import { computeDocumentationReadiness, ReadinessInput, ReadinessProcedure, ReadinessEvidence } from '../../domain/ClaimReadinessEngine';
 
 interface ClaimPrepModalProps {
   isOpen: boolean;
@@ -88,7 +88,29 @@ export const ClaimPrepModal: React.FC<ClaimPrepModalProps> = ({ isOpen, onClose,
 
   const allItemsReady = items.every(isItemReady);
 
+  const getReadinessInput = (): ReadinessInput => {
+      const input = getReadinessInputForVisit(visit.id);
+      if (!input) {
+          // Fallback structure to prevent crash if visit somehow missing from storage mid-flight
+          return {
+              procedures: [], diagnoses: [], evidence: [], risksAndConsentComplete: false,
+              provider: {}, patient: {}
+          };
+      }
+      return input;
+  };
+
   const handleMarkVisitReady = () => {
+      // 1. Strict Gate Check
+      const input = getReadinessInput();
+      const { ok, blockers } = canAdvanceVisitToClaimReady(input);
+
+      if (!ok) {
+          alert(`Cannot mark Ready. Please resolve the following blockers:\n\n${blockers.map(b => `- ${b.label}`).join('\n')}`);
+          return;
+      }
+
+      // 2. Legacy Check (Optional, but kept for UI consistency if needed)
       if (allItemsReady) {
           updateVisitClaimPrepStatus(visit.id, 'READY');
           onUpdate();
@@ -96,35 +118,7 @@ export const ClaimPrepModal: React.FC<ClaimPrepModalProps> = ({ isOpen, onClose,
   };
 
   const visitRiskSummary = useMemo(() => {
-      // Use the V2 Engine for comprehensive check including Provider NPI
-      const provider = visit.providerId ? getProviderById(visit.providerId) : undefined;
-      
-      const input: ReadinessInput = {
-          procedures: items.map(p => ({
-              id: p.id,
-              cdtCode: p.procedureCode,
-              label: p.procedureName,
-              tooth: p.selectedTeeth?.join(','),
-              surfaces: p.surfaces,
-              quadrant: p.selectedQuadrants?.[0],
-              isCompleted: p.procedureStatus === 'COMPLETED'
-          })),
-          diagnoses: items.flatMap(p => (p.diagnosisCodes || []).map(code => ({ procedureId: p.id, icd10: code }))),
-          evidence: items.flatMap(p => {
-              const ev = [];
-              if (p.documentation?.hasXray) ev.push({ procedureId: p.id, type: 'pre_op_xray', attached: true });
-              if (p.documentation?.hasPerioChart) ev.push({ procedureId: p.id, type: 'perio_charting', attached: true });
-              return ev;
-          }),
-          risksAndConsentComplete: true, // simplified
-          provider: {
-              npi: provider?.npi // Pass NPI to engine
-          },
-          serviceDate: visit.date,
-          // Patient info mocked as present for now, would come from patient record
-          patient: { dob: '1980-01-01', memberId: '12345' } 
-      };
-
+      const input = getReadinessInput();
       const engineResult = computeDocumentationReadiness(input);
       
       // Map V2 engine result to UI summary counts
@@ -160,7 +154,7 @@ export const ClaimPrepModal: React.FC<ClaimPrepModalProps> = ({ isOpen, onClose,
       });
 
       return { low, med, high, topMissingLabel, adminBlockers: engineResult.items.filter(i => i.kind === 'admin') };
-  }, [items, getReadiness, visit.providerId, visit.date]);
+  }, [items, getReadiness, visit.providerId, visit.date, visit.performedDate]);
 
   const selectedReadiness = useMemo(() => selectedItem ? getReadiness(selectedItem) : null, [selectedItem, getReadiness]);
 

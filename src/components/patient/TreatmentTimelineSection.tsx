@@ -1,4 +1,5 @@
-import React from 'react';
+
+import React, { useEffect } from 'react';
 import { Clock } from 'lucide-react';
 import { TreatmentPlan, TreatmentPlanItem, TreatmentPhase } from '../../types';
 
@@ -8,16 +9,16 @@ interface TreatmentTimelineSectionProps {
 }
 
 const renderPhaseMetric = (phase: TreatmentPhase) => {
-  // Display the aggregated or estimated duration.
-  // For "Monitor" phases, this duration is set manually.
+  // 1. Duration (Preferred)
   if (phase.estimatedDurationValue && phase.estimatedDurationUnit) {
       const { estimatedDurationValue: value, estimatedDurationUnit: unit } = phase;
       let unitText = unit.charAt(0).toUpperCase() + unit.slice(1);
-      if (value === 1) unitText = unitText.slice(0, -1); // De-pluralize
+      // Simple pluralization check
+      if (value === 1 && unitText.endsWith('s')) unitText = unitText.slice(0, -1); 
       return `Est. ${value} ${unitText}`;
   }
   
-  // Fallback to visits if no duration is available.
+  // 2. Visits (Fallback)
   if (phase.estimatedVisits) {
       return `Est. ${phase.estimatedVisits} visits`;
   }
@@ -29,13 +30,14 @@ const PhaseItem: React.FC<{ phase: TreatmentPhase; index: number; }> = ({ phase,
   const metricText = renderPhaseMetric(phase);
   return (
     <div key={phase.id} className="relative z-10 flex flex-col items-center text-center group">
-      <div className="w-16 h-16 rounded-full bg-blue-600 text-white font-bold text-2xl flex items-center justify-center mb-6 shadow-lg shadow-blue-200 border-4 border-white transition-transform group-hover:scale-110">
+      <div className="w-16 h-16 rounded-full bg-blue-600 text-white font-bold text-2xl flex items-center justify-center mb-6 shadow-lg shadow-blue-200 border-4 border-white transition-transform group-hover:scale-110 relative">
         {index + 1}
       </div>
       <h3 className="text-lg font-bold text-gray-900 mb-2">{phase.title}</h3>
-      <p className="text-sm text-gray-500 mb-4 max-w-[240px] mx-auto leading-relaxed">{phase.description}</p>
+      <p className="text-sm text-gray-500 mb-4 max-w-[240px] mx-auto leading-relaxed min-h-[40px]">{phase.description}</p>
+      
       {metricText && (
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 px-3 py-1.5 rounded-full">
+        <div className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wide bg-gray-100 px-3 py-1.5 rounded-full">
           <Clock size={12} />
           {metricText}
         </div>
@@ -45,6 +47,12 @@ const PhaseItem: React.FC<{ phase: TreatmentPhase; index: number; }> = ({ phase,
 };
 
 export const TreatmentTimelineSection: React.FC<TreatmentTimelineSectionProps> = ({ plan, items }) => {
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+        console.log('TreatmentTimeline Phases:', plan.phases);
+    }
+  }, [plan]);
+
   const phases = plan.phases
     ? [...plan.phases]
         .filter(p => (p.itemIds && p.itemIds.length > 0) || p.isMonitorPhase)
@@ -56,14 +64,15 @@ export const TreatmentTimelineSection: React.FC<TreatmentTimelineSectionProps> =
   let phaseRows: TreatmentPhase[][];
   const numPhases = phases.length;
 
+  // Simple responsive row breaking
   if (numPhases <= 4) {
     phaseRows = [phases];
   } else if (numPhases === 5) {
-    phaseRows = [phases.slice(0, 3), phases.slice(3, 5)]; // 3+2 layout
+    phaseRows = [phases.slice(0, 3), phases.slice(3, 5)];
   } else if (numPhases === 6) {
-    phaseRows = [phases.slice(0, 3), phases.slice(3, 6)]; // 3+3 layout
-  } else { // 7 or 8 phases
-    phaseRows = [phases.slice(0, 4), phases.slice(4)]; // 4+4 or 4+4 layout
+    phaseRows = [phases.slice(0, 3), phases.slice(3, 6)];
+  } else {
+    phaseRows = [phases.slice(0, 4), phases.slice(4)];
   }
 
   let phaseCounter = 0;
@@ -74,7 +83,7 @@ export const TreatmentTimelineSection: React.FC<TreatmentTimelineSectionProps> =
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Treatment Timeline</h2>
         <p className="text-gray-500 mb-10 md:mb-12">How your treatment will progress over time</p>
         
-        {/* Desktop & Tablet Container - DYNAMIC MULTI-ROW */}
+        {/* Desktop & Tablet Container */}
         <div className="hidden md:block relative mx-auto space-y-16">
           {phaseRows.map((row, rowIndex) => {
             const rowCount = row.length;
@@ -87,13 +96,8 @@ export const TreatmentTimelineSection: React.FC<TreatmentTimelineSectionProps> =
             };
 
             if (isMultiRow) {
-              if (rowIndex === 0) {
-                // First row: extend to the right edge
-                lineStyle.right = '0%';
-              } else {
-                // Second (and subsequent) rows: extend from the left edge
-                lineStyle.left = '0%';
-              }
+              if (rowIndex === 0) lineStyle.right = '0%';
+              else lineStyle.left = '0%';
             }
             
             return (
@@ -119,28 +123,25 @@ export const TreatmentTimelineSection: React.FC<TreatmentTimelineSectionProps> =
           })}
         </div>
 
-        {/* Mobile Container - Vertical Stack with Connected Line */}
+        {/* Mobile Container */}
         <div className="md:hidden">
            {phases.map((phase, idx) => {
              const metricText = renderPhaseMetric(phase);
              return (
                <div key={phase.id} className="flex gap-4 relative">
-                  {/* Connecting Line */}
                   {idx !== phases.length - 1 && (
                       <div className="absolute left-5 top-10 bottom-0 w-0.5 bg-blue-100 -ml-[1px]" aria-hidden="true" />
                   )}
                   
-                  {/* Number Circle */}
                   <div className="relative z-10 w-10 h-10 rounded-full bg-blue-600 text-white font-bold text-lg flex items-center justify-center shrink-0 shadow-lg shadow-blue-200 ring-4 ring-white">
                     {idx + 1}
                   </div>
 
-                  {/* Content */}
                   <div className="flex-1 pb-10">
                      <h3 className="text-lg font-bold text-gray-900 mb-1 leading-tight">{phase.title}</h3>
                      <p className="text-sm text-gray-600 leading-relaxed mb-3">{phase.description}</p>
                      {metricText && (
-                        <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 bg-gray-50 px-2.5 py-1 rounded-md border border-gray-100">
+                        <div className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 bg-gray-50 px-2.5 py-1 rounded-full border border-gray-200 uppercase tracking-wide">
                           <Clock size={12} />
                           {metricText}
                         </div>

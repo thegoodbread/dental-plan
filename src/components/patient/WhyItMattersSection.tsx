@@ -1,5 +1,4 @@
 
-
 import React from 'react';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { generateClinicalExplanation } from '../../services/clinicalLogic';
@@ -7,13 +6,11 @@ import { TreatmentPlanItem } from '../../types';
 
 interface WhyItMattersSectionProps {
   items: TreatmentPlanItem[];
-  explanation?: string | null; // Optional override from doctor
+  explanation?: string | null;
 }
 
 export const WhyItMattersSection: React.FC<WhyItMattersSectionProps> = ({ items, explanation }) => {
   const dynamicContent = generateClinicalExplanation(items);
-  
-  // Use manual explanation if provided, otherwise generated
   const text = explanation || dynamicContent.intro;
   const benefits = dynamicContent.benefits;
 

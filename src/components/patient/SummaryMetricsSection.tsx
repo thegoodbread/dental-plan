@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Clock } from 'lucide-react';
 
@@ -34,7 +35,6 @@ export const SummaryMetricsSection: React.FC<SummaryMetricsSectionProps> = ({
             <p className="text-gray-500">Estimated commitment for your treatment.</p>
         </div>
 
-        {/* 3 Columns on all screens */}
         <div className="grid grid-cols-3 gap-3 md:gap-6">
           <MetricCard label="Est. Visits" value={visitCount} />
           <MetricCard label="Phases" value={phaseCount} />

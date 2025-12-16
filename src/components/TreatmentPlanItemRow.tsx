@@ -1,10 +1,11 @@
 
 import React, { useState } from 'react';
-import { TreatmentPlanItem, UrgencyLevel } from '../types';
-import { Trash2, Edit2, Check, X, AlertTriangle, Clock, Smile, Calculator, ChevronDown } from 'lucide-react';
+import { TreatmentPlanItem, UrgencyLevel, FeeScheduleType } from '../types';
+import { Trash2, Edit2, Check, X, AlertTriangle, Clock, Smile, Calculator, ChevronDown, Star } from 'lucide-react';
 import { ToothSelectorModal } from './ToothSelectorModal';
 import { NumberPadModal } from './NumberPadModal';
 import { SEDATION_TYPES } from '../services/treatmentPlans';
+import { computeItemPricing } from '../utils/pricingLogic';
 
 const NumpadButton = ({ onClick }: { onClick: () => void }) => (
   <button
@@ -19,6 +20,7 @@ const NumpadButton = ({ onClick }: { onClick: () => void }) => (
 
 interface TreatmentPlanItemRowProps {
   item: TreatmentPlanItem;
+  feeScheduleType?: FeeScheduleType;
   onUpdate: (id: string, updates: Partial<TreatmentPlanItem>) => void;
   onDelete: (id: string) => void;
   // New props for hierarchy
@@ -34,7 +36,7 @@ interface TreatmentPlanItemRowProps {
 }
 
 export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ 
-    item, onUpdate, onDelete, 
+    item, feeScheduleType = 'standard', onUpdate, onDelete, 
     isAddOn = false, linkedItemNames = [], onAddSedation,
     onDragOver, onDragLeave, onDrop, isDragOver, isCompatibleDropTarget
 }) => {
@@ -197,6 +199,9 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
   const textClass = isAddOn ? 'text-gray-600' : 'text-gray-900';
   const displayedSedationType = item.sedationType || item.procedureName.replace('Sedation – ', '');
 
+  // Dynamic Pricing Calculation
+  const pricing = computeItemPricing(item, feeScheduleType);
+
   return (
     <>
       <tr 
@@ -255,7 +260,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
           {renderSelectionInput()}
         </td>
 
-        {/* Cost (Base Fee) */}
+        {/* Cost (Active Fee / Base Fee) */}
         <td className="px-4 py-3 text-right text-sm align-top pt-3">
           {isEditing ? (
             <div className="flex items-center justify-end gap-1.5 w-full">
@@ -272,7 +277,14 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
                 <NumpadButton onClick={() => setIsNumpadOpen(true)} />
             </div>
           ) : (
-            <span className={textClass}>${item.baseFee.toFixed(2)}</span>
+            <div className="flex flex-col items-end">
+                <span className={textClass}>${pricing.activeUnitFee.toFixed(2)}</span>
+                {pricing.isMemberPrice && (
+                    <span className="text-[10px] text-teal-600 font-bold bg-teal-50 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                       <Star size={8} fill="currentColor" /> Member
+                    </span>
+                )}
+            </div>
           )}
         </td>
 
@@ -281,9 +293,16 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
           {item.units}
         </td>
 
-        {/* Net Fee */}
+        {/* Net Fee (Calculated Total) */}
         <td className={`px-4 py-3 text-right text-sm font-bold align-top pt-3 ${isAddOn ? 'text-gray-700 bg-slate-100/50' : 'text-gray-900 bg-gray-50/50'}`}>
-          ${item.netFee.toFixed(2)}
+          <div className="flex flex-col items-end">
+              <span>${pricing.netFee.toFixed(2)}</span>
+              {pricing.memberSavings > 0 && (
+                  <span className="text-[10px] text-green-600 font-medium">
+                      Save ${pricing.memberSavings.toFixed(0)}
+                  </span>
+              )}
+          </div>
         </td>
 
         {/* Actions */}
