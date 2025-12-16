@@ -64,11 +64,23 @@ export const ClinicalSubmissionPreview: React.FC<ClinicalSubmissionPreviewProps>
                 // 1. Missing Required Slot
                 if (status === 'empty') {
                     return (
-                        <div key={slot} className="bg-red-50 border border-red-100 rounded p-2 flex items-start gap-2">
-                            <AlertCircle size={14} className="text-red-500 mt-0.5 shrink-0" />
+                        <div 
+                            key={slot} 
+                            id={`preview-missing-${sectionType}-${slot}`}
+                            className="bg-red-50 border border-red-200 rounded p-3 flex items-start gap-3 cursor-pointer hover:bg-red-100 transition-colors group"
+                            onClick={() => {
+                                // Trigger focus in Left Rail
+                                const el = document.getElementById(`slot-${sectionType}-${slot}`);
+                                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }}
+                        >
+                            <AlertCircle size={16} className="text-red-500 mt-0.5 shrink-0" />
                             <div className="flex-1">
-                                <span className="text-xs font-bold text-red-600 uppercase tracking-wide">Missing: {SLOT_LABELS[slot]}</span>
-                                <p className="text-[10px] text-red-500">This section requires documentation for compliance.</p>
+                                <span className="text-xs font-bold text-red-600 uppercase tracking-wide flex items-center gap-1">
+                                    Missing: {SLOT_LABELS[slot]}
+                                    <span className="text-[10px] bg-white px-1.5 rounded border border-red-100 text-red-400 group-hover:border-red-200">REQUIRED</span>
+                                </span>
+                                <p className="text-xs text-red-500 mt-1">This section requires documentation for claim clearance.</p>
                             </div>
                         </div>
                     );
