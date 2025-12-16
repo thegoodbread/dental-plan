@@ -1,5 +1,4 @@
 
-
 // Enums
 import { AssignedRisk, SoapSection } from './domain/dentalTypes';
 
@@ -53,6 +52,18 @@ export type AddOnKind =
   | 'OCCLUSAL_ADJUSTMENT'
   | 'FOLLOWUP'
   | 'OTHER';
+
+// --- PATIENT DOMAIN ---
+
+export interface Patient {
+  id: string;
+  firstName: string;
+  lastName: string;
+  dob?: string;        // ISO date
+  memberId?: string;   // insurance subscriber ID
+  createdAt: string;
+  updatedAt: string;
+}
 
 // --- VISIT DOMAIN ---
 
@@ -228,6 +239,7 @@ export interface TreatmentPlanItem {
 
 export interface TreatmentPlan {
   id: string;
+  patientId?: string; // NEW: Link to Patient
   caseAlias?: string;
   planNumber: string;
   title: string;

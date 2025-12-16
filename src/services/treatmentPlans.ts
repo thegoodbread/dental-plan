@@ -1,3 +1,4 @@
+
 import { 
   TreatmentPlan, 
   TreatmentPlanItem, 
@@ -14,9 +15,10 @@ import {
   AddOnKind,
   Visit,
   VisitStatus,
-  ProcedureStatus
+  ProcedureStatus,
+  Patient
 } from '../types';
-import { DEMO_PLANS, DEMO_ITEMS, DEMO_SHARES } from '../mock/seedPlans';
+import { DEMO_PLANS, DEMO_ITEMS, DEMO_SHARES, DEMO_PATIENTS } from '../mock/seedPlans';
 import { estimateDuration } from './clinicalLogic';
 
 // --- KEYS (Bumped to v7 to force re-seed with new Library) ---
@@ -25,7 +27,8 @@ const KEY_ITEMS = 'dental_plan_items_v7';
 const KEY_FEE_SCHEDULE = 'dental_fee_schedule_v7';
 const KEY_SHARES = 'dental_shares_v7';
 const KEY_LOGS = 'dental_logs_v7';
-const KEY_VISITS = 'dental_visits_v1'; // NEW Visit Layer
+const KEY_VISITS = 'dental_visits_v1';
+const KEY_PATIENTS = 'dental_patients_v1';
 
 // --- UTILS ---
 const generateId = () => `id-${Math.random().toString(36).substring(2, 10)}`;
@@ -161,6 +164,28 @@ export const computeItemPricing = (
   };
 };
 
+// --- PATIENT PERSISTENCE ---
+
+export const getPatients = (): Patient[] => {
+  return JSON.parse(localStorage.getItem(KEY_PATIENTS) || '[]');
+};
+
+export const getPatientById = (id: string): Patient | undefined => {
+  const patients = getPatients();
+  return patients.find(p => p.id === id);
+};
+
+export const upsertPatient = (patient: Patient): void => {
+  const patients = getPatients();
+  const index = patients.findIndex(p => p.id === patient.id);
+  if (index >= 0) {
+    patients[index] = patient;
+  } else {
+    patients.push(patient);
+  }
+  localStorage.setItem(KEY_PATIENTS, JSON.stringify(patients));
+};
+
 // --- INITIALIZATION ---
 
 export const initServices = () => {
@@ -177,6 +202,45 @@ export const initServices = () => {
     localStorage.setItem(KEY_FEE_SCHEDULE, JSON.stringify(PROCEDURE_LIBRARY));
     localStorage.setItem(KEY_LOGS, JSON.stringify([]));
     localStorage.setItem(KEY_VISITS, JSON.stringify([]));
+  }
+
+  // Patient Seeding
+  const hasPatients = localStorage.getItem(KEY_PATIENTS);
+  if (!hasPatients) {
+     localStorage.setItem(KEY_PATIENTS, JSON.stringify(DEMO_PATIENTS));
+  }
+
+  // Backward-Compat Migration: Ensure all plans have a patientId
+  const plans: TreatmentPlan[] = JSON.parse(localStorage.getItem(KEY_PLANS) || '[]');
+  let plansUpdated = false;
+  const patients = getPatients();
+  let patientsUpdated = false;
+
+  plans.forEach(plan => {
+    if (!plan.patientId) {
+      // Create fallback patient
+      const newPatientId = `pat_fallback_${plan.id}`;
+      const newPatient: Patient = {
+        id: newPatientId,
+        firstName: "Unknown",
+        lastName: plan.caseAlias ?? "Patient",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      patients.push(newPatient);
+      patientsUpdated = true;
+
+      plan.patientId = newPatientId;
+      plansUpdated = true;
+    }
+  });
+
+  if (patientsUpdated) {
+    localStorage.setItem(KEY_PATIENTS, JSON.stringify(patients));
+  }
+  if (plansUpdated) {
+    localStorage.setItem(KEY_PLANS, JSON.stringify(plans));
   }
 };
 
@@ -487,12 +551,19 @@ const savePlan = (plan: TreatmentPlan) => {
   localStorage.setItem(KEY_PLANS, JSON.stringify(plans));
 };
 
-export const createTreatmentPlan = (data: { title?: string }): TreatmentPlan => {
+export const createTreatmentPlan = (data: { title?: string; patientId: string }): TreatmentPlan => {
+  const patient = getPatientById(data.patientId);
+  // Fallback to anonymous alias if patient not found (safety), otherwise "Last, First"
+  const alias = patient 
+    ? `${patient.lastName}, ${patient.firstName}` 
+    : `Patient-${Math.floor(1000 + Math.random() * 9000)}`;
+
   const newPlan: TreatmentPlan = {
     id: generateId(),
-    caseAlias: `Patient-${Math.floor(1000 + Math.random() * 9000)}`,
-    title: data.title || '',
+    patientId: data.patientId, // Required now
+    caseAlias: alias,
     planNumber: `TP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+    title: data.title || '',
     status: 'DRAFT',
     insuranceMode: 'simple',
     feeScheduleType: 'standard',

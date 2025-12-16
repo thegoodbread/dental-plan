@@ -1,8 +1,9 @@
 
-import { TreatmentPlan, TreatmentPlanItem, ShareLink, FeeUnitType, UrgencyLevel, FeeCategory, FeeScheduleType, ItemType } from '../types';
+import { TreatmentPlan, TreatmentPlanItem, ShareLink, FeeUnitType, UrgencyLevel, FeeCategory, FeeScheduleType, ItemType, Patient } from '../types';
 
 // Helper to create IDs
 const id = (prefix: string) => `${prefix}-${Math.random().toString(36).substr(2, 5)}`;
+const now = new Date().toISOString();
 
 const ITEM_DEFAULTS = {
   discount: 0,
@@ -13,6 +14,14 @@ const ITEM_DEFAULTS = {
   estimatedPatientPortion: null,
   itemType: 'PROCEDURE' as ItemType,
 };
+
+// --- REAL PATIENTS ---
+export const DEMO_PATIENTS: Patient[] = [
+  { id: 'pat_alex', firstName: 'Alex', lastName: 'Rivera', dob: '1989-04-12', memberId: 'M12345', createdAt: now, updatedAt: now },
+  { id: 'pat_jordan', firstName: 'Jordan', lastName: 'Kim', dob: '1976-09-30', memberId: 'M54321', createdAt: now, updatedAt: now },
+  { id: 'pat_casey', firstName: 'Casey', lastName: 'Nguyen', dob: '1991-02-18', memberId: 'M99887', createdAt: now, updatedAt: now },
+  { id: 'pat_taylor', firstName: 'Taylor', lastName: 'Brooks', dob: '1984-07-05', memberId: 'M77661', createdAt: now, updatedAt: now },
+];
 
 // --- PLAN A: Single-Tooth (Alex) ---
 const planA_Id = 'plan_demo_A';
@@ -89,6 +98,7 @@ const itemsA: TreatmentPlanItem[] = [
 
 export const PLAN_A: TreatmentPlan = {
   id: planA_Id,
+  patientId: 'pat_alex',
   caseAlias: 'Patient-8432',
   planNumber: 'TP-DEMO-SINGLE',
   title: 'Restorative & Implant Plan',
@@ -167,6 +177,7 @@ const itemsB: TreatmentPlanItem[] = [
 
 export const PLAN_B: TreatmentPlan = {
   id: planB_Id,
+  patientId: 'pat_jordan',
   caseAlias: 'Patient-5519',
   planNumber: 'TP-DEMO-QUAD',
   title: 'Periodontal Therapy',
@@ -229,6 +240,7 @@ const itemsC: TreatmentPlanItem[] = [
 
 export const PLAN_C: TreatmentPlan = {
   id: planC_Id,
+  patientId: 'pat_casey',
   caseAlias: 'Patient-2387',
   planNumber: 'TP-DEMO-ARCH',
   title: 'Upper Arch Restoration',
@@ -347,6 +359,7 @@ const itemsD: TreatmentPlanItem[] = [
 
 export const PLAN_D: TreatmentPlan = {
   id: planD_Id,
+  patientId: 'pat_taylor',
   caseAlias: 'Patient-9102',
   planNumber: 'TP-DEMO-COMPLEX',
   title: 'Comprehensive Rehab',

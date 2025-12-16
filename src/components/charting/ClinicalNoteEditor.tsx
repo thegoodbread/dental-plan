@@ -1,20 +1,19 @@
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useChairside } from '../../context/ChairsideContext';
 import { 
-  ArrowLeft, Save, ShieldCheck, Activity, Clock, Lock, CheckSquare, ArrowRight, FileCheck, Layout, ChevronDown, Check, FileText, AlertTriangle, Plus
+  ArrowLeft, Save, ShieldCheck, Activity, Clock, Lock, CheckSquare, ArrowRight, FileCheck, Layout, ChevronDown, ChevronRight, FileText, AlertTriangle, Plus, Filter, Search, Info, Check
 } from 'lucide-react';
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
-import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
-import { ToothNumber, ToothRecord, SoapSection, AssignedRisk, RiskLibraryItem, SoapSectionType, recordRiskEvent, RiskCategory } from '../../domain/dentalTypes';
-import { RISK_LIBRARY } from '../../domain/riskLibrary';
+import { SoapSection, AssignedRisk, RiskLibraryItem, SoapSectionType, ToothNumber, ToothRecord } from '../../domain/dentalTypes';
 import { SoapSectionBlock } from './SoapSectionBlock';
 import { RiskLibraryPanel } from './RiskLibraryPanel';
+import { EvidencePanel } from './EvidencePanel';
+import { PreflightPanel } from './PreflightPanel';
 import { ClinicalSubmissionPreview } from './ClinicalSubmissionPreview';
 import { Visit, TreatmentPlanItem } from '../../types';
-import { CompletenessResult } from '../../domain/CompletenessEngine';
-import { TruthAssertionsBundle, getNoteCompleteness, getNextMissingSlot, AssertionSlot, createManualAssertion } from '../../domain/TruthAssertions';
+import { TruthAssertionsBundle, AssertionSlot, createManualAssertion } from '../../domain/TruthAssertions';
+import { computeDocumentationReadiness, DocumentationReadinessResult, ReadinessInput, ReadinessEvidence, ReadinessProcedure, DISCLAIMER_TEXT } from '../../domain/ClaimReadinessEngine';
 
 export interface ClinicalNoteEditorProps {
   soapSections: SoapSection[];
@@ -54,54 +53,14 @@ export interface ClinicalNoteEditorProps {
   chiefComplaint: string;
   onChiefComplaintChange: (val: string) => void;
   
-  completeness: CompletenessResult | null;
+  // NOTE: completeness prop is deprecated in favor of internal engine calculation
+  completeness: any | null; 
   relevantProcedures?: TreatmentPlanItem[]; 
   recommendedRiskCategories?: string[]; 
   
   truthAssertions?: TruthAssertionsBundle;
   onVerifySecondary?: () => void;
 }
-
-const QUICK_ACTION_TO_CODES: Record<string, string[]> = {
-  'Composite': ['D2391', 'D2392', 'D2393'],
-  'Crown': ['D2740', 'D2950'],
-  'Extraction': ['D7140', 'D7210'],
-  'Root Canal': ['D3310', 'D3320', 'D3330'],
-  'Implant': ['D6010'],
-  'Exam': ['D0150', 'D0120'],
-  'Perio': ['D4341', 'D4910']
-};
-
-function getSuggestedRiskIdsForProcedures(codes: string[]): string[] {
-  const normalizedCodes = new Set(codes.map(c => c.toUpperCase()));
-  const suggestions = new Set<string>();
-
-  RISK_LIBRARY.forEach(risk => {
-    if (risk.procedureCodes && risk.procedureCodes.some(code => normalizedCodes.has(code))) {
-      suggestions.add(risk.id);
-    }
-  });
-
-  return Array.from(suggestions);
-}
-
-// Improvement: Determine broad risk categories from items
-function getRiskCategoriesForProcedures(items: TreatmentPlanItem[]): string[] {
-  const categories = new Set<string>();
-  items.forEach(i => {
-    const code = i.procedureCode.toUpperCase();
-    if (i.category === 'RESTORATIVE') categories.add('DIRECT_RESTORATION'); 
-    if (code.startsWith('D27') || code.startsWith('D29')) categories.add('INDIRECT_RESTORATION');
-    if (i.category === 'ENDODONTIC' || code.startsWith('D3')) categories.add('ENDO');
-    if (i.category === 'IMPLANT' || code.startsWith('D60')) categories.add('IMPLANT');
-    if (i.category === 'SURGICAL' || code.startsWith('D7')) categories.add('EXTRACTION'); 
-    if (i.itemType === 'ADDON' && i.addOnKind === 'SEDATION') categories.add('SEDATION');
-    if (code.startsWith('D92')) categories.add('ANESTHESIA'); // Or sedation
-  });
-  return Array.from(categories);
-}
-
-const generateId = () => Math.random().toString(36).substr(2, 9);
 
 export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => {
   const {
@@ -116,13 +75,61 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
     currentTenantId,
   } = props;
 
-  const { setTruthAssertions, toggleFactSection, noteCompleteness, setCurrentView, factSectionStates, addManualAssertion } = useChairside();
+  const { setTruthAssertions, toggleFactSection, setCurrentView, factSectionStates, addManualAssertion } = useChairside();
   
   // Refs for scrolling
   const leftRailRef = useRef<HTMLDivElement>(null);
   
   // UI State
-  const [activeRightTab, setActiveRightTab] = useState<'RISKS' | 'FINDINGS' | 'TEMPLATES'>('RISKS');
+  const [activeRightTab, setActiveRightTab] = useState<'EVIDENCE' | 'RISKS' | 'FINDINGS' | 'PREFLIGHT'>('EVIDENCE');
+  const [scopeProcedureId, setScopeProcedureId] = useState<string | 'ALL'>('ALL');
+  
+  // Use "Readiness" not "Approval"
+  const [readiness, setReadiness] = useState<DocumentationReadinessResult>({ percent: 0, items: [], status: 'INCOMPLETE' });
+
+  // --- Readiness Engine Integration ---
+  useEffect(() => {
+      // Map domain models to engine input types
+      const procedures: ReadinessProcedure[] = relevantProcedures.map(p => ({
+          id: p.id,
+          cdtCode: p.procedureCode,
+          label: p.procedureName,
+          tooth: p.selectedTeeth?.join(','),
+          surfaces: p.surfaces,
+          quadrant: p.selectedQuadrants?.[0], // Map first quadrant if present
+          isCompleted: p.procedureStatus === 'COMPLETED'
+      }));
+
+      const diagnoses = relevantProcedures.flatMap(p => 
+          (p.diagnosisCodes || []).map(code => ({ procedureId: p.id, icd10: code }))
+      );
+
+      // Mock evidence mapping (In real app, map from p.documentation)
+      const evidence: ReadinessEvidence[] = [];
+      relevantProcedures.forEach(p => {
+          if (p.documentation?.hasXray) evidence.push({ procedureId: p.id, type: 'pre_op_xray', attached: true });
+          if (p.documentation?.hasPerioChart) evidence.push({ procedureId: p.id, type: 'perio_charting', attached: true });
+          if (p.documentation?.hasPhoto) evidence.push({ procedureId: p.id, type: 'intraoral_photo', attached: true });
+          if (p.documentation?.hasFmxWithin36Months) evidence.push({ procedureId: p.id, type: 'fmX_pano_recent', attached: true });
+      });
+
+      const input: ReadinessInput = {
+          truth: truthAssertions,
+          procedures,
+          diagnoses,
+          evidence,
+          risksAndConsentComplete: assignedRisks.some(r => r.consentCapturedAt), // simplified check
+          // New admin checks (mocked as undefined to trigger blockers for demo)
+          patient: undefined,
+          provider: undefined,
+          serviceDate: undefined
+      };
+
+      const result = computeDocumentationReadiness(input);
+      setReadiness(result);
+
+  }, [relevantProcedures, assignedRisks, truthAssertions]);
+
 
   // V2.0 Inline Facts Toggle Handler
   const handleToggleAssertion = (id: string) => {
@@ -138,31 +145,22 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
       });
   };
 
-  const noteCompletenessPercent = noteCompleteness?.percent ?? 0;
-
   // --- Navigation & Sync Logic ---
   
   const scrollToSlot = (section: string, slot: string) => {
-      // 1. Ensure section is expanded in context state if needed
       const sectionObj = soapSections.find(s => s.type === section);
       if (sectionObj && !factSectionStates[sectionObj.id]) {
           toggleFactSection(sectionObj.id);
       }
 
-      // 2. Scroll Logic
       setTimeout(() => {
           const slotId = `slot-${section}-${slot}`;
           const el = document.getElementById(slotId);
           if (el) {
               el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              
-              // Visual Flash
               el.classList.add('bg-blue-100/50', 'ring-2', 'ring-blue-400');
-              setTimeout(() => {
-                  el.classList.remove('bg-blue-100/50', 'ring-2', 'ring-blue-400');
-              }, 1500);
+              setTimeout(() => el.classList.remove('bg-blue-100/50', 'ring-2', 'ring-blue-400'), 1500);
           } else {
-              // Fallback: Scroll to section header
               const secId = `section-${section}`;
               const secEl = document.getElementById(secId);
               if (secEl) secEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -171,10 +169,49 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
   };
 
   const handleFixNext = () => {
-      const next = getNextMissingSlot(truthAssertions);
-      if (next) {
-          scrollToSlot(next.section, next.slot);
+      const next = readiness.fixNext;
+      if (!next) return;
+
+      switch (next.kind) {
+          case 'slot':
+              scrollToSlot(next.section, next.slot);
+              break;
+          case 'evidence':
+              setActiveRightTab('EVIDENCE');
+              break;
+          case 'icd10':
+              alert(`Action: Add ICD-10 for ${next.label}`); // Stub
+              break;
+          case 'procedure_status':
+              alert(`Action: Confirm procedure completion`); 
+              break;
+          case 'consent':
+              scrollToSlot('PLAN', 'RISK');
+              break;
+          case 'admin':
+          case 'procedure_detail':
+              setActiveRightTab('PREFLIGHT');
+              break;
       }
+  };
+
+  // Filter assertions based on scope
+  const filteredAssertions = useMemo(() => {
+      if (!truthAssertions) return [];
+      if (scopeProcedureId === 'ALL') return truthAssertions.assertions;
+      
+      const targetProc = relevantProcedures.find(p => p.id === scopeProcedureId);
+      const targetCode = targetProc?.procedureCode || 'XXX';
+
+      return truthAssertions.assertions.filter(a => {
+          if (a.procedureId === scopeProcedureId) return true;
+          if (a.code === targetCode) return true;
+          return false;
+      });
+  }, [truthAssertions, scopeProcedureId, relevantProcedures]);
+
+  const handleAttachEvidence = (type: string, procedureId?: string) => {
+      alert(`Attaching ${type} for procedure ${procedureId}... (Mock)`);
   };
 
   const displayedSections = soapSections.filter(s => {
@@ -183,16 +220,14 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
 
   const activeRiskIds = useMemo(() => assignedRisks.map(r => r.riskLibraryItemId), [assignedRisks]);
 
-  // -- Mock Findings Logic (since actual findings provider is missing in prompt) --
   const handleAddFinding = (text: string, section: SoapSectionType, slot: AssertionSlot) => {
-      // Directly inject a manual assertion
       addManualAssertion(section as any, slot, text);
   };
 
   return (
     <div className="flex flex-col h-full bg-slate-100 overflow-hidden font-sans text-slate-900">
         
-        {/* TOP BAR: Claim Studio Header */}
+        {/* TOP BAR: Documentation Studio Header */}
         <header className="bg-white border-b border-slate-200 px-4 py-2.5 flex items-center justify-between shadow-sm shrink-0 z-40 h-[60px]">
             <div className="flex items-center gap-4">
                 {viewMode === 'page' && (
@@ -200,37 +235,46 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
                 )}
                 <div>
                     <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                        Claim Studio 
+                        Documentation Studio 
                         {isLocked && <span className="bg-slate-100 text-slate-500 text-[10px] px-2 py-0.5 rounded border border-slate-200 uppercase tracking-wide">Locked</span>}
                     </h2>
                     {/* Readiness Bar */}
-                    <div className="flex items-center gap-2 mt-0.5">
+                    <div className="flex items-center gap-2 mt-0.5 group relative cursor-help">
                         <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                             <div 
-                                className={`h-full transition-all duration-500 ease-out ${noteCompletenessPercent === 100 ? 'bg-green-500' : noteCompletenessPercent > 80 ? 'bg-amber-500' : 'bg-blue-500'}`} 
-                                style={{ width: `${noteCompletenessPercent}%` }} 
+                                className={`h-full transition-all duration-500 ease-out ${readiness.percent === 100 ? 'bg-green-500' : readiness.percent > 75 ? 'bg-blue-500' : 'bg-amber-500'}`} 
+                                style={{ width: `${readiness.percent}%` }} 
                             />
                         </div>
-                        <span className={`text-[10px] font-bold ${noteCompletenessPercent === 100 ? 'text-green-600' : noteCompletenessPercent > 80 ? 'text-amber-600' : 'text-slate-500'}`}>
-                            {noteCompletenessPercent}% Ready
+                        <span className={`text-[10px] font-bold ${readiness.percent === 100 ? 'text-green-600' : 'text-slate-500'}`}>
+                            {readiness.percent}% Doc. Readiness
                         </span>
+                        <span className="text-[9px] text-slate-400">Guidance only. Requirements vary by payer.</span>
+                        
+                        {/* Compliance Tooltip */}
+                        <div className="absolute top-full left-0 mt-2 w-64 p-3 bg-slate-800 text-white text-[10px] rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 leading-relaxed">
+                            <div className="flex items-center gap-1.5 mb-1 text-slate-300 font-bold uppercase tracking-wider">
+                                <Info size={12} /> Compliance Notice
+                            </div>
+                            {DISCLAIMER_TEXT}
+                        </div>
                     </div>
                 </div>
             </div>
 
             <div className="flex items-center gap-3">
-                {!isLocked && noteCompletenessPercent < 100 && (
+                {!isLocked && readiness.fixNext && (
                     <button 
                         onClick={handleFixNext}
                         className="h-9 px-4 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 shadow-sm flex items-center gap-2 transition-all hover:scale-[1.02] active:scale-95 animate-pulse"
                     >
-                        Fix Next <ArrowRight size={14} />
+                        Resolve: {readiness.fixNext.label} <ArrowRight size={14} />
                     </button>
                 )}
-                {noteCompletenessPercent === 100 && !isLocked && (
+                {readiness.percent === 100 && !isLocked && (
                     <div className="flex items-center gap-1.5 text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border border-green-100 shadow-sm">
                         <Check size={14} strokeWidth={3} />
-                        <span className="text-xs font-bold">Claim Ready</span>
+                        <span className="text-xs font-bold">Docs Ready</span>
                     </div>
                 )}
                 
@@ -254,18 +298,37 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
             
             {/* LEFT RAIL: Claim Structure (Truth Builder) */}
             <div className="w-[380px] bg-slate-50/50 border-r border-slate-200 flex flex-col shrink-0 z-30 shadow-[4px_0_16px_rgba(0,0,0,0.02)]">
-                <div className="p-3 border-b border-slate-200 bg-white sticky top-0 z-20 flex justify-between items-center shrink-0">
-                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                        <CheckSquare size={14} className="text-blue-500" /> Claim Structure
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-medium bg-slate-100 px-2 py-0.5 rounded-full">
-                        {truthAssertions?.assertions.filter(a => a.checked).length || 0} Facts
-                    </span>
+                {/* Scope Selector */}
+                <div className="p-3 border-b border-slate-200 bg-white sticky top-0 z-20 flex flex-col gap-2 shrink-0">
+                    <div className="flex justify-between items-center">
+                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                            <CheckSquare size={14} className="text-blue-500" /> Structure
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium bg-slate-100 px-2 py-0.5 rounded-full">
+                            {filteredAssertions.filter(a => a.checked).length} Facts
+                        </span>
+                    </div>
+                    {/* Procedure Scope Dropdown */}
+                    <div className="relative">
+                        <select 
+                            value={scopeProcedureId}
+                            onChange={(e) => setScopeProcedureId(e.target.value)}
+                            className="w-full text-xs p-2 pr-8 bg-slate-50 border border-slate-200 rounded-md font-medium text-slate-700 appearance-none outline-none focus:ring-2 focus:ring-blue-200"
+                        >
+                            <option value="ALL">All Procedures</option>
+                            {relevantProcedures.map(p => (
+                                <option key={p.id} value={p.id}>
+                                    {p.procedureCode} - {p.procedureName}
+                                </option>
+                            ))}
+                        </select>
+                        <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    </div>
                 </div>
                 
                 <div ref={leftRailRef} className="flex-1 overflow-y-auto p-3 custom-scrollbar">
                     {displayedSections.map(section => {
-                        const sectionAssertions = truthAssertions?.assertions.filter(a => a.section === section.type) || [];
+                        const sectionAssertions = filteredAssertions.filter(a => a.section === section.type);
                         return (
                             <SoapSectionBlock 
                                 key={section.id} 
@@ -301,6 +364,12 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
                 {/* Tab Header */}
                 <div className="flex border-b border-slate-200 shrink-0 bg-slate-50/50">
                     <button 
+                        onClick={() => setActiveRightTab('EVIDENCE')}
+                        className={`flex-1 py-3 text-xs font-bold border-b-2 transition-colors ${activeRightTab === 'EVIDENCE' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                    >
+                        Evidence
+                    </button>
+                    <button 
                         onClick={() => setActiveRightTab('RISKS')}
                         className={`flex-1 py-3 text-xs font-bold border-b-2 transition-colors ${activeRightTab === 'RISKS' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
                     >
@@ -313,14 +382,21 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
                         Findings
                     </button>
                     <button 
-                        onClick={() => setActiveRightTab('TEMPLATES')}
-                        className={`flex-1 py-3 text-xs font-bold border-b-2 transition-colors ${activeRightTab === 'TEMPLATES' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                        onClick={() => setActiveRightTab('PREFLIGHT')}
+                        className={`flex-1 py-3 text-xs font-bold border-b-2 transition-colors ${activeRightTab === 'PREFLIGHT' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
                     >
-                        Templates
+                        Preflight
                     </button>
                 </div>
                 
                 <div className="flex-1 overflow-hidden relative">
+                    {activeRightTab === 'EVIDENCE' && (
+                        <EvidencePanel 
+                            missingEvidence={[...readiness.items].filter(m => m.kind === 'evidence')}
+                            onAttach={handleAttachEvidence}
+                        />
+                    )}
+
                     {activeRightTab === 'RISKS' && (
                         <RiskLibraryPanel 
                             assignedRiskIds={activeRiskIds}
@@ -357,11 +433,11 @@ export const ClinicalNoteEditor: React.FC<ClinicalNoteEditorProps> = (props) => 
                         </div>
                     )}
 
-                    {activeRightTab === 'TEMPLATES' && (
-                        <div className="flex flex-col items-center justify-center h-full p-8 text-slate-400">
-                            <FileText size={48} className="mb-4 opacity-20" />
-                            <p className="text-xs text-center">Templates are managed in Settings.</p>
-                        </div>
+                    {activeRightTab === 'PREFLIGHT' && (
+                        <PreflightPanel 
+                            items={readiness.items}
+                            onResolve={(label) => alert(`Resolve: ${label} (stub)`)}
+                        />
                     )}
                 </div>
             </div>

@@ -40,7 +40,6 @@ export const TreatmentPlansPage: React.FC = () => {
     const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter;
     const term = searchTerm.toLowerCase();
     
-    // Enhance search to include patient name
     const patient = patients.find(pat => pat.id === p.patientId);
     const patientName = patient ? `${patient.firstName} ${patient.lastName}`.toLowerCase() : '';
     const patientNameRev = patient ? `${patient.lastName}, ${patient.firstName}`.toLowerCase() : '';
