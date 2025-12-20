@@ -1,8 +1,7 @@
-
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { TreatmentPlan, TreatmentPlanItem, TreatmentPhase, UrgencyLevel, FeeCategory, AddOnKind, Visit, VisitType, Provider, PHASE_BUCKET_LABELS } from '../../types';
 import { Plus, X, MoreHorizontal, Clock, GripVertical, Edit, Trash2, Library, Calendar, Check, Stethoscope, History as HistoryIcon, ArrowRight, Eye, EyeOff, RotateCcw, Shuffle } from 'lucide-react';
-import { SEDATION_TYPES, checkAddOnCompatibility, createAddOnItem, ADD_ON_LIBRARY, AddOnDefinition, createVisit, getVisitsForPlan, linkProceduresToVisit, getTreatmentPlanById, getProviders, getProviderById, getPhaseIdForItem, updateTreatmentPlanItem, recalculatePhaseDuration } from '../../services/treatmentPlans';
+import { SEDATION_TYPES, checkAddOnCompatibility, createAddOnItem, ADD_ON_LIBRARY, AddOnDefinition, createVisit, getVisitsForPlan, linkProceduresToVisit, getTreatmentPlanById, getProviders, getProviderById, getPhaseIdForItem, updateTreatmentPlanItem, recalculatePhaseDuration, computeBucketKeyForItem } from '../../services/treatmentPlans';
 import { AddOnsLibraryPanel } from './AddOnsLibraryPanel';
 import { VisitDetailModal } from './VisitDetailModal';
 
@@ -428,18 +427,33 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
     const draggedId = e.dataTransfer.getData('text/plain');
     if (!draggedId) { handleGlobalDragEnd(); return; }
 
-    // Existing move logic for items between phases...
-    // 1. Identify all items to move (Parent + Linked Add-ons)
+    const draggedItem = localItems.find(i => i.id === draggedId);
+    if (!draggedItem) { handleGlobalDragEnd(); return; }
+
+    // Identify all items to move (Parent + Linked Add-ons)
     const linkedAddOnItems = localItems.filter(i => 
         i.itemType === 'ADDON' && i.linkedItemIds?.includes(draggedId)
     );
     const idsToMove = [draggedId, ...linkedAddOnItems.map(s => s.id)];
 
-    // 2. Update Items (Source of Truth)
+    // SMART RENAMING LOGIC: If target phase is empty and name isn't manual, name it after the procedure
+    const targetPhase = localPlan.phases?.find(p => p.id === phaseId);
+    const itemsInTarget = itemsByPhase[phaseId] || [];
+    
+    if (targetPhase && itemsInTarget.length === 0 && !targetPhase.titleIsManual && !targetPhase.isMonitorPhase) {
+        const bucket = computeBucketKeyForItem(draggedItem);
+        const categoryLabel = PHASE_BUCKET_LABELS[bucket];
+        const newTitle = `Phase ${targetPhase.sortOrder + 1}: ${categoryLabel}`;
+        
+        setLocalPlan(prev => ({
+            ...prev,
+            phases: prev.phases?.map(p => p.id === phaseId ? { ...p, title: newTitle, bucketKey: bucket } : p)
+        }));
+    }
+
+    // Update Items (Source of Truth)
     setLocalItems(prevItems => prevItems.map(item => {
         if (idsToMove.includes(item.id)) {
-            // Lock the item to this phase so it doesn't float back
-            // Crucial: We update phaseId directly. This is the source of truth.
             return { ...item, phaseId, phaseLocked: true } as any; 
         }
         return item;
@@ -541,7 +555,8 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
     const newPhase: TreatmentPhase = {
         id: generateId(), planId: localPlan.id, bucketKey: 'OTHER', title: 'New Phase',
         sortOrder: localPlan.phases?.length ?? 0, itemIds: [], isMonitorPhase: false,
-        durationIsManual: false, estimatedDurationValue: null, estimatedDurationUnit: null
+        durationIsManual: false, estimatedDurationValue: null, estimatedDurationUnit: null,
+        titleIsManual: false // Start as false so smart naming can apply
     };
     setLocalPlan(prev => ({ ...prev, phases: [...(prev.phases || []), newPhase] }));
   };
@@ -561,7 +576,7 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
     if (!renamingPhaseId) return;
     setLocalPlan(prev => ({
         ...prev,
-        phases: prev.phases?.map(p => p.id === renamingPhaseId ? { ...p, title: renameValue } : p)
+        phases: prev.phases?.map(p => p.id === renamingPhaseId ? { ...p, title: renameValue, titleIsManual: true } : p)
     }));
     setRenamingPhaseId(null);
     setRenameValue('');
@@ -636,7 +651,7 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
   const handleSetPhaseTitle = (phaseId: string, newTitle: string) => {
       setLocalPlan(prev => ({
           ...prev,
-          phases: prev.phases?.map(p => p.id === phaseId ? { ...p, title: newTitle } : p)
+          phases: prev.phases?.map(p => p.id === phaseId ? { ...p, title: newTitle, titleIsManual: true } : p)
       }));
       setOpenMenuPhaseId(null);
   };
@@ -769,8 +784,8 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setOpenMenuPhaseId(null)} aria-modal="true" role="dialog">
-        <div className="bg-slate-50 w-[95vw] h-[95vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-300 relative">
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setOpenMenuPhaseId(null)}>
+        <div className="bg-slate-50 w-full max-w-[98%] h-[95vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-300 relative" onClick={e => e.stopPropagation()}>
           
           {/* Header */}
           <header className="shrink-0 px-5 py-3 border-b bg-white/80 backdrop-blur-sm flex items-center justify-between">
@@ -825,7 +840,7 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
 
                 <button 
                   onClick={() => setIsLibraryOpen(!isLibraryOpen)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-semibold transition-colors ${isLibraryOpen ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-semibold transition-colors ${isLibraryOpen ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'}`}
                 >
                     <Library size={16} /> Add-Ons Library
                 </button>

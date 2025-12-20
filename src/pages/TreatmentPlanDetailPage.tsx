@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import * as ReactRouterDOM from 'react-router-dom';
 import { 
@@ -198,10 +197,16 @@ export const TreatmentPlanDetailPage: React.FC = () => {
     }
   };
 
-  const handleAddItem = (fee: FeeScheduleEntry) => {
+  const handleAddItem = (fee: any) => {
     if (!plan) return;
+    
+    // Crucial: Spread the fee object which contains the user's area selections from the picker.
+    // Use ProcedureDefinition.id as the feeScheduleEntryId.
+    const { id: entryId, ...selections } = fee;
+    
     createTreatmentPlanItem(plan.id, { 
-      feeScheduleEntryId: fee.id 
+      ...selections,
+      feeScheduleEntryId: entryId 
     });
     loadData(plan.id);
   };

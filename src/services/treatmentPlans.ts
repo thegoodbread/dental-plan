@@ -17,6 +17,7 @@ import {
 import { DEMO_PLANS, DEMO_ITEMS, DEMO_SHARES, DEMO_PATIENTS } from '../mock/seedPlans';
 import { computeDocumentationReadiness, ReadinessInput, MissingItem, ReadinessProcedure, ReadinessDiagnosis, ReadinessEvidence } from '../domain/ClaimReadinessEngine';
 import { computeItemPricing, computePlanTotals } from '../utils/pricingLogic';
+import { getProcedureLibrary } from '../domain/procedureLibrary';
 
 // --- KEYS ---
 const KEY_PLANS = 'dental_plans_v8';
@@ -61,7 +62,7 @@ export const ensurePlanHasDefaultPhases = (plan: TreatmentPlan): TreatmentPlan =
   return { ...plan, phases: defaultPhases };
 };
 
-const computeBucketKeyForItem = (item: TreatmentPlanItem): PhaseBucketKey => {
+export const computeBucketKeyForItem = (item: TreatmentPlanItem): PhaseBucketKey => {
   const code = (item.procedureCode || '').toUpperCase();
   const cat = (item.category || 'OTHER').toUpperCase();
   const urgency = (item.urgency || '').toUpperCase();
@@ -112,11 +113,6 @@ export const assignMissingPhaseIds = (plan: TreatmentPlan, items: TreatmentPlanI
   return hasChanges ? newItems : items;
 };
 
-/**
- * PRODUCTION CLINICAL HYDRATION:
- * Overwrites all clinical estimates with Procedure Library defaults unless explicitly flagged as Manual.
- * This effectively "purges" any legacy demo data on load.
- */
 export function hydrateItemClinicalDefaultsFromFeeSchedule(items: TreatmentPlanItem[]): { items: TreatmentPlanItem[], changed: boolean } {
   const feeSchedule = getFeeSchedule();
   let globalChanged = false;
@@ -130,11 +126,9 @@ export function hydrateItemClinicalDefaultsFromFeeSchedule(items: TreatmentPlanI
     let itemChanged = false;
     const updated = { ...item };
 
-    // Standardize flags
     if (updated.estimatedVisitsIsManual === undefined) { updated.estimatedVisitsIsManual = false; itemChanged = true; }
     if (updated.estimatedDurationIsManual === undefined) { updated.estimatedDurationIsManual = false; itemChanged = true; }
 
-    // 1. Enforce Visits from Library
     if (updated.estimatedVisitsIsManual !== true) {
        const defVisits = entry.defaultEstimatedVisits ?? 1;
        if (updated.estimatedVisits !== defVisits) {
@@ -143,7 +137,6 @@ export function hydrateItemClinicalDefaultsFromFeeSchedule(items: TreatmentPlanI
        }
     }
 
-    // 2. Enforce Duration from Library
     if (updated.estimatedDurationIsManual !== true) {
       const defVal = entry.defaultEstimatedDurationValue ?? null;
       const defUnit = entry.defaultEstimatedDurationUnit ?? null;
@@ -218,11 +211,6 @@ export const recalculatePhaseDuration = (items: TreatmentPlanItem[]): { estimate
     return { estimatedDurationValue: finalValue, estimatedDurationUnit: finalUnit };
 };
 
-/**
- * PRODUCTION PHASE REBUILD:
- * Forces non-monitor phases to automatic mode to ensure they re-compute from hydrated items.
- * Strips legacy demo phase durations.
- */
 export function rebuildPhaseDurationsFromItems(plan: TreatmentPlan, items: TreatmentPlanItem[]): TreatmentPlan {
   if (!plan.phases) return plan;
   const itemsByPhase = new Map<string, TreatmentPlanItem[]>();
@@ -232,7 +220,6 @@ export function rebuildPhaseDurationsFromItems(plan: TreatmentPlan, items: Treat
       itemsByPhase.get(item.phaseId)!.push(item);
   });
   const updatedPhases = plan.phases.map(p => {
-    // Only monitor phases are allowed to have persistent manual durations in this production model.
     if (p.isMonitorPhase === true && p.durationIsManual === true) return p;
     
     const { estimatedDurationValue, estimatedDurationUnit } = recalculatePhaseDuration(itemsByPhase.get(p.id) || []);
@@ -264,23 +251,19 @@ export const setPlanPricingMode = (planId: string, mode: FeeScheduleType) => {
     const allItems = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, DEMO_ITEMS);
     const planItems = allItems.filter(i => i.treatmentPlanId === planId);
     
-    // 1. Update Fees
     let updatedItems = planItems.map(item => {
         const pricing = computeItemPricing(item, mode);
         return { ...item, netFee: pricing.netFee, grossFee: pricing.grossActive };
     });
 
-    // 2. Re-hydrate clinical defaults from the new fee schedule context
     const { items: hydratedItems } = hydrateItemClinicalDefaultsFromFeeSchedule(updatedItems);
     updatedItems = hydratedItems;
 
-    // 3. Persist
     const itemMap = new Map(updatedItems.map(i => [i.id, i]));
     const newAllItems = allItems.map(i => itemMap.get(i.id) || i);
     saveToStorage(KEY_ITEMS, newAllItems);
 
     const updatedPlanBase = { ...plan, feeScheduleType: mode };
-    // Re-compute phase durations from hydrated items
     const planWithPhases = rebuildPhaseDurationsFromItems(updatedPlanBase, updatedItems);
     const finalPlan = recalculatePlanTotals(planWithPhases, updatedItems);
     
@@ -341,7 +324,6 @@ export const loadTreatmentPlanWithItems = (id: string): { plan: TreatmentPlan, i
   let allItems = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, DEMO_ITEMS);
   let items = allItems.filter(i => i.treatmentPlanId === id);
   
-  // CANONICAL SELF-HEALING pass
   const fixedItems = assignMissingPhaseIds(planWithPhases, items);
   const { items: hydratedItems, changed: itemsChanged } = hydrateItemClinicalDefaultsFromFeeSchedule(fixedItems);
   items = hydratedItems;
@@ -380,18 +362,22 @@ export const savePlanAndItems = (plan: TreatmentPlan, items: TreatmentPlanItem[]
     return { plan: planToSave, items: sortedItems };
 };
 
-// --- FEE SCHEDULE ---
+// --- COMPATIBILITY ADAPTER ---
 export const getFeeSchedule = (): FeeScheduleEntry[] => {
-    return [
-        { id: 'f1', procedureCode: 'D2391', procedureName: 'Resin-based composite - 1 surface, posterior', category: 'RESTORATIVE', unitType: 'PER_TOOTH', baseFee: 200, membershipFee: 160, isActive: true, defaultEstimatedDurationValue: 1, defaultEstimatedDurationUnit: 'days', defaultEstimatedVisits: 1 },
-        { id: 'f2', procedureCode: 'D2740', procedureName: 'Crown - porcelain/ceramic', category: 'RESTORATIVE', unitType: 'PER_TOOTH', baseFee: 1200, membershipFee: 950, isActive: true, defaultEstimatedDurationValue: 2, defaultEstimatedDurationUnit: 'weeks', defaultEstimatedVisits: 2 },
-        { id: 'f3', procedureCode: 'D0120', procedureName: 'Periodic oral evaluation', category: 'DIAGNOSTIC', unitType: 'PER_PROCEDURE', baseFee: 65, membershipFee: 0, isActive: true, defaultEstimatedDurationValue: 1, defaultEstimatedDurationUnit: 'days', defaultEstimatedVisits: 1 },
-        { id: 'f4', procedureCode: 'D1110', procedureName: 'Prophylaxis - adult', category: 'PREVENTIVE', unitType: 'PER_PROCEDURE', baseFee: 110, membershipFee: 0, isActive: true, defaultEstimatedDurationValue: 1, defaultEstimatedDurationUnit: 'days', defaultEstimatedVisits: 1 },
-        { id: 'f5', procedureCode: 'D3330', procedureName: 'Endodontic therapy, molar', category: 'ENDODONTIC', unitType: 'PER_TOOTH', baseFee: 1100, membershipFee: 850, isActive: true, defaultEstimatedDurationValue: 2, defaultEstimatedDurationUnit: 'weeks', defaultEstimatedVisits: 2 },
-        { id: 'f6', procedureCode: 'D7140', procedureName: 'Extraction, erupted tooth', category: 'OTHER', unitType: 'PER_TOOTH', baseFee: 250, membershipFee: 200, isActive: true, defaultEstimatedDurationValue: 1, defaultEstimatedDurationUnit: 'weeks', defaultEstimatedVisits: 1 },
-        { id: 'f7', procedureCode: 'D6010', procedureName: 'Surgical placement of implant body', category: 'IMPLANT', unitType: 'PER_TOOTH', baseFee: 2200, membershipFee: 1800, isActive: true, defaultEstimatedDurationValue: 4, defaultEstimatedDurationUnit: 'months', defaultEstimatedVisits: 3 },
-        { id: 'f8', procedureCode: 'D4341', procedureName: 'Periodontal scaling and root planing - 4+ teeth', category: 'PERIO', unitType: 'PER_QUADRANT', baseFee: 300, membershipFee: 240, isActive: true, defaultEstimatedDurationValue: 6, defaultEstimatedDurationUnit: 'weeks', defaultEstimatedVisits: 2 },
-    ];
+    const defs = getProcedureLibrary();
+    return defs.map(def => ({
+      id: def.id,
+      procedureCode: def.cdtCode,
+      procedureName: def.name,
+      category: def.category,
+      unitType: def.unitType,
+      baseFee: def.pricing.baseFee,
+      membershipFee: def.pricing.membershipFee,
+      isActive: true,
+      defaultEstimatedVisits: def.defaults.defaultEstimatedVisits,
+      defaultEstimatedDurationValue: def.defaults.defaultEstimatedDurationValue,
+      defaultEstimatedDurationUnit: def.defaults.defaultEstimatedDurationUnit || undefined
+    }));
 };
 
 // --- ITEM CRUD OPERATIONS ---
@@ -405,24 +391,45 @@ export const createTreatmentPlanItem = (planId: string, data: Partial<TreatmentP
     sortOrder: data.sortOrder || 0, ...data
   };
   
-  if (data.feeScheduleEntryId) {
-      const entry = getFeeSchedule().find(f => f.id === data.feeScheduleEntryId);
-      if (entry) {
-          newItem.procedureCode = entry.procedureCode; newItem.procedureName = entry.procedureName;
-          newItem.category = entry.category; newItem.unitType = entry.unitType;
-          newItem.baseFee = entry.baseFee; newItem.membershipFee = entry.membershipFee;
-          newItem.grossFee = newItem.baseFee * newItem.units; newItem.netFee = newItem.grossFee - newItem.discount;
-          
-          newItem.estimatedVisits = entry.defaultEstimatedVisits ?? newItem.estimatedVisits ?? 1;
-          newItem.estimatedDurationValue = entry.defaultEstimatedDurationValue ?? newItem.estimatedDurationValue ?? null;
-          newItem.estimatedDurationUnit = entry.defaultEstimatedDurationUnit ?? newItem.estimatedDurationUnit ?? null;
-          
-          newItem.estimatedVisitsIsManual = data.estimatedVisitsIsManual ?? false;
-          newItem.estimatedDurationIsManual = data.estimatedDurationIsManual ?? false;
+  const library = getProcedureLibrary();
+  const definition = library.find(l => l.id === data.feeScheduleEntryId || l.cdtCode === data.procedureCode);
+
+  if (definition) {
+      newItem.feeScheduleEntryId = definition.id;
+      newItem.procedureCode = definition.cdtCode; 
+      newItem.procedureName = definition.name;
+      newItem.category = definition.category; 
+      newItem.unitType = definition.unitType;
+      newItem.baseFee = definition.pricing.baseFee; 
+      newItem.membershipFee = definition.pricing.membershipFee;
+      newItem.grossFee = newItem.baseFee * newItem.units; 
+      newItem.netFee = newItem.grossFee - newItem.discount;
+      
+      newItem.estimatedVisits = definition.defaults.defaultEstimatedVisits;
+      newItem.estimatedDurationValue = definition.defaults.defaultEstimatedDurationValue;
+      newItem.estimatedDurationUnit = definition.defaults.defaultEstimatedDurationUnit;
+      
+      newItem.estimatedVisitsIsManual = data.estimatedVisitsIsManual ?? false;
+      newItem.estimatedDurationIsManual = data.estimatedDurationIsManual ?? false;
+
+      // Initialize selection rules - Crucial Fix: Respect incoming selection data from picker
+      if (definition.selectionRules.requiresToothSelection) {
+        newItem.selectedTeeth = data.selectedTeeth || [];
+      }
+      if (definition.selectionRules.allowsQuadrants) {
+        newItem.selectedQuadrants = data.selectedQuadrants || [];
+      }
+      if (definition.selectionRules.allowsArch) {
+        newItem.selectedArches = data.selectedArches || [];
+      }
+      if (definition.selectionRules.requiresSurfaces) {
+        newItem.surfaces = data.surfaces || [];
       }
   }
+
   const allItems = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, []);
   saveToStorage(KEY_ITEMS, [...allItems, newItem]);
+  
   const plan = getTreatmentPlanById(planId);
   if (plan) {
       const planItems = [...allItems, newItem].filter(i => i.treatmentPlanId === planId);
@@ -434,6 +441,7 @@ export const createTreatmentPlanItem = (planId: string, data: Partial<TreatmentP
   return newItem;
 };
 
+// --- REST OF CRUD AND VISIT LOGIC ---
 export const updateTreatmentPlanItem = (itemId: string, updates: Partial<TreatmentPlanItem>): { plan: TreatmentPlan, items: TreatmentPlanItem[] } | null => {
   const allItems = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, []);
   const index = allItems.findIndex(i => i.id === itemId);
@@ -597,23 +605,17 @@ export const canAdvanceVisitToClaimReady = (input: ReadinessInput): { ok: boolea
   return { ok: blockers.length === 0, blockers };
 };
 
-/**
- * PRODUCTION MIGRATION / PURGE HELPER:
- * Strips all legacy seeded demo estimates and enforces clinical engine flags.
- */
 const migrateAllData = () => {
     if (typeof window === 'undefined') return;
     let plans = getFromStorage<TreatmentPlan>(KEY_PLANS, []);
     let allItems = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, []);
     let madeChanges = false;
     
-    // Purge Demo Items and initialize flags
     allItems = allItems.map(item => {
         let changed = false;
         if (item.estimatedVisitsIsManual === undefined) { item.estimatedVisitsIsManual = false; changed = true; }
         if (item.estimatedDurationIsManual === undefined) { item.estimatedDurationIsManual = false; changed = true; }
         
-        // If not manual, clear values to ensure hydration from library happens
         if (item.estimatedVisitsIsManual !== true) { item.estimatedVisits = undefined; changed = true; }
         if (item.estimatedDurationIsManual !== true) { 
             item.estimatedDurationValue = null; 
@@ -628,7 +630,6 @@ const migrateAllData = () => {
     plans.forEach((plan, idx) => {
         const planItems = allItems.filter(i => i.treatmentPlanId === plan.id);
         
-        // Structural validation
         const fixedItems = assignMissingPhaseIds(plan, planItems);
         if (fixedItems !== planItems) {
             madeChanges = true;
@@ -640,7 +641,6 @@ const migrateAllData = () => {
         
         const reconciledManifest = rebuildPhaseManifest(plan, fixedItems);
         
-        // Force non-monitor phases to automatic to strip seeded durations
         reconciledManifest.phases?.forEach(p => {
             if (p.durationIsManual === undefined || (p.isMonitorPhase !== true && p.durationIsManual === true)) {
                 p.durationIsManual = p.isMonitorPhase === true; 

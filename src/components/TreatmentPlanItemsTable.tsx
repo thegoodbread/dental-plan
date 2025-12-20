@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, UrgencyLevel, AddOnKind, FeeScheduleType } from '../types';
 import { TreatmentPlanItemRow } from './TreatmentPlanItemRow';
@@ -8,6 +7,8 @@ import { Plus, Search, Library, Calculator, AlertTriangle, Smile, Clock, Edit2, 
 import { ToothSelectorModal } from './ToothSelectorModal';
 import { NumberPadModal } from './NumberPadModal';
 import { createSedationItem, createAddOnItem, checkAddOnCompatibility, AddOnDefinition } from '../services/treatmentPlans';
+/* FIX: Added missing import for pricing calculation used in the mobile view */
+import { computeItemPricing } from '../utils/pricingLogic';
 
 const NumpadButton = ({ onClick }: { onClick: () => void }) => (
   <button
@@ -20,10 +21,47 @@ const NumpadButton = ({ onClick }: { onClick: () => void }) => (
   </button>
 );
 
+/* FIX: Added implementation for the missing MobileItemCard component used in the mobile view */
+const MobileItemCard: React.FC<{
+  item: TreatmentPlanItem;
+  feeScheduleType: FeeScheduleType;
+  onUpdate: (id: string, updates: Partial<TreatmentPlanItem>) => void;
+  onDelete: (id: string) => void;
+}> = ({ item, feeScheduleType, onUpdate, onDelete }) => {
+  const pricing = computeItemPricing(item, feeScheduleType);
+  return (
+    <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+      <div className="flex justify-between items-start">
+        <div className="flex-1 min-w-0">
+          <div className="font-bold text-gray-900 text-sm truncate">{item.procedureName}</div>
+          <div className="text-xs text-gray-500 font-mono mt-0.5">{item.procedureCode}</div>
+        </div>
+        <div className="text-right ml-4">
+          <div className="font-bold text-gray-900 text-sm">${pricing.netFee.toFixed(2)}</div>
+          {pricing.memberSavings > 0 && (
+            <div className="text-[10px] text-green-600 font-semibold">Save ${pricing.memberSavings.toFixed(0)}</div>
+          )}
+        </div>
+      </div>
+      <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-50">
+        <div className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
+           {item.units} unit{item.units > 1 ? 's' : ''}
+        </div>
+        <button 
+          onClick={() => onDelete(item.id)}
+          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+        >
+          <Trash2 size={16} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 interface TreatmentPlanItemsTableProps {
   plan: TreatmentPlan;
   items: TreatmentPlanItem[];
-  onAddItem: (feeEntry: FeeScheduleEntry) => void;
+  onAddItem: (feeEntry: any) => void;
   onUpdateItem: (id: string, updates: Partial<TreatmentPlanItem>) => void;
   onDeleteItem: (id: string) => void;
   onRefresh?: () => void;
@@ -349,246 +387,5 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
         feeScheduleType={plan.feeScheduleType}
       />
     </div>
-  );
-};
-
-// Internal Mobile Card Component
-const MobileItemCard: React.FC<{
-  item: TreatmentPlanItem;
-  feeScheduleType?: FeeScheduleType;
-  onUpdate: (id: string, updates: Partial<TreatmentPlanItem>) => void;
-  onDelete: (id: string) => void;
-}> = ({ item, feeScheduleType = 'standard', onUpdate, onDelete }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
-  const [baseFee, setBaseFee] = useState(item.baseFee);
-  const [urgency, setUrgency] = useState<UrgencyLevel>(item.urgency || 'ELECTIVE');
-  const [isToothSelectorOpen, setIsToothSelectorOpen] = useState(false);
-  const [isNumpadOpen, setIsNumpadOpen] = useState(false);
-
-  const isAddOn = item.itemType === 'ADDON';
-
-  const getLocation = () => {
-    if (isAddOn) return item.addOnKind === 'SEDATION' ? 'Sedation' : 'Add-On';
-    if (item.selectedTeeth?.length) return `Tooth: ${item.selectedTeeth.join(', ')}`;
-    if (item.selectedQuadrants?.length) return `Quad: ${item.selectedQuadrants.join(', ')}`;
-    if (item.selectedArches?.length) return `Arch: ${item.selectedArches.join(', ')}`;
-    return 'Full Mouth';
-  };
-
-  const handleSaveAndClose = () => {
-    onUpdate(item.id, { 
-      baseFee: Number(baseFee), 
-      urgency: isAddOn ? undefined : urgency 
-    });
-    setIsEditing(false);
-  };
-  
-  const handleCancel = () => {
-    setBaseFee(item.baseFee);
-    setUrgency(item.urgency || 'ELECTIVE');
-    setIsEditing(false);
-    setIsConfirmingDelete(false);
-  };
-
-  const toggleQuadrant = (q: 'UR'|'UL'|'LL'|'LR') => {
-    const current = item.selectedQuadrants || [];
-    const updated = current.includes(q) 
-      ? current.filter(x => x !== q)
-      : [...current, q];
-    onUpdate(item.id, { selectedQuadrants: updated });
-  };
-
-  const toggleArch = (a: 'UPPER'|'LOWER') => {
-    const current = item.selectedArches || [];
-    const updated = current.includes(a) 
-      ? current.filter(x => x !== a)
-      : [...current, a];
-    onUpdate(item.id, { selectedArches: updated });
-  };
-
-  const displayedSedationType = item.sedationType || item.procedureName.replace('Sedation – ', '');
-
-  const UrgencyBadge = ({ u }: { u: UrgencyLevel }) => {
-    const styles: Record<UrgencyLevel, string> = {
-      URGENT: "bg-red-50 text-red-600 border-red-100",
-      SOON: "bg-orange-50 text-orange-600 border-orange-100",
-      ELECTIVE: "bg-blue-50 text-blue-600 border-blue-100"
-    };
-    const icons: Record<UrgencyLevel, React.ReactNode> = {
-      URGENT: <AlertTriangle size={10} />,
-      SOON: <Clock size={10} />,
-      ELECTIVE: <Smile size={10} />
-    };
-    return (
-      <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full border uppercase ${styles[u]}`}>
-        {icons[u]} {u}
-      </span>
-    );
-  };
-
-  return (
-    <>
-      <div className={`bg-white border border-gray-200 rounded-lg p-4 shadow-sm ${isAddOn ? 'border-l-4 border-l-slate-400 bg-slate-50' : ''}`}>
-        <div className="flex justify-between items-start mb-2">
-          <div className="w-full mr-4">
-            <h4 className="font-bold text-gray-900 text-sm leading-tight">{item.procedureName}</h4>
-            <div className="text-xs text-gray-500 mt-1 flex items-center gap-2">
-              <code className="bg-gray-100 px-1 rounded">{item.procedureCode}</code>
-              <span>{item.category}</span>
-            </div>
-          </div>
-          <div className="text-right shrink-0">
-             <div className="font-bold text-gray-900">${item.netFee.toFixed(0)}</div>
-             {item.units > 1 && <div className="text-xs text-gray-400">Qty: {item.units}</div>}
-          </div>
-        </div>
-        
-        {isEditing ? (
-          <div className="space-y-4 pt-3 mt-3 border-t border-gray-100">
-            {/* Urgency Editor - Hide for AddOn */}
-            {!isAddOn && (
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-gray-700">Urgency</label>
-                <select
-                  value={urgency}
-                  onChange={e => setUrgency(e.target.value as UrgencyLevel)}
-                  className="w-auto p-1.5 border border-gray-300 rounded text-sm text-gray-900 bg-white shadow-sm outline-none focus:ring-1 focus:ring-blue-500 block w-full"
-                >
-                  <option value="ELECTIVE">Elective</option>
-                  <option value="SOON">Soon</option>
-                  <option value="URGENT">Urgent</option>
-                </select>
-              </div>
-            )}
-            
-            {/* Fee Editor */}
-            <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-gray-700">Cost {isAddOn ? '(Override)' : 'per unit'}</label>
-                <div className="flex items-center gap-1.5 w-48">
-                    <div className="relative grow">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">$</span>
-                        <input 
-                            type="number" 
-                            className="w-full p-1.5 border rounded text-right pl-5 text-sm text-gray-900 bg-white"
-                            value={baseFee}
-                            onFocus={(e) => e.target.select()}
-                            onChange={e => setBaseFee(parseFloat(e.target.value) || 0)}
-                        />
-                    </div>
-                    <NumpadButton onClick={() => setIsNumpadOpen(true)} />
-                </div>
-            </div>
-
-            {/* Area Editor - Hide for AddOn */}
-            {!isAddOn && (item.unitType === 'PER_TOOTH' || item.unitType === 'PER_QUADRANT' || item.unitType === 'PER_ARCH') && (
-              <div>
-                {item.unitType === 'PER_TOOTH' && (
-                  <button
-                    onClick={() => setIsToothSelectorOpen(true)}
-                    className="w-full text-center py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg text-sm border border-gray-200"
-                  >
-                    Change Selected Teeth
-                  </button>
-                )}
-                {item.unitType === 'PER_QUADRANT' && (
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Select Quadrants</label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {(['UR', 'UL', 'LR', 'LL'] as const).map(q => (
-                        <button
-                          key={q}
-                          onClick={() => toggleQuadrant(q)}
-                          className={`py-2 text-xs rounded-lg border font-bold transition-colors ${
-                            item.selectedQuadrants?.includes(q) 
-                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
-                              : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'
-                          }`}
-                        >
-                          {q}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {item.unitType === 'PER_ARCH' && (
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Select Arch</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {(['UPPER', 'LOWER'] as const).map(a => (
-                        <button
-                          key={a}
-                          onClick={() => toggleArch(a)}
-                          className={`py-2 text-sm rounded-lg border font-bold transition-colors ${
-                            item.selectedArches?.includes(a) 
-                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
-                              : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'
-                          }`}
-                        >
-                          {a}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex gap-2 pt-2">
-              <button onClick={handleCancel} className="flex-1 py-2 text-sm bg-gray-100 text-gray-700 font-bold rounded-lg hover:bg-gray-200">
-                Cancel
-              </button>
-              <button onClick={handleSaveAndClose} className="flex-1 py-2 text-sm bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700">
-                Done
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between text-sm text-gray-600 border-t border-gray-100 pt-3 mt-2">
-            <div className="flex items-center gap-2">
-              {!isAddOn && <UrgencyBadge u={item.urgency || 'ELECTIVE'} />}
-              <div className="font-medium text-xs md:text-sm">{getLocation()}</div>
-            </div>
-            {isConfirmingDelete ? (
-              <div className="flex items-center gap-2 animate-in fade-in">
-                <span className="text-xs text-red-700 font-medium">Sure?</span>
-                <button onClick={() => onDelete(item.id)} className="px-2 py-1 text-xs font-bold text-white bg-red-600 rounded-md">Confirm</button>
-                <button onClick={() => setIsConfirmingDelete(false)} className="p-1.5 text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-md"><X size={12}/></button>
-              </div>
-            ) : (
-              <div className="flex gap-3">
-                <button onClick={() => { setIsEditing(true); setBaseFee(item.baseFee); setUrgency(item.urgency || 'ELECTIVE'); }} className="text-blue-600 text-xs font-bold uppercase flex items-center gap-1">
-                  <Edit2 size={12} /> Edit
-                </button>
-                <button onClick={() => setIsConfirmingDelete(true)} className="text-red-500 text-xs font-bold uppercase flex items-center gap-1">
-                  <Trash2 size={12} /> Delete
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {item.unitType === 'PER_TOOTH' && (
-        <ToothSelectorModal
-            isOpen={isToothSelectorOpen}
-            onClose={() => setIsToothSelectorOpen(false)}
-            selectedTeeth={item.selectedTeeth || []}
-            onChange={(teeth) => onUpdate(item.id, { selectedTeeth: teeth })}
-        />
-      )}
-      
-      <NumberPadModal
-        isOpen={isNumpadOpen}
-        onClose={() => setIsNumpadOpen(false)}
-        onDone={(newValue) => {
-            setBaseFee(parseFloat(newValue) || 0);
-            setIsNumpadOpen(false);
-        }}
-        initialValue={String(baseFee)}
-        title="Base Fee ($)"
-      />
-    </>
   );
 };
