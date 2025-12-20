@@ -166,6 +166,10 @@ export interface FeeScheduleEntry {
   membershipFee?: number | null;
   defaultNotes?: string | null;
   isActive: boolean;
+  // NEW: Production Estimates
+  defaultEstimatedDurationValue?: number;
+  defaultEstimatedDurationUnit?: 'days' | 'weeks' | 'months';
+  defaultEstimatedVisits?: number;
 }
 
 export interface TreatmentPhase {
@@ -179,6 +183,7 @@ export interface TreatmentPhase {
   estimatedVisits?: number;
   estimatedDurationValue?: number | null;
   estimatedDurationUnit?: 'days' | 'weeks' | 'months' | null;
+  durationIsManual?: boolean; // NEW: true if duration is fixed override, false if derived from items
   isMonitorPhase?: boolean;
 }
 
@@ -208,8 +213,10 @@ export interface TreatmentPlanItem {
   // Clinical Logic
   urgency?: UrgencyLevel;
   estimatedVisits?: number;
+  estimatedVisitsIsManual?: boolean; // NEW: manual override for visit count
   estimatedDurationValue?: number | null;
   estimatedDurationUnit?: 'days' | 'weeks' | 'months' | null;
+  estimatedDurationIsManual?: boolean; // NEW: manual override for duration
   phaseId?: string | null;
   phaseLocked?: boolean;
 

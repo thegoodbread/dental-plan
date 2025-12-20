@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { TreatmentPlan, TreatmentPlanItem } from "../types";
 
@@ -35,8 +34,9 @@ export const explainPlanForPatient = async (plan: TreatmentPlan, items: Treatmen
       5. Do NOT list the prices again in the text unless necessary for context.
     `;
 
+    // FIX: Updated model to 'gemini-3-flash-preview' for basic text tasks
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
     });
 

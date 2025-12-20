@@ -80,10 +80,13 @@ export const TreatmentPlanDetailPage: React.FC = () => {
   // Persists the in-memory plan details (sidebar fields) to localStorage.
   const handleDetailsSave = () => {
     if (!plan) return;
-    const updatedPlan = updateTreatmentPlan(plan.id, plan);
-    if (updatedPlan) {
-        setPlan(updatedPlan);
-        setItems(updatedPlan.items || []);
+    updateTreatmentPlan(plan.id, plan); // Save to storage
+    
+    // Reload canonical to ensure plan and items are in sync and references are fresh
+    const refreshed = loadTreatmentPlanWithItems(plan.id); 
+    if (refreshed) {
+        setPlan(refreshed.plan);
+        setItems(refreshed.items);
     }
   };
   
@@ -105,10 +108,12 @@ export const TreatmentPlanDetailPage: React.FC = () => {
         estimatedInsurance: plan.estimatedInsurance ?? 0,
         clinicDiscount: plan.clinicDiscount ?? 0,
       };
-      const updatedPlan = updateTreatmentPlan(plan.id, updates);
-      if (updatedPlan) {
-        setPlan(updatedPlan);
-        setItems(updatedPlan.items || []);
+      updateTreatmentPlan(plan.id, updates);
+      
+      const refreshed = loadTreatmentPlanWithItems(plan.id); 
+      if (refreshed) {
+          setPlan(refreshed.plan);
+          setItems(refreshed.items);
       }
     };
 
@@ -127,11 +132,12 @@ export const TreatmentPlanDetailPage: React.FC = () => {
     }
 
     if (Object.keys(updates).length > 0) {
-      setPlan(prevPlan => ({ ...prevPlan!, ...updates }));
-      const updatedPlan = updateTreatmentPlan(plan.id, updates);
-      if (updatedPlan) {
-        setPlan(updatedPlan);
-        setItems(updatedPlan.items || []);
+      updateTreatmentPlan(plan.id, updates);
+      
+      const refreshed = loadTreatmentPlanWithItems(plan.id); 
+      if (refreshed) {
+          setPlan(refreshed.plan);
+          setItems(refreshed.items);
       }
     }
   };
@@ -146,42 +152,49 @@ export const TreatmentPlanDetailPage: React.FC = () => {
   const handleModeChange = (newMode: InsuranceMode) => {
     if (!plan || plan.insuranceMode === newMode) return;
 
+    let updates: Partial<TreatmentPlan> = {};
     if (newMode === 'simple') {
-      const updatedPlan = updateTreatmentPlan(plan.id, { 
+      updates = { 
         insuranceMode: 'simple',
         estimatedInsurance: plan.estimatedInsurance ?? 0,
-      });
-
-      if (updatedPlan) {
-        setPlan(updatedPlan);
-        setItems(updatedPlan.items || []);
-      }
-
+      };
     } else {
-      const updatedPlan = updateTreatmentPlan(plan.id, { insuranceMode: 'advanced' });
-
-      if (updatedPlan) {
-        setPlan(updatedPlan);
-        setItems(updatedPlan.items || []);
-      }
+      updates = { insuranceMode: 'advanced' };
+    }
+    
+    updateTreatmentPlan(plan.id, updates);
+    
+    const refreshed = loadTreatmentPlanWithItems(plan.id); 
+    if (refreshed) {
+        setPlan(refreshed.plan);
+        setItems(refreshed.items);
     }
   };
   
   const handlePricingModeChange = (newType: FeeScheduleType) => {
     if (!plan || plan.feeScheduleType === newType) return;
-    const result = setPlanPricingMode(plan.id, newType);
-    if (result) {
-        setPlan(result.plan);
-        setItems(result.items);
+    
+    // 1. Perform background pricing conversion
+    setPlanPricingMode(plan.id, newType);
+    
+    // 2. Canonical reload is MANDATORY after a pricing model change.
+    // This ensures all derived data (duration labels, savings totals) are 
+    // fresh and consistent with storage, avoiding stale UI references.
+    const refreshed = loadTreatmentPlanWithItems(plan.id);
+    if (refreshed) {
+        setPlan(refreshed.plan);
+        setItems(refreshed.items);
     }
   };
 
   const handleStatusChange = (status: TreatmentPlanStatus) => {
     if (!plan) return;
     const newStatus = plan.status === status ? 'DRAFT' : status;
-    const updatedPlan = updateTreatmentPlan(plan.id, { status: newStatus });
-    if (updatedPlan) {
-        setPlan(updatedPlan);
+    updateTreatmentPlan(plan.id, { status: newStatus });
+    
+    const refreshed = loadTreatmentPlanWithItems(plan.id); 
+    if (refreshed) {
+        setPlan(refreshed.plan);
     }
   };
 
@@ -218,8 +231,10 @@ export const TreatmentPlanDetailPage: React.FC = () => {
     const url = `${baseUrl}#/p/${link.token}`;
     setShareUrl(url);
     setCopied(false);
-    const updatedPlan = updateTreatmentPlan(plan.id, { status: 'PRESENTED', presentedAt: new Date().toISOString() });
-    if (updatedPlan) setPlan(updatedPlan);
+    updateTreatmentPlan(plan.id, { status: 'PRESENTED', presentedAt: new Date().toISOString() });
+    
+    const refreshed = loadTreatmentPlanWithItems(plan.id); 
+    if (refreshed) setPlan(refreshed.plan);
   };
 
   const handleCopy = () => {
@@ -230,10 +245,20 @@ export const TreatmentPlanDetailPage: React.FC = () => {
   };
   
   const handleBoardSaveChanges = (updatedPlan: TreatmentPlan, updatedItems: TreatmentPlanItem[]) => {
+    // 1. Persist to storage (which handles rebuilding manifest and sorting)
     const result = savePlanAndItems(updatedPlan, updatedItems);
+    
+    // 2. Immediately reload canonical storage state to avoid any mutation/reference issues.
+    // This ensures the Patient Timeline receives fresh objects reflecting the new phase assignments.
     if (result) {
-        setPlan(result.plan);
-        setItems(result.items);
+        const refreshed = loadTreatmentPlanWithItems(updatedPlan.id);
+        if (refreshed) {
+            setPlan(refreshed.plan);
+            setItems(refreshed.items);
+        } else {
+            setPlan(result.plan);
+            setItems(result.items);
+        }
     }
   };
 

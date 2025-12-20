@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { TreatmentPlan, TreatmentPlanItem, TreatmentPhase, UrgencyLevel, FeeCategory, AddOnKind, Visit, VisitType, Provider, PHASE_BUCKET_LABELS } from '../../types';
 import { Plus, X, MoreHorizontal, Clock, GripVertical, Edit, Trash2, Library, Calendar, Check, Stethoscope, History as HistoryIcon, ArrowRight, Eye, EyeOff, RotateCcw, Shuffle } from 'lucide-react';
-import { SEDATION_TYPES, checkAddOnCompatibility, createAddOnItem, ADD_ON_LIBRARY, AddOnDefinition, createVisit, getVisitsForPlan, linkProceduresToVisit, getTreatmentPlanById, getProviders, getProviderById, getPhaseIdForItem, updateTreatmentPlanItem } from '../../services/treatmentPlans';
+import { SEDATION_TYPES, checkAddOnCompatibility, createAddOnItem, ADD_ON_LIBRARY, AddOnDefinition, createVisit, getVisitsForPlan, linkProceduresToVisit, getTreatmentPlanById, getProviders, getProviderById, getPhaseIdForItem, updateTreatmentPlanItem, recalculatePhaseDuration } from '../../services/treatmentPlans';
 import { AddOnsLibraryPanel } from './AddOnsLibraryPanel';
 import { VisitDetailModal } from './VisitDetailModal';
 
@@ -70,57 +70,6 @@ const formatPhaseDuration = (phase: TreatmentPhase): string | null => {
     }
     return null;
 };
-
-const convertToDays = (value: number | null | undefined, unit: 'days' | 'weeks' | 'months' | null | undefined): number => {
-    if (!value || !unit) return 0;
-    switch(unit) {
-        case 'days': return value;
-        case 'weeks': return value * 7;
-        case 'months': return value * 30.44; // More accurate average
-    }
-    return 0;
-}
-
-const recalculatePhaseDuration = (items: TreatmentPlanItem[]): { estimatedDurationValue: number | null; estimatedDurationUnit: 'days' | 'weeks' | 'months' | null } => {
-    if (items.length === 0) {
-        return { estimatedDurationValue: null, estimatedDurationUnit: null };
-    }
-
-    let totalDays = 0;
-    let hasMonths = false;
-    let hasWeeks = false;
-
-    for (const item of items) {
-        totalDays += convertToDays(item.estimatedDurationValue, item.estimatedDurationUnit);
-        if (item.estimatedDurationUnit === 'months') hasMonths = true;
-        if (item.estimatedDurationUnit === 'weeks') hasWeeks = true;
-    }
-
-    if (totalDays <= 0) {
-        return { estimatedDurationValue: null, estimatedDurationUnit: null };
-    }
-
-    let finalValue: number;
-    let finalUnit: 'days' | 'weeks' | 'months';
-
-    if (hasMonths) {
-        finalValue = Math.round(totalDays / 30.44);
-        finalUnit = 'months';
-    } else if (hasWeeks) {
-        finalValue = Math.round(totalDays / 7);
-        finalUnit = 'weeks';
-    } else {
-        finalValue = Math.round(totalDays);
-        finalUnit = 'days';
-    }
-
-    if (finalValue < 1 && totalDays > 0) {
-        finalValue = 1;
-    }
-
-    return { estimatedDurationValue: finalValue, estimatedDurationUnit: finalUnit };
-};
-
 
 // --- Sub-components for SaaS UI ---
 
@@ -414,10 +363,6 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
         list.sort((a, b) => a.sortOrder - b.sortOrder);
     });
 
-    // We do NOT filter allPhases based on showEmptyBuckets here anymore.
-    // The filtering/placeholder logic is handled in the Grid render loop (gridSlots).
-    // This ensures stability of phase IDs.
-
     return { phases: allPhases, itemsByPhase: itemsByPhaseMap };
   }, [localPlan.phases, localItems]);
 
@@ -494,13 +439,11 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
     setLocalItems(prevItems => prevItems.map(item => {
         if (idsToMove.includes(item.id)) {
             // Lock the item to this phase so it doesn't float back
+            // Crucial: We update phaseId directly. This is the source of truth.
             return { ...item, phaseId, phaseLocked: true } as any; 
         }
         return item;
     }));
-    
-    // Note: We intentionally do NOT update localPlan.phases here because the UI is now derived from item.phaseId.
-    // The manifest will be reconciled upon saving.
     
     handleGlobalDragEnd();
   };
@@ -566,8 +509,6 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
 
               // Add to local state
               setLocalItems(prev => [...prev, newItem]);
-              
-              // No need to update plan manifest manually for UI update
           }
       } catch (err) {
           console.error("Drop error", err);
@@ -592,7 +533,6 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
     }
     
     setLocalItems(updatedItems);
-    // No need to update plan manifest manually
     closeEditor();
   };
 
@@ -601,6 +541,7 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
     const newPhase: TreatmentPhase = {
         id: generateId(), planId: localPlan.id, bucketKey: 'OTHER', title: 'New Phase',
         sortOrder: localPlan.phases?.length ?? 0, itemIds: [], isMonitorPhase: false,
+        durationIsManual: false, estimatedDurationValue: null, estimatedDurationUnit: null
     };
     setLocalPlan(prev => ({ ...prev, phases: [...(prev.phases || []), newPhase] }));
   };
@@ -668,21 +609,22 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
             if (p.id === phaseId) {
                 const isNowMonitor = !p.isMonitorPhase;
                 if (isNowMonitor) {
-                    // Toggling ON: Set manual duration
+                    // Toggling ON: Set manual duration as overrides are required for monitor phases
                     return {
                         ...p,
                         isMonitorPhase: true,
+                        durationIsManual: true,
                         estimatedDurationValue: 2, // Default monitor duration
                         estimatedDurationUnit: 'months',
                     };
                 } else {
-                    // Toggling OFF: Recalculate from items
-                    const { estimatedDurationValue, estimatedDurationUnit } = recalculatePhaseDuration(itemsByPhase[phaseId] || []);
+                    // Toggling OFF: Revert to derived duration
                     return {
                         ...p,
                         isMonitorPhase: false,
-                        estimatedDurationValue,
-                        estimatedDurationUnit,
+                        durationIsManual: false,
+                        estimatedDurationValue: null,
+                        estimatedDurationUnit: null,
                     };
                 }
             }
@@ -704,11 +646,12 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
           ...prev,
           phases: prev.phases?.map(p => {
               if (p.id === phaseId) {
+                  // Explicitly set durationIsManual to true when user manually updates the values
                   if (field === 'value') {
-                      return { ...p, estimatedDurationValue: parseInt(value, 10) || null };
+                      return { ...p, durationIsManual: true, estimatedDurationValue: parseInt(value, 10) || null };
                   }
                   if (field === 'unit') {
-                      return { ...p, estimatedDurationUnit: value as 'days' | 'weeks' | 'months' };
+                      return { ...p, durationIsManual: true, estimatedDurationUnit: value as 'days' | 'weeks' | 'months' };
                   }
               }
               return p;
@@ -786,8 +729,6 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
   const handleVisitUpdate = () => {
       loadVisits();
       
-      // Refresh local state from storage to reflect external updates (e.g. status changes, diagnosis codes)
-      // This replaces the window.location.reload() call
       const updatedData = getTreatmentPlanById(plan.id);
       if (updatedData) {
           setLocalPlan(updatedData);
@@ -804,9 +745,7 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
   const gridSlots = useMemo(() => {
       const slots: { type: 'PHASE' | 'ADD' | 'PLACEHOLDER', data?: TreatmentPhase, index: number }[] = [];
       
-      // 1. Existing Phases from data
       phases.forEach((p, index) => {
-          // If Hide Empty is enabled, only show phases that have items OR are monitor phases
           const hasItems = itemsByPhase[p.id] && itemsByPhase[p.id].length > 0;
           const shouldShow = showEmptyBuckets || hasItems || p.isMonitorPhase;
           
@@ -815,12 +754,10 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
           }
       });
 
-      // 2. Add Phase Button (if space)
       if (slots.length < maxPhases) {
           slots.push({ type: 'ADD', index: slots.length });
       }
 
-      // 3. Placeholders (Only if showEmptyBuckets is true)
       if (showEmptyBuckets) {
           while (slots.length < maxPhases) {
               slots.push({ type: 'PLACEHOLDER', index: slots.length });
@@ -921,7 +858,7 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
           )}
 
           <div className="flex-1 overflow-hidden relative flex flex-row">
-             {/* Wrapper Container - SCROLLS VERTICALLY ON MOBILE/TABLET, FIXED ON DESKTOP */}
+             {/* Wrapper Container */}
              <div className="flex-1 p-4 bg-slate-50/50 overflow-y-auto lg:overflow-hidden h-full flex flex-col">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 lg:grid-rows-2 gap-4 pb-20 lg:pb-0 h-full">
                 {gridSlots.map((slot) => {
@@ -1000,7 +937,6 @@ export const TreatmentPlanBoardModal: React.FC<TreatmentPlanBoardModalProps> = (
                                 </div>
                             )}
 
-                            {/* Column Content - NO SCROLL, auto height */}
                             <div className={`flex-1 p-2 space-y-2 overflow-y-auto min-h-0 transition-colors duration-300 ${dragOverPhaseId === phase.id ? 'bg-blue-50' : ''}`}>
                                 {procedureItems.map(item => {
                                     const linkedAddOns = addOnItems.filter(s => s.linkedItemIds && s.linkedItemIds[0] === item.id);

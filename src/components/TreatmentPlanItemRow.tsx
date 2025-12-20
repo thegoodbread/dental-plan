@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { TreatmentPlanItem, UrgencyLevel, FeeScheduleType } from '../types';
 import { Trash2, Edit2, Check, X, AlertTriangle, Clock, Smile, Calculator, ChevronDown, Star } from 'lucide-react';
@@ -36,7 +35,10 @@ interface TreatmentPlanItemRowProps {
 }
 
 export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ 
-    item, feeScheduleType = 'standard', onUpdate, onDelete, 
+    item, 
+    // FIX: Cast default value to FeeScheduleType to avoid widening to string type
+    feeScheduleType = 'standard' as FeeScheduleType, 
+    onUpdate, onDelete, 
     isAddOn = false, linkedItemNames = [], onAddSedation,
     onDragOver, onDragLeave, onDrop, isDragOver, isCompatibleDropTarget
 }) => {
@@ -200,6 +202,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
   const displayedSedationType = item.sedationType || item.procedureName.replace('Sedation – ', '');
 
   // Dynamic Pricing Calculation
+  // FIX: feeScheduleType is now correctly typed as FeeScheduleType
   const pricing = computeItemPricing(item, feeScheduleType);
 
   return (
@@ -274,7 +277,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
                         onChange={e => setBaseFee(parseFloat(e.target.value) || 0)}
                     />
                 </div>
-                <NumpadButton onClick={() => setIsNumpadOpen(true)} />
+                <NumpadButton onClick={() => setIsNumpadOpen(false)} />
             </div>
           ) : (
             <div className="flex flex-col items-end">
