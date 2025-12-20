@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { LayoutDashboard, Users, FileText, Settings, LogOut, Menu, X, Activity } from 'lucide-react';
 import * as ReactRouterDOM from 'react-router-dom';
@@ -20,6 +19,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { icon: Activity, label: 'Chairside', path: '/charting/new' },
     { icon: Users, label: 'Patients', path: '/patients' },
   ];
+
+  const isSettingsActive = location.pathname.startsWith('/settings');
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -102,7 +103,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
              <Link
                 to="/settings"
                 onClick={() => setIsMenuOpen(false)}
-                className={`flex items-center gap-3 px-3 py-3 md:py-2 rounded-lg text-sm font-medium transition-colors text-gray-700 hover:bg-gray-100`}
+                className={`flex items-center gap-3 px-3 py-3 md:py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isSettingsActive 
+                    ? 'bg-blue-50 text-blue-700' 
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
               >
                 <Settings size={20} />
                 Settings

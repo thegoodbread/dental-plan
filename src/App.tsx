@@ -1,4 +1,3 @@
-
 import React from 'react';
 import * as ReactRouterDOM from 'react-router-dom';
 import { Layout } from './components/Layout';
@@ -7,6 +6,7 @@ import { TreatmentPlanDetailPage } from './pages/TreatmentPlanDetailPage';
 import { PatientPlanPage } from './pages/PatientPlanPage';
 import { ChairsideChartingPage } from './pages/ChairsideChartingPage'; // Ensure this is imported
 import { PatientListPage } from './pages/PatientListPage';
+import { SettingsPage } from './pages/SettingsPage';
 
 const { HashRouter: Router, Routes, Route, Navigate } = ReactRouterDOM;
 
@@ -27,7 +27,7 @@ const AppContent: React.FC = () => {
         <Route path="/charting/:id" element={<ChairsideChartingPage />} />
         <Route path="/p/:token" element={<PatientPlanPage />} />
         <Route path="/patients" element={<PatientListPage />} />
-        <Route path="/settings" element={<div className="p-8 text-gray-500">Settings not implemented in this demo.</div>} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

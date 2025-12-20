@@ -1,4 +1,6 @@
-import { TreatmentPlan, TreatmentPlanItem, ShareLink, FeeUnitType, UrgencyLevel, FeeCategory, FeeScheduleType, ItemType, Patient, TreatmentPhase } from '../types';
+
+// FIX: Replaced FeeUnitType with exported ProcedureUnitType
+import { TreatmentPlan, TreatmentPlanItem, ShareLink, ProcedureUnitType, UrgencyLevel, FeeCategory, FeeScheduleType, ItemType, Patient, TreatmentPhase } from '../types';
 
 // Helper to create IDs
 const id = (prefix: string) => `${prefix}-${Math.random().toString(36).substr(2, 5)}`;

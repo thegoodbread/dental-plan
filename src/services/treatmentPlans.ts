@@ -17,7 +17,7 @@ import {
 import { DEMO_PLANS, DEMO_ITEMS, DEMO_SHARES, DEMO_PATIENTS } from '../mock/seedPlans';
 import { computeDocumentationReadiness, ReadinessInput, MissingItem, ReadinessProcedure, ReadinessDiagnosis, ReadinessEvidence } from '../domain/ClaimReadinessEngine';
 import { computeItemPricing, computePlanTotals } from '../utils/pricingLogic';
-import { getProcedureLibrary } from '../domain/procedureLibrary';
+import { listEffectiveProcedures, resolveEffectiveProcedure } from '../domain/procedureResolver';
 
 // --- KEYS ---
 const KEY_PLANS = 'dental_plans_v8';
@@ -364,68 +364,69 @@ export const savePlanAndItems = (plan: TreatmentPlan, items: TreatmentPlanItem[]
 
 // --- COMPATIBILITY ADAPTER ---
 export const getFeeSchedule = (): FeeScheduleEntry[] => {
-    const defs = getProcedureLibrary();
-    return defs.map(def => ({
-      id: def.id,
-      procedureCode: def.cdtCode,
-      procedureName: def.name,
-      category: def.category,
-      unitType: def.unitType,
-      baseFee: def.pricing.baseFee,
-      membershipFee: def.pricing.membershipFee,
-      isActive: true,
-      defaultEstimatedVisits: def.defaults.defaultEstimatedVisits,
-      defaultEstimatedDurationValue: def.defaults.defaultEstimatedDurationValue,
-      defaultEstimatedDurationUnit: def.defaults.defaultEstimatedDurationUnit || undefined
+    // REPLACED: Mock data with library resolver
+    const effectiveProcedures = listEffectiveProcedures();
+    return effectiveProcedures.map(p => ({
+        id: `proc_${p.cdtCode}`,
+        procedureCode: p.cdtCode,
+        procedureName: p.displayName,
+        category: p.category,
+        unitType: p.unitType,
+        baseFee: p.pricing.baseFee,
+        membershipFee: p.pricing.membershipFee,
+        isActive: true,
+        defaultEstimatedVisits: p.defaults.defaultEstimatedVisits,
+        defaultEstimatedDurationValue: p.defaults.defaultEstimatedDurationValue || undefined,
+        defaultEstimatedDurationUnit: p.defaults.defaultEstimatedDurationUnit || undefined
     }));
 };
 
 // --- ITEM CRUD OPERATIONS ---
 export const createTreatmentPlanItem = (planId: string, data: Partial<TreatmentPlanItem>): TreatmentPlanItem => {
+  const code = data.procedureCode;
+  const effectiveProc = code ? resolveEffectiveProcedure(code) : null;
+
   const newItem: TreatmentPlanItem = {
-    id: generateId(), treatmentPlanId: planId, feeScheduleEntryId: data.feeScheduleEntryId || '',
-    procedureCode: data.procedureCode || 'Dxxxx', procedureName: data.procedureName || 'Unknown Procedure',
-    unitType: data.unitType || 'PER_PROCEDURE', category: data.category || 'OTHER', itemType: 'PROCEDURE',
-    baseFee: data.baseFee || 0, units: data.units || 1, grossFee: (data.baseFee || 0) * (data.units || 1),
-    discount: data.discount || 0, netFee: ((data.baseFee || 0) * (data.units || 1)) - (data.discount || 0),
-    sortOrder: data.sortOrder || 0, ...data
+    id: generateId(), 
+    treatmentPlanId: planId, 
+    feeScheduleEntryId: data.feeScheduleEntryId || '',
+    procedureCode: data.procedureCode || 'Dxxxx', 
+    procedureName: data.procedureName || 'Unknown Procedure',
+    unitType: data.unitType || 'PER_PROCEDURE', 
+    category: data.category || 'OTHER', 
+    itemType: 'PROCEDURE',
+    baseFee: data.baseFee || 0, 
+    units: data.units || 1, 
+    grossFee: 0,
+    discount: data.discount || 0, 
+    netFee: 0,
+    sortOrder: data.sortOrder || 0, 
+    ...data
   };
-  
-  const library = getProcedureLibrary();
-  const definition = library.find(l => l.id === data.feeScheduleEntryId || l.cdtCode === data.procedureCode);
 
-  if (definition) {
-      newItem.feeScheduleEntryId = definition.id;
-      newItem.procedureCode = definition.cdtCode; 
-      newItem.procedureName = definition.name;
-      newItem.category = definition.category; 
-      newItem.unitType = definition.unitType;
-      newItem.baseFee = definition.pricing.baseFee; 
-      newItem.membershipFee = definition.pricing.membershipFee;
-      newItem.grossFee = newItem.baseFee * newItem.units; 
-      newItem.netFee = newItem.grossFee - newItem.discount;
+  // HYDRATION FROM LIBRARY
+  if (effectiveProc) {
+      newItem.procedureName = effectiveProc.displayName;
+      newItem.category = effectiveProc.category;
+      newItem.unitType = effectiveProc.unitType;
+      newItem.baseFee = effectiveProc.pricing.baseFee;
+      newItem.membershipFee = effectiveProc.pricing.membershipFee;
       
-      newItem.estimatedVisits = definition.defaults.defaultEstimatedVisits;
-      newItem.estimatedDurationValue = definition.defaults.defaultEstimatedDurationValue;
-      newItem.estimatedDurationUnit = definition.defaults.defaultEstimatedDurationUnit;
+      // Defaults
+      newItem.estimatedVisits = effectiveProc.defaults.defaultEstimatedVisits;
+      newItem.estimatedDurationValue = effectiveProc.defaults.defaultEstimatedDurationValue;
+      newItem.estimatedDurationUnit = effectiveProc.defaults.defaultEstimatedDurationUnit;
       
-      newItem.estimatedVisitsIsManual = data.estimatedVisitsIsManual ?? false;
-      newItem.estimatedDurationIsManual = data.estimatedDurationIsManual ?? false;
-
-      // Initialize selection rules - Crucial Fix: Respect incoming selection data from picker
-      if (definition.selectionRules.requiresToothSelection) {
-        newItem.selectedTeeth = data.selectedTeeth || [];
-      }
-      if (definition.selectionRules.allowsQuadrants) {
-        newItem.selectedQuadrants = data.selectedQuadrants || [];
-      }
-      if (definition.selectionRules.allowsArch) {
-        newItem.selectedArches = data.selectedArches || [];
-      }
-      if (definition.selectionRules.requiresSurfaces) {
-        newItem.surfaces = data.surfaces || [];
-      }
+      // Init selection fields based on rules
+      const rules = effectiveProc.selectionRules;
+      if (rules.requiresToothSelection) newItem.selectedTeeth = data.selectedTeeth || [];
+      if (rules.allowsQuadrants) newItem.selectedQuadrants = data.selectedQuadrants || [];
+      if (rules.allowsArch) newItem.selectedArches = data.selectedArches || [];
+      if (rules.requiresSurfaces) newItem.surfaces = data.surfaces || [];
   }
+
+  newItem.grossFee = newItem.baseFee * newItem.units;
+  newItem.netFee = Math.max(0, newItem.grossFee - newItem.discount);
 
   const allItems = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, []);
   saveToStorage(KEY_ITEMS, [...allItems, newItem]);
@@ -441,7 +442,7 @@ export const createTreatmentPlanItem = (planId: string, data: Partial<TreatmentP
   return newItem;
 };
 
-// --- REST OF CRUD AND VISIT LOGIC ---
+// ... REST OF CRUD LOGIC (update/delete) remains unchanged ...
 export const updateTreatmentPlanItem = (itemId: string, updates: Partial<TreatmentPlanItem>): { plan: TreatmentPlan, items: TreatmentPlanItem[] } | null => {
   const allItems = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, []);
   const index = allItems.findIndex(i => i.id === itemId);

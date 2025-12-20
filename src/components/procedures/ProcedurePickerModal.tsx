@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, X, Clock, AlertCircle, FileText, Upload, Download } from 'lucide-react';
-import { FeeScheduleEntry, FeeCategory, SelectionRules, ProcedureDefinition } from '../../types';
+import { Search, X, Clock, AlertCircle, FileText, Upload, Download, Info } from 'lucide-react';
+// FIX: ProcedureDefinition is now available from types.ts
+import { FeeScheduleEntry, FeeCategory, SelectionRules, ProcedureDefinition, EffectiveProcedure } from '../../types';
 import { getFeeSchedule } from '../../services/treatmentPlans';
-import { getProcedureLibrary, saveProcedureLibrary } from '../../domain/procedureLibrary';
-import { exportLibraryToCsv, parseCsvToLibrary } from '../../domain/procedureLibraryCsv';
+import { resolveEffectiveProcedure, listEffectiveProcedures } from '../../domain/procedureResolver';
 import { getProcedureIcon } from '../../utils/getProcedureIcon';
 import { ToothSelector } from '../ToothSelector';
 
@@ -18,38 +19,22 @@ const CATEGORIES: (FeeCategory | 'ALL')[] = [
   'PERIO', 'IMPLANT', 'PROSTHETIC', 'ORTHO', 'COSMETIC', 'OTHER'
 ];
 
-const RECENT_KEY = 'dental_recent_codes';
-
 export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({ 
   isOpen, onClose, onSelect 
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<FeeCategory | 'ALL'>('ALL');
-  const [highlightedIndex, setHighlightedIndex] = useState(0);
-  const [recentCodes, setRecentCodes] = useState<string[]>([]);
   
   // Selection Logic State
-  const [configuringProc, setConfiguringProc] = useState<ProcedureDefinition | null>(null);
+  const [configuringProc, setConfiguringProc] = useState<EffectiveProcedure | null>(null);
   const [selectedTeeth, setSelectedTeeth] = useState<number[]>([]);
   const [selectedSurfaces, setSelectedSurfaces] = useState<string[]>([]);
   const [selectedQuads, setSelectedQuads] = useState<('UR'|'UL'|'LR'|'LL')[]>([]);
   const [selectedArches, setSelectedArches] = useState<('UPPER'|'LOWER')[]>([]);
 
-  // CSV State
-  const [showCsvInput, setShowCsvInput] = useState(false);
-  const [csvText, setCsvText] = useState('');
-
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
 
-  const library = useMemo(() => getProcedureLibrary(), [isOpen]);
-  
-  useEffect(() => {
-    const saved = localStorage.getItem(RECENT_KEY);
-    if (saved) {
-      try { setRecentCodes(JSON.parse(saved)); } catch (e) {}
-    }
-  }, []);
+  const library = useMemo(() => listEffectiveProcedures(), [isOpen]);
 
   const displayList = useMemo(() => {
     let items = library;
@@ -58,7 +43,7 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
       const term = searchTerm.toLowerCase();
       items = items.filter(i => 
         i.cdtCode.toLowerCase().includes(term) ||
-        i.name.toLowerCase().includes(term)
+        i.displayName.toLowerCase().includes(term)
       );
     }
     return items;
@@ -67,38 +52,29 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => searchInputRef.current?.focus(), 50);
-      setHighlightedIndex(0);
       setConfiguringProc(null);
     }
   }, [isOpen]);
 
-  const handleEntryClick = (def: ProcedureDefinition) => {
-    const rules = def.selectionRules;
-    if (rules.requiresToothSelection || rules.allowsQuadrants || rules.allowsArch) {
-        setConfiguringProc(def);
-        setSelectedTeeth([]);
-        setSelectedSurfaces([]);
-        setSelectedQuads([]);
-        setSelectedArches([]);
-    } else {
-        commitSelection(def);
-    }
+  const handleEntryClick = (proc: EffectiveProcedure) => {
+    setConfiguringProc(proc);
+    setSelectedTeeth([]);
+    setSelectedSurfaces([]);
+    setSelectedQuads([]);
+    setSelectedArches([]);
   };
 
-  const commitSelection = (def: ProcedureDefinition) => {
-    const newRecents = [def.cdtCode, ...recentCodes.filter(c => c !== def.cdtCode)].slice(0, 8);
-    setRecentCodes(newRecents);
-    localStorage.setItem(RECENT_KEY, JSON.stringify(newRecents));
+  const commitSelection = () => {
+    if (!configuringProc) return;
     
-    // Map back to FeeScheduleEntry format for onSelect compatibility
     onSelect({
-        id: def.id,
-        procedureCode: def.cdtCode,
-        procedureName: def.name,
-        category: def.category,
-        unitType: def.unitType,
-        baseFee: def.pricing.baseFee,
-        membershipFee: def.pricing.membershipFee,
+        id: `proc_${configuringProc.cdtCode}`,
+        procedureCode: configuringProc.cdtCode,
+        procedureName: configuringProc.displayName,
+        category: configuringProc.category,
+        unitType: configuringProc.unitType,
+        baseFee: configuringProc.pricing.baseFee,
+        membershipFee: configuringProc.pricing.membershipFee,
         isActive: true,
         selectedTeeth: selectedTeeth.length ? selectedTeeth : undefined,
         selectedQuadrants: selectedQuads.length ? selectedQuads : undefined,
@@ -108,49 +84,23 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
     onClose();
   };
 
-  const isAddDisabled = useMemo(() => {
-    if (!configuringProc) return false;
+  const validation = useMemo(() => {
+    if (!configuringProc) return { ok: true, msg: "" };
     const rules = configuringProc.selectionRules;
-    if (rules.requiresToothSelection && selectedTeeth.length === 0) return true;
-    if (rules.allowsQuadrants && selectedQuads.length === 0) return true;
-    if (rules.allowsArch && selectedArches.length === 0) return true;
-    if (rules.requiresSurfaces && selectedSurfaces.length === 0) return true;
-    return false;
+    if (rules.requiresToothSelection && selectedTeeth.length === 0) return { ok: false, msg: "Select at least one tooth." };
+    if (rules.allowsQuadrants && selectedQuads.length === 0) return { ok: false, msg: "Select at least one quadrant." };
+    if (rules.allowsArch && selectedArches.length === 0) return { ok: false, msg: "Select an arch." };
+    if (rules.requiresSurfaces && selectedSurfaces.length === 0) return { ok: false, msg: "Surfaces required." };
+    return { ok: true, msg: "" };
   }, [configuringProc, selectedTeeth, selectedQuads, selectedArches, selectedSurfaces]);
-
-  const handleExport = () => {
-    const csv = exportLibraryToCsv(library);
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `procedure_library_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-  };
-
-  const handleImport = () => {
-    const newLib = parseCsvToLibrary(csvText);
-    if (newLib.length > 0) {
-        saveProcedureLibrary(newLib);
-        alert(`Imported ${newLib.length} procedures.`);
-        setShowCsvInput(false);
-        setCsvText('');
-    } else {
-        alert("Parse failed. Ensure CSV format is correct.");
-    }
-  };
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div 
-        className="bg-white w-full max-w-4xl h-[85vh] rounded-2xl shadow-2xl overflow-hidden border border-gray-200 flex flex-col animate-in zoom-in-95 duration-200"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="bg-white w-full max-w-4xl h-[85vh] rounded-2xl shadow-2xl overflow-hidden border border-gray-200 flex flex-col">
         {/* Header */}
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-white sticky top-0 z-30 shrink-0">
-          <div className="flex items-center gap-4 flex-1">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between shrink-0">
              <div className="relative flex-1 max-w-md">
                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                  <input
@@ -162,16 +112,10 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
                     onChange={(e) => setSearchTerm(e.target.value)}
                  />
              </div>
-             <div className="flex gap-2">
-                 <button onClick={() => setShowCsvInput(true)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Import Library"><Upload size={18}/></button>
-                 <button onClick={handleExport} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Export Library"><Download size={18}/></button>
-             </div>
-          </div>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-100 rounded-full ml-4"><X size={20}/></button>
+             <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-100 rounded-full ml-4"><X size={20}/></button>
         </div>
 
         <div className="flex-1 flex overflow-hidden">
-            {/* Sidebar Filters */}
             <div className="w-56 border-r border-gray-100 bg-gray-50/50 p-4 shrink-0 overflow-y-auto hidden md:block">
                 <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Categories</h4>
                 <div className="space-y-1">
@@ -181,19 +125,18 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
                             onClick={() => setSelectedCategory(cat)}
                             className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all ${selectedCategory === cat ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}`}
                         >
-                            {cat === 'ALL' ? 'All Procedures' : cat.charAt(0) + cat.slice(1).toLowerCase()}
+                            {cat === 'ALL' ? 'All' : cat.charAt(0) + cat.slice(1).toLowerCase()}
                         </button>
                     ))}
                 </div>
             </div>
 
-            {/* Main Area */}
             <div className="flex-1 flex flex-col min-w-0 bg-white">
                 {configuringProc ? (
                     <div className="flex-1 flex flex-col p-8 animate-in slide-in-from-right duration-200 overflow-y-auto">
                         <div className="mb-6 flex justify-between items-start">
                             <div>
-                                <h3 className="text-xl font-bold text-gray-900">{configuringProc.name}</h3>
+                                <h3 className="text-xl font-bold text-gray-900">{configuringProc.displayName}</h3>
                                 <div className="text-sm font-mono text-gray-500 mt-1">{configuringProc.cdtCode}</div>
                             </div>
                             <button onClick={() => setConfiguringProc(null)} className="text-xs font-bold text-blue-600 hover:underline">Change Procedure</button>
@@ -260,35 +203,41 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
                             )}
                         </div>
 
-                        <div className="pt-8 border-t border-gray-100 flex justify-end gap-3 shrink-0">
-                            <button onClick={() => setConfiguringProc(null)} className="px-6 py-2 text-sm font-bold text-gray-500 hover:text-gray-800">Cancel</button>
-                            <button 
-                                onClick={() => commitSelection(configuringProc)}
-                                disabled={isAddDisabled}
-                                className="px-8 py-2 bg-blue-600 text-white font-bold rounded-lg shadow-lg shadow-blue-100 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 transition-all"
-                            >
-                                Add to Plan
-                            </button>
+                        <div className="pt-8 border-t border-gray-100 flex flex-col items-end gap-3 shrink-0">
+                            {!validation.ok && (
+                                <div className="flex items-center gap-2 text-red-600 text-xs font-bold bg-red-50 px-3 py-2 rounded-lg border border-red-100 animate-in slide-in-from-bottom-1">
+                                    <AlertCircle size={14} /> {validation.msg}
+                                </div>
+                            )}
+                            <div className="flex gap-3">
+                                <button onClick={() => setConfiguringProc(null)} className="px-6 py-2 text-sm font-bold text-gray-500 hover:text-gray-800 transition-colors">Cancel</button>
+                                <button 
+                                    onClick={commitSelection}
+                                    disabled={!validation.ok}
+                                    className="px-8 py-2 bg-blue-600 text-white font-bold rounded-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 transition-all"
+                                >
+                                    Add to Plan
+                                </button>
+                            </div>
                         </div>
                     </div>
                 ) : (
                     <div className="flex-1 overflow-y-auto">
                         <div className="divide-y divide-gray-50">
-                            {displayList.map((item, idx) => {
-                                const isFullRow = item.uiHints.layout === 'fullRow';
-                                const Icon = getProcedureIcon({ procedureCode: item.cdtCode, procedureName: item.name });
+                            {displayList.map(item => {
+                                const Icon = getProcedureIcon({ procedureCode: item.cdtCode, procedureName: item.displayName });
                                 return (
                                     <div
-                                        key={item.id}
+                                        key={item.cdtCode}
                                         onClick={() => handleEntryClick(item)}
-                                        className={`px-4 py-4 flex items-center justify-between cursor-pointer transition-all hover:bg-blue-50/50 group ${isFullRow ? 'bg-gray-50/30' : ''}`}
+                                        className="px-4 py-4 flex items-center justify-between cursor-pointer transition-all hover:bg-blue-50/50 group"
                                     >
                                         <div className="flex items-center gap-4 min-w-0">
-                                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isFullRow ? 'bg-blue-100 text-blue-600 shadow-sm' : 'bg-gray-100 text-gray-400 group-hover:bg-blue-100 group-hover:text-blue-600'}`}>
+                                            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-gray-100 text-gray-400 group-hover:bg-blue-100 group-hover:text-blue-600">
                                                 <Icon size={20} />
                                             </div>
                                             <div className="min-w-0">
-                                                <div className="font-bold text-sm text-gray-900 group-hover:text-blue-900 truncate">{item.name}</div>
+                                                <div className="font-bold text-sm text-gray-900 group-hover:text-blue-900 truncate">{item.displayName}</div>
                                                 <div className="flex items-center gap-2 mt-0.5">
                                                     <code className="text-xs font-mono bg-white border border-gray-100 px-1 rounded text-gray-500">{item.cdtCode}</code>
                                                     <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">{item.category}</span>
@@ -297,47 +246,16 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
                                         </div>
                                         <div className="text-right ml-4 shrink-0">
                                             <div className="text-sm font-bold text-gray-900">${item.pricing.baseFee}</div>
-                                            {item.pricing.membershipFee !== undefined && <div className="text-[10px] text-teal-600 font-bold uppercase">Member: ${item.pricing.membershipFee}</div>}
+                                            {item.pricing.membershipFee !== null && <div className="text-[10px] text-teal-600 font-bold uppercase">Member: ${item.pricing.membershipFee}</div>}
                                         </div>
                                     </div>
                                 );
                             })}
                         </div>
-                        {displayList.length === 0 && (
-                            <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                                <Search size={40} className="opacity-20 mb-2" />
-                                <p className="text-sm font-medium">No procedures found.</p>
-                            </div>
-                        )}
                     </div>
                 )}
             </div>
         </div>
-
-        {/* CSV Modal Overlay */}
-        {showCsvInput && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
-                <div className="bg-white w-full max-w-lg rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95">
-                    <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
-                        <h3 className="font-bold text-gray-900 flex items-center gap-2"><FileText size={18}/> Import Library</h3>
-                        <button onClick={() => setShowCsvInput(false)} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
-                    </div>
-                    <div className="p-6">
-                        <p className="text-xs text-gray-500 mb-4">Paste CSV procedure data here. Header must match:<br/><code>cdtCode,name,category,unitType,baseFee,membershipFee,visits,duration,unit,layout</code></p>
-                        <textarea 
-                            className="w-full h-64 p-3 border border-gray-200 rounded-lg text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="D0150,Comp Exam,DIAGNOSTIC,PER_PROCEDURE,95,0,1,1,days,fullRow"
-                            value={csvText}
-                            onChange={e => setCsvText(e.target.value)}
-                        />
-                    </div>
-                    <div className="p-4 bg-gray-50 border-t flex justify-end gap-3">
-                        <button onClick={() => setShowCsvInput(false)} className="px-4 py-2 text-sm font-bold text-gray-600">Cancel</button>
-                        <button onClick={handleImport} className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg">Apply Library</button>
-                    </div>
-                </div>
-            </div>
-        )}
       </div>
     </div>
   );

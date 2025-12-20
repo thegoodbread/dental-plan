@@ -1,4 +1,6 @@
-import { ProcedureDefinition, FeeCategory, FeeUnitType } from '../types';
+
+// FIX: ProcedureDefinition and ProcedureUnitType are correctly imported from src/types.ts
+import { ProcedureDefinition, FeeCategory, ProcedureUnitType } from '../types';
 
 export function exportLibraryToCsv(defs: ProcedureDefinition[]): string {
   const headers = "cdtCode,name,category,unitType,baseFee,membershipFee,defaultEstimatedVisits,defaultEstimatedDurationValue,defaultEstimatedDurationUnit,layout";
@@ -34,7 +36,8 @@ export function parseCsvToLibrary(csv: string): ProcedureDefinition[] {
       cdtCode: cdt,
       name: getVal("name") || "Untitled",
       category: (getVal("category") as FeeCategory) || "OTHER",
-      unitType: (getVal("unitType") as FeeUnitType) || "PER_PROCEDURE",
+      // FIX: Cast to valid ProcedureUnitType
+      unitType: (getVal("unitType") as ProcedureUnitType) || "PER_PROCEDURE",
       pricing: {
         baseFee: parseFloat(getVal("baseFee")) || 0,
         membershipFee: parseFloat(getVal("membershipFee")) || undefined
