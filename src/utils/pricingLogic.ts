@@ -1,4 +1,3 @@
-
 import { TreatmentPlanItem, FeeScheduleType } from '../types';
 
 export interface ItemPricing {
@@ -16,30 +15,34 @@ export interface ItemPricing {
  * Calculates standard vs member fees, totals, and savings based on the plan's mode.
  */
 export const computeItemPricing = (item: TreatmentPlanItem, mode: FeeScheduleType): ItemPricing => {
-  const standardUnitFee = item.baseFee;
-  const memberUnitFee = item.membershipFee ?? item.baseFee;
+  const standardUnitFee = item.baseFee ?? 0;
+  
+  // 3-STATE MEMBERSHIP LOGIC:
+  // null => Not defined (fallback to standard)
+  // 0    => Included benefit ($0)
+  // > 0  => Custom discounted rate
+  const hasMemberPriceDefined = item.membershipFee !== null && item.membershipFee !== undefined;
+  const memberUnitFee = hasMemberPriceDefined ? item.membershipFee! : standardUnitFee;
+  
   const isMemberMode = mode === 'membership';
 
-  // Determine which fee is active
+  // Determine which fee is active for net calculations
   let activeUnitFee = standardUnitFee;
-  if (isMemberMode && item.membershipFee != null) {
+  if (isMemberMode && hasMemberPriceDefined) {
     activeUnitFee = memberUnitFee;
   }
 
-  const units = item.units || 1;
+  const units = item.units ?? 1;
   const grossStandard = standardUnitFee * units;
   const grossActive = activeUnitFee * units;
   
-  // Net fee includes manual item-level discounts (subtracted from gross)
-  const discount = item.discount || 0;
+  const discount = item.discount ?? 0;
   const netFee = Math.max(0, grossActive - discount);
 
-  // Savings Logic:
-  // We strictly calculate savings as the difference between Standard and Member rates.
-  // Manual discounts are treated as separate adjustments.
+  // Savings are strictly the Delta between Standard and Member rates
   let memberSavings = 0;
-  if (isMemberMode && item.membershipFee != null && item.membershipFee < item.baseFee) {
-    memberSavings = (item.baseFee - item.membershipFee) * units;
+  if (isMemberMode && hasMemberPriceDefined && memberUnitFee < standardUnitFee) {
+    memberSavings = (standardUnitFee - memberUnitFee) * units;
   }
 
   return {
@@ -49,7 +52,7 @@ export const computeItemPricing = (item: TreatmentPlanItem, mode: FeeScheduleTyp
     grossActive,
     netFee,
     memberSavings,
-    isMemberPrice: isMemberMode && item.membershipFee != null
+    isMemberPrice: isMemberMode && hasMemberPriceDefined
   };
 };
 

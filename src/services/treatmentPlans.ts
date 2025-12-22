@@ -16,9 +16,9 @@ import {
   PhaseBucketKey
 } from '../types';
 import { DEMO_PLANS, DEMO_ITEMS, DEMO_SHARES, DEMO_PATIENTS } from '../mock/seedPlans';
-import { computeDocumentationReadiness, ReadinessInput, MissingItem, ReadinessProcedure, ReadinessDiagnosis, ReadinessEvidence } from '../domain/ClaimReadinessEngine';
 import { computeItemPricing, computePlanTotals } from '../utils/pricingLogic';
 import { listEffectiveProcedures, resolveEffectiveProcedure } from '../domain/procedureResolver';
+import { computeDocumentationReadiness, ReadinessInput, ReadinessProcedure, ReadinessDiagnosis, ReadinessEvidence, MissingItem } from '../domain/ClaimReadinessEngine';
 
 // --- KEYS ---
 const KEY_PLANS = 'dental_plans_v8';
@@ -73,7 +73,7 @@ export const computeBucketKeyForItem = (item: TreatmentPlanItem): PhaseBucketKey
     return 'FOUNDATION';
   }
   if (cat.includes('DIAGNOSTIC') || cat.includes('PREVENT') || cat.includes('PERIO')) return 'FOUNDATION';
-  if (code.startsWith('D0') || code.startsWith('D1') || code.startsWith('D4')) return 'FOUNDATION';
+  if (code.startsWith('D01') || code.startsWith('D1') || code.startsWith('D4')) return 'FOUNDATION';
   if (cat.includes('ENDO') || cat.includes('RESTOR')) return 'RESTORATIVE';
   if (code.startsWith('D2') || code.startsWith('D3')) return 'RESTORATIVE';
   if (cat.includes('IMPLANT') || cat.includes('SURG')) return 'IMPLANT';
@@ -124,30 +124,42 @@ export function hydrateItemClinicalDefaultsFromFeeSchedule(items: TreatmentPlanI
     let itemChanged = false;
     const updated = { ...item };
 
-    // DATA INVARIANT: Overwrite procedureName ONLY if it is "technical" (empty, equals code, or placeholder).
-    // This prevents clinical label destruction during background sync.
-    const isNameTechnical = !updated.procedureName || 
-                            updated.procedureName.trim() === "" ||
-                            updated.procedureName === updated.procedureCode || 
-                            updated.procedureName === "Unknown Procedure" || 
-                            updated.procedureName === "Needs label";
+    // TIGHT HYDRATION: Only overwrite names if technical placeholders or the code itself are used.
+    const currentName = updated.procedureName;
+    const code = updated.procedureCode;
+    const isNameTechnical = !currentName || 
+                            currentName.trim() === "" ||
+                            currentName === code || 
+                            currentName === "Unknown Procedure" || 
+                            currentName === "Needs label";
     
     if (isNameTechnical && !effective.isLabelMissing) {
         updated.procedureName = effective.displayName;
         updated.isCustomProcedureNameMissing = false;
         itemChanged = true;
     } else if (isNameTechnical && effective.isLabelMissing) {
-        // Ensure flag is correct even if we can't find a better name yet
         if (updated.procedureName !== "Needs label") {
             updated.procedureName = "Needs label";
             itemChanged = true;
         }
         updated.isCustomProcedureNameMissing = true;
-        // flag updated on next step if it wasn't already set
-    } else if (!isNameTechnical) {
-        // If it already has a good name, just ensure the missing-label flag is off.
-        if (updated.isCustomProcedureNameMissing) {
+    } else {
+        if (updated.isCustomProcedureNameMissing !== false) {
             updated.isCustomProcedureNameMissing = false;
+            itemChanged = true;
+        }
+    }
+
+    // AUTHORITATIVE PRICING: Sync only if NOT manually overridden
+    if (!updated.baseFeeIsManual) {
+        if (updated.baseFee !== effective.pricing.baseFee) {
+            updated.baseFee = effective.pricing.baseFee;
+            itemChanged = true;
+        }
+    }
+    if (!updated.membershipFeeIsManual) {
+        if (updated.membershipFee !== effective.pricing.membershipFee) {
+            updated.membershipFee = effective.pricing.membershipFee;
             itemChanged = true;
         }
     }
@@ -155,7 +167,6 @@ export function hydrateItemClinicalDefaultsFromFeeSchedule(items: TreatmentPlanI
     if (updated.estimatedVisitsIsManual === undefined) { updated.estimatedVisitsIsManual = false; itemChanged = true; }
     if (updated.estimatedDurationIsManual === undefined) { updated.estimatedDurationIsManual = false; itemChanged = true; }
 
-    // Use ?? to allow 0-value defaults
     if (updated.estimatedVisitsIsManual !== true) {
        const defVisits = effective.defaults.defaultEstimatedVisits ?? 1;
        if (updated.estimatedVisits !== defVisits) {
@@ -201,8 +212,6 @@ export const rebuildPhaseManifest = (plan: TreatmentPlan, items: TreatmentPlanIt
     }));
     return { ...plan, phases: newPhases };
 };
-
-// --- DURATION CALCULATION HELPERS ---
 
 const convertToDays = (value: number | null | undefined, unit: 'days' | 'weeks' | 'months' | null | undefined): number => {
     if (!value || !unit) return 0;
@@ -260,7 +269,6 @@ export function rebuildPhaseDurationsFromItems(plan: TreatmentPlan, items: Treat
   return { ...plan, phases: updatedPhases };
 }
 
-// --- PRICING LOGIC ---
 const recalculatePlanTotals = (plan: TreatmentPlan, items: TreatmentPlanItem[]): TreatmentPlan => {
     const planItems = items.filter(i => i.treatmentPlanId === plan.id);
     const { totalFee, totalMemberSavings } = computePlanTotals(planItems, plan.feeScheduleType);
@@ -278,13 +286,10 @@ export const setPlanPricingMode = (planId: string, mode: FeeScheduleType) => {
     const allItems = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, DEMO_ITEMS);
     const planItems = allItems.filter(i => i.treatmentPlanId === planId);
     
-    let updatedItems = planItems.map(item => {
+    const updatedItems = planItems.map(item => {
         const pricing = computeItemPricing(item, mode);
         return { ...item, netFee: pricing.netFee, grossFee: pricing.grossActive };
     });
-
-    const { items: hydratedItems } = hydrateItemClinicalDefaultsFromFeeSchedule(updatedItems);
-    updatedItems = hydratedItems;
 
     const itemMap = new Map(updatedItems.map(i => [i.id, i]));
     const newAllItems = allItems.map(i => itemMap.get(i.id) || i);
@@ -300,7 +305,6 @@ export const setPlanPricingMode = (planId: string, mode: FeeScheduleType) => {
     return { plan: finalPlan, items: updatedItems };
 };
 
-// --- PLANS & ITEMS ---
 export const getAllTreatmentPlans = (): TreatmentPlan[] => getFromStorage<TreatmentPlan>(KEY_PLANS, DEMO_PLANS);
 
 export const getTreatmentPlanById = (id: string): TreatmentPlan | undefined => {
@@ -389,7 +393,6 @@ export const savePlanAndItems = (plan: TreatmentPlan, items: TreatmentPlanItem[]
     return { plan: planToSave, items: sortedItems };
 };
 
-// --- COMPATIBILITY ADAPTER ---
 export const getFeeSchedule = (): FeeScheduleEntry[] => {
     const effectiveProcedures = listEffectiveProcedures();
     return effectiveProcedures.map(p => ({
@@ -401,19 +404,16 @@ export const getFeeSchedule = (): FeeScheduleEntry[] => {
         baseFee: p.pricing.baseFee,
         membershipFee: p.pricing.membershipFee,
         isActive: true,
-        // Using ?? for defaults
         defaultEstimatedVisits: p.defaults.defaultEstimatedVisits ?? 1,
         defaultEstimatedDurationValue: p.defaults.defaultEstimatedDurationValue ?? undefined,
         defaultEstimatedDurationUnit: p.defaults.defaultEstimatedDurationUnit ?? undefined
     }));
 };
 
-// --- ITEM CRUD OPERATIONS ---
 export const createTreatmentPlanItem = (planId: string, data: Partial<TreatmentPlanItem>): TreatmentPlanItem => {
   const code = data.procedureCode;
   const effectiveProc = code ? resolveEffectiveProcedure(code) : null;
 
-  // STRICT ENFORCEMENT: Procedures MUST NOT have a technical CDT code as their primary name.
   const providedName = data.procedureName;
   const hasValidProvidedName = providedName && 
                                providedName.trim() !== "" &&
@@ -430,6 +430,7 @@ export const createTreatmentPlanItem = (planId: string, data: Partial<TreatmentP
     category: data.category || (effectiveProc ? effectiveProc.category : 'OTHER'), 
     itemType: 'PROCEDURE',
     baseFee: data.baseFee ?? (effectiveProc ? effectiveProc.pricing.baseFee : 0), 
+    membershipFee: data.membershipFee ?? (effectiveProc ? effectiveProc.pricing.membershipFee : null),
     units: data.units || 1, 
     grossFee: 0,
     discount: data.discount || 0, 
@@ -438,46 +439,40 @@ export const createTreatmentPlanItem = (planId: string, data: Partial<TreatmentP
     ...data
   };
 
-  // HYDRATION FROM LIBRARY
   if (effectiveProc) {
       if (!hasValidProvidedName) {
          newItem.procedureName = effectiveProc.isLabelMissing ? "Needs label" : effectiveProc.displayName;
       }
       newItem.category = effectiveProc.category;
       newItem.unitType = effectiveProc.unitType;
-      newItem.baseFee = effectiveProc.pricing.baseFee ?? 0;
-      newItem.membershipFee = effectiveProc.pricing.membershipFee ?? null;
+      
+      // Initial creation respects meta defaults, but we flag as NOT manual yet unless explicit
+      newItem.baseFee = data.baseFee ?? effectiveProc.pricing.baseFee ?? 0;
+      newItem.membershipFee = data.membershipFee ?? effectiveProc.pricing.membershipFee ?? null;
+      newItem.baseFeeIsManual = data.baseFee !== undefined;
+      newItem.membershipFeeIsManual = data.membershipFee !== undefined;
+
       newItem.isCustomProcedureNameMissing = effectiveProc.isLabelMissing;
       
-      // Defaults - Using ?? for numeric safety
       newItem.estimatedVisits = effectiveProc.defaults.defaultEstimatedVisits ?? 1;
       newItem.estimatedDurationValue = effectiveProc.defaults.defaultEstimatedDurationValue ?? null;
       newItem.estimatedDurationUnit = effectiveProc.defaults.defaultEstimatedDurationUnit ?? null;
       
-      // Init selection fields based on rules
       const rules = effectiveProc.selectionRules;
       if (rules.requiresToothSelection) newItem.selectedTeeth = data.selectedTeeth || [];
       if (rules.allowsQuadrants) newItem.selectedQuadrants = data.selectedQuadrants || [];
       if (rules.allowsArch) newItem.selectedArches = data.selectedArches || [];
       if (rules.requiresSurfaces) newItem.surfaces = data.surfaces || [];
-  } else {
-      const ut = newItem.unitType;
-      if (ut === 'PER_TOOTH') newItem.selectedTeeth = data.selectedTeeth || [];
-      if (ut === 'PER_QUADRANT') newItem.selectedQuadrants = data.selectedQuadrants || [];
-      if (ut === 'PER_ARCH') newItem.selectedArches = data.selectedArches || [];
-      
-      if (!hasValidProvidedName) {
-          newItem.isCustomProcedureNameMissing = true;
-      }
   }
 
-  newItem.grossFee = newItem.baseFee * newItem.units;
-  newItem.netFee = Math.max(0, newItem.grossFee - newItem.discount);
+  const plan = getTreatmentPlanById(planId);
+  const currentPricing = computeItemPricing(newItem, plan?.feeScheduleType || 'standard');
+  newItem.grossFee = currentPricing.grossActive;
+  newItem.netFee = currentPricing.netFee;
 
   const allItems = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, []);
   saveToStorage(KEY_ITEMS, [...allItems, newItem]);
   
-  const plan = getTreatmentPlanById(planId);
   if (plan) {
       const planItems = [...allItems, newItem].filter(i => i.treatmentPlanId === planId);
       const { totalFee, totalMemberSavings } = computePlanTotals(planItems, plan.feeScheduleType);
@@ -495,11 +490,13 @@ export const updateTreatmentPlanItem = (itemId: string, updates: Partial<Treatme
   const originalItem = allItems[index];
   let updatedItem = { ...originalItem, ...updates };
 
-  // If name is updated to a valid string, clear the missing flag
   if (updates.procedureName && updates.procedureName !== updatedItem.procedureCode && updates.procedureName !== "Needs label" && updates.procedureName.trim() !== "") {
       updatedItem.isCustomProcedureNameMissing = false;
   }
 
+  // TRACK MANUAL OVERRIDES
+  if (updates.baseFee !== undefined) updatedItem.baseFeeIsManual = true;
+  if (updates.membershipFee !== undefined) updatedItem.membershipFeeIsManual = true;
   if (updates.estimatedVisits !== undefined) updatedItem.estimatedVisitsIsManual = true;
   if (updates.estimatedDurationValue !== undefined || updates.estimatedDurationUnit !== undefined) {
      updatedItem.estimatedDurationIsManual = true;
@@ -526,6 +523,13 @@ export const updateTreatmentPlanItem = (itemId: string, updates: Partial<Treatme
   return { plan: plan!, items: [] };
 };
 
+export const rehydrateAllPlans = () => {
+    const plans = getAllTreatmentPlans();
+    plans.forEach(plan => {
+        loadTreatmentPlanWithItems(plan.id);
+    });
+};
+
 export const deleteTreatmentPlanItem = (itemId: string) => {
   const allItems = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, []);
   const itemToDelete = allItems.find(i => i.id === itemId);
@@ -547,7 +551,6 @@ export const deleteTreatmentPlanItem = (itemId: string) => {
   }
 };
 
-// --- AUDIT FIX FOR MISSING HELPERS ---
 export const createAddOnItem = (planId: string, def: any): TreatmentPlanItem => {
   return createTreatmentPlanItem(planId, { ...def, itemType: 'ADDON' });
 };
@@ -587,10 +590,6 @@ export const ADD_ON_LIBRARY: AddOnDefinition[] = [
 
 export const SEDATION_TYPES = ADD_ON_LIBRARY.filter(a => a.kind === 'SEDATION');
 
-/**
- * PRODUCTION INVARIANT: Validates whether a specific add-on kind (like Bone Graft) 
- * can be logically attached to a procedure category (like Surgical).
- */
 export const checkAddOnCompatibility = (kind: AddOnKind, cat: FeeCategory): boolean => {
     const surgicalCats: FeeCategory[] = ['SURGICAL', 'IMPLANT', 'OTHER'];
     const restorativeCats: FeeCategory[] = ['RESTORATIVE', 'PROSTHETIC', 'COSMETIC', 'ENDODONTIC'];
@@ -601,7 +600,6 @@ export const checkAddOnCompatibility = (kind: AddOnKind, cat: FeeCategory): bool
     if (kind === 'CORE_BUILDUP' || kind === 'TEMP_CROWN' || kind === 'PULP_CAP') {
         return restorativeCats.includes(cat);
     }
-    // Sedation, Medication, etc are universally compatible
     return true;
 };
 
@@ -684,20 +682,62 @@ export const getPlanByShareToken = (token: string) => {
 };
 
 export const getReadinessInputForVisit = (visitId: string): ReadinessInput | null => {
-  const v = getFromStorage<Visit>(KEY_VISITS, []).find(x => x.id === visitId);
-  if (!v) return null;
-  const items = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, []).filter(i => i.performedInVisitId === visitId);
+  const allVisits = getFromStorage<Visit>(KEY_VISITS, []);
+  const visit = allVisits.find(v => v.id === visitId);
+  if (!visit) return null;
+
+  const plan = getTreatmentPlanById(visit.treatmentPlanId);
+  if (!plan) return null;
+
+  const allItems = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, []);
+  const visitItems = allItems.filter(i => i.performedInVisitId === visit.id);
+
+  const provider = visit.providerId ? getProviderById(visit.providerId) : undefined;
+  const patient = plan.patientId ? getPatients().find(p => p.id === plan.patientId) : undefined;
+
+  const procedures: ReadinessProcedure[] = visitItems.map(p => ({
+    id: p.id,
+    cdtCode: p.procedureCode,
+    label: p.procedureName,
+    tooth: p.selectedTeeth?.join(','),
+    surfaces: p.surfaces,
+    quadrant: p.selectedQuadrants?.[0],
+    isCompleted: p.procedureStatus === 'COMPLETED'
+  }));
+
+  const diagnoses: ReadinessDiagnosis[] = visitItems.flatMap(p => 
+    (p.diagnosisCodes || []).map(code => ({ procedureId: p.id, icd10: code }))
+  );
+
+  const evidence: ReadinessEvidence[] = [];
+  visitItems.forEach(p => {
+    if (p.documentation?.hasXray) evidence.push({ procedureId: p.id, type: 'pre_op_xray', attached: true });
+    if (p.documentation?.hasPerioChart) evidence.push({ procedureId: p.id, type: 'perio_charting', attached: true });
+    if (p.documentation?.hasPhoto) evidence.push({ procedureId: p.id, type: 'intraoral_photo', attached: true });
+    if (p.documentation?.hasFmxWithin36Months) evidence.push({ procedureId: p.id, type: 'fmX_pano_recent', attached: true });
+  });
+
   return {
-    procedures: items.map(p => ({ id: p.id, cdtCode: p.procedureCode, label: p.procedureName, isCompleted: p.procedureStatus === 'COMPLETED' })),
-    diagnoses: items.flatMap(p => (p.diagnosisCodes || []).map(d => ({ procedureId: p.id, icd10: d }))),
-    evidence: [],
-    risksAndConsentComplete: true
+    procedures,
+    diagnoses,
+    evidence,
+    risksAndConsentComplete: (plan.assignedRisks || []).some(r => r.consentCapturedAt) || 
+                             (visit.assignedRisks || []).some(r => r.consentCapturedAt),
+    provider: provider ? { npi: provider.npi } : undefined,
+    patient: patient ? { dob: patient.dob, memberId: patient.memberId } : undefined,
+    serviceDate: visit.date,
   };
 };
 
-export const canAdvanceVisitToClaimReady = (input: any) => ({ ok: true, blockers: [] });
+export const canAdvanceVisitToClaimReady = (input: ReadinessInput): { ok: boolean, blockers: MissingItem[] } => {
+  const result = computeDocumentationReadiness(input);
+  const blockers = result.items.filter(i => i.severity === 'blocker');
+  return {
+    ok: blockers.length === 0,
+    blockers
+  };
+};
 
-// Self-healing migration for technical names
 const migrateTechnicalNames = () => {
     if (typeof window === 'undefined') return;
     let allItems = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, []);

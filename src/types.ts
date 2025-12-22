@@ -269,7 +269,9 @@ export interface TreatmentPlanItem {
   phaseId?: string | null;
   phaseLocked?: boolean;
   baseFee: number;
+  baseFeeIsManual?: boolean; // NEW: track manual overrides
   membershipFee?: number | null;
+  membershipFeeIsManual?: boolean; // NEW: track manual overrides
   units: number;
   grossFee: number;
   discount: number;

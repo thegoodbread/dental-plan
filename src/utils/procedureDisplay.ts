@@ -10,24 +10,32 @@ export const getProcedurePrimaryLabel = (item: TreatmentPlanItem, context: 'staf
   const name = item.procedureName;
   const code = item.procedureCode;
   
-  // Non-technical name check
-  const isValidHumanName = (n: string | undefined) => 
-    n && n.trim() !== '' && n !== code && n !== "Unknown Procedure" && n !== "Needs label";
+  // A name is technical (invalid as a primary human label) if it's empty, 
+  // exactly matches the code, or contains known technical placeholders.
+  const isTechnical = !name || 
+                      name.trim() === '' || 
+                      name === code || 
+                      name === "Unknown Procedure" || 
+                      name === "Needs label";
 
-  if (isValidHumanName(name)) {
+  // 1. If we already have a valid human-friendly name on the item, use it.
+  if (!isTechnical) {
     return name!;
   }
   
+  // 2. If technical/missing on item, try the authoritative Clinic Library.
   const effective = resolveEffectiveProcedure(code);
   if (effective && !effective.isLabelMissing) {
     return effective.displayName;
   }
 
-  // Final fallback strategy
+  // 3. Final fallback strategy based on context.
   if (context === 'patient') {
+    // In patient views, we must NEVER show "Needs label" or raw CDT codes.
     return "Treatment item";
   }
   
+  // In staff views, we show the placeholder so they know to define it.
   return "Needs label";
 };
 
@@ -43,4 +51,4 @@ export const getProcedureDisplayName = (item: TreatmentPlanItem): string => {
  */
 export const getProcedureDisplayCode = (item: TreatmentPlanItem): string | null => {
   return item.procedureCode || null;
-};
+}

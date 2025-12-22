@@ -5,7 +5,7 @@ import { ToothSelectorModal } from './ToothSelectorModal';
 import { NumberPadModal } from './NumberPadModal';
 import { SEDATION_TYPES } from '../services/treatmentPlans';
 import { computeItemPricing } from '../utils/pricingLogic';
-import { getProcedureDisplayName, getProcedureDisplayCode } from '../utils/procedureDisplay';
+import { getProcedurePrimaryLabel, getProcedureDisplayCode } from '../utils/procedureDisplay';
 import { mergeOrUpsertClinicProcedure } from '../domain/clinicProcedureLibrary';
 import { resolveEffectiveProcedure } from '../domain/procedureResolver';
 
@@ -70,7 +70,6 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
         return;
     }
 
-    // 1. Update master clinic library
     const effective = resolveEffectiveProcedure(item.procedureCode);
     mergeOrUpsertClinicProcedure({
         cdtCode: item.procedureCode,
@@ -79,7 +78,6 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
         membershipFee: effective?.pricing.membershipFee ?? null
     });
 
-    // 2. Update local item instance
     onUpdate(item.id, { 
         procedureName: editName,
         isCustomProcedureNameMissing: false 
@@ -105,7 +103,6 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
   const toggleSurface = (s: string) => {
     setEditSurfaces(prev => {
         const next = prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s];
-        // Ensure strictly sorted according to canonical MODBLIF order
         return [...next].sort((a, b) => SURFACES.indexOf(a) - SURFACES.indexOf(b));
     });
   };
@@ -171,7 +168,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
                             <button
                                 key={s}
                                 onClick={() => toggleSurface(s)}
-                                className={`w-6 h-6 flex items-center justify-center rounded border text-[10px] font-bold transition-all ${editSurfaces.includes(s) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white text-gray-400 border-gray-200 hover:border-gray-300'}`}
+                                className={`w-6 h-6 flex items-center justify-center rounded border text-[10px] font-bold transition-all ${editSurfaces.includes(s) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white text-gray-400 border-gray-200 hover:border-blue-300'}`}
                             >
                                 {s}
                             </button>
@@ -260,9 +257,9 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
   const displayedSedationType = item.sedationType || item.procedureName.replace('Sedation – ', '');
 
   const pricing = computeItemPricing(item, feeScheduleType);
-  const displayName = getProcedureDisplayName(item);
+  const displayName = getProcedurePrimaryLabel(item, 'staff');
   const displayCode = getProcedureDisplayCode(item);
-  const needsLabel = displayName === "Needs label" || item.isCustomProcedureNameMissing;
+  const isNeedsLabel = displayName === "Needs label" || item.isCustomProcedureNameMissing;
 
   return (
     <>
@@ -292,7 +289,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
                        </select>
                        <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
                    </div>
-                 <div className="text-xs text-gray-500 font-mono mb-1">{displayCode}</div>
+                 <div className="text-[10px] font-mono font-bold text-slate-400 mt-0.5">{displayCode}</div>
              </div>
           ) : (
              <>
@@ -317,8 +314,8 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
                      </div>
                  ) : (
                      <div className="flex items-center gap-2">
-                        <div className={`font-medium text-sm ${needsLabel ? 'text-red-500 italic' : textClass}`}>{displayName}</div>
-                        {needsLabel && (
+                        <div className={`font-bold text-sm ${isNeedsLabel ? 'text-red-500 italic' : textClass}`}>{displayName}</div>
+                        {isNeedsLabel && (
                             <button 
                                 onClick={() => { setEditName(""); setIsDefiningLabel(true); }}
                                 className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100 hover:bg-red-100 transition-colors"
@@ -328,7 +325,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
                         )}
                      </div>
                  )}
-                 <div className="text-xs text-gray-500 font-mono mb-1">{displayCode}</div>
+                 <div className="text-[10px] font-mono font-bold text-slate-400 mt-0.5">{displayCode}</div>
              </>
           )}
           
