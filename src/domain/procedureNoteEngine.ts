@@ -1,4 +1,3 @@
-
 import { NoteEngineProcedureInput, SoapSection, VisitType } from "./dentalTypes";
 import { PROCEDURE_NOTE_TEMPLATES, ProcedureNoteTemplate } from "./procedureNoteTemplates";
 
@@ -16,7 +15,6 @@ export const VISIT_LABELS: Record<VisitType, string> = {
 function normalizeVisitType(v: string | VisitType): VisitType {
   const allowed: VisitType[] = ['restorative', 'endo', 'hygiene', 'exam', 'surgery', 'ortho', 'other'];
   if (!(allowed as string[]).includes(v)) {
-    // Default to 'other' if unknown, or handle gracefully
     return 'other'; 
   }
   return v as VisitType;
@@ -60,19 +58,20 @@ export function buildTemplateContext(args: {
   if (teeth.length > 0) {
     toothList = teeth.map(t => `#${t}`).join(", ");
   } else if (item.selectedQuadrants && item.selectedQuadrants.length > 0) {
-    toothList = item.selectedQuadrants.join("/") + " quad";
+    toothList = item.selectedQuadrants.join("/") + " quadrant(s)";
   } else if (item.selectedArches && item.selectedArches.length > 0) {
-    toothList = item.selectedArches.join(" ") + " arch";
+    // Enhanced Arch Labeling for Clinical Narratives
+    toothList = item.selectedArches.map(a => a === 'UPPER' ? 'Maxillary Arch' : 'Mandibular Arch').join(" and ");
   }
 
   const context: Record<string, string> = {
     tooth_list: toothList,
     visit_type_label: VISIT_LABELS[args.visitType] || args.visitType,
-    chief_complaint: "sensitivity to cold/sweets",
+    chief_complaint: "sensitivity/functional limitation",
     percussion_status: "WNL",
     palpation_status: "WNL",
     vitality_status: "vital",
-    isolation_method: "rubber dam/isolation system",
+    isolation_method: "cotton roll/dry angle",
   };
 
   if (item.procedureName) {
@@ -107,14 +106,12 @@ export function applyTemplateToSoapSections(params: {
   let procedureLabel = item.procedureName || "Procedure";
   if (context.tooth_list && context.tooth_list !== "treated area") {
       procedureLabel += ` ${context.tooth_list}`;
-  } else if (item.selectedTeeth && item.selectedTeeth.length > 0) {
-      procedureLabel += ` #${item.selectedTeeth.join(",")}`;
   }
 
   const updatedSections = existingSections.map(section => {
     let templatePart;
     if (section.type === 'SUBJECTIVE') templatePart = template.soap.subjective;
-    else if (section.type === 'OBJECTIVE') templatePart = template.soap.objective;
+    else if (section.type === 'OBJECTIVE') templatePart = templatePart = template.soap.objective;
     else if (section.type === 'ASSESSMENT') templatePart = template.soap.assessment;
     else if (section.type === 'PLAN') templatePart = template.soap.plan;
     else if (section.type === 'TREATMENT_PERFORMED') templatePart = template.soap.treatment_performed;
@@ -136,13 +133,6 @@ export function applyTemplateToSoapSections(params: {
     } else {
         const header = `— ${procedureLabel} —`;
         const blockToAppend = `\n\n${header}\n${hydratedText}`;
-        
-        // Prevent duplicate appends if clicked multiple times rapidly
-        if (newContent.includes(hydratedText)) {
-             // simplistic de-dupe
-             // return section; 
-        }
-        
         newContent = newContent + blockToAppend;
     }
 

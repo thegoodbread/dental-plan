@@ -19,13 +19,6 @@ export const STARTER_PROCEDURES: ProcedureDefinition[] = [
     defaults: { defaultEstimatedVisits: 1, defaultEstimatedDurationValue: 1, defaultEstimatedDurationUnit: "days" },
     uiHints: { layout: "fullRow" }
   },
-  {
-    id: "def_d0210", cdtCode: "D0210", name: "FMX (Complete Radiographic Series)", category: "DIAGNOSTIC", unitType: "PER_PROCEDURE",
-    pricing: { baseFee: 145, membershipFee: 0 },
-    selectionRules: { fullMouth: true },
-    defaults: { defaultEstimatedVisits: 1, defaultEstimatedDurationValue: 1, defaultEstimatedDurationUnit: "days" },
-    uiHints: { layout: "fullRow" }
-  },
   // --- PREVENTIVE ---
   {
     id: "def_d1110", cdtCode: "D1110", name: "Prophylaxis - Adult", category: "PREVENTIVE", unitType: "PER_PROCEDURE",
@@ -33,13 +26,6 @@ export const STARTER_PROCEDURES: ProcedureDefinition[] = [
     selectionRules: { fullMouth: true },
     defaults: { defaultEstimatedVisits: 1, defaultEstimatedDurationValue: 1, defaultEstimatedDurationUnit: "days" },
     uiHints: { layout: "fullRow" }
-  },
-  {
-    id: "def_d1206", cdtCode: "D1206", name: "Fluoride Varnish", category: "PREVENTIVE", unitType: "PER_ARCH",
-    pricing: { baseFee: 45, membershipFee: 0 },
-    selectionRules: { allowsArch: true },
-    defaults: { defaultEstimatedVisits: 1, defaultEstimatedDurationValue: 1, defaultEstimatedDurationUnit: "days" },
-    uiHints: { layout: "single" }
   },
   // --- RESTORATIVE ---
   {
@@ -63,12 +49,33 @@ export const STARTER_PROCEDURES: ProcedureDefinition[] = [
     defaults: { defaultEstimatedVisits: 2, defaultEstimatedDurationValue: 2, defaultEstimatedDurationUnit: "weeks" },
     uiHints: { layout: "single" }
   },
-  // --- ENDODONTIC ---
+  // --- ARCH SPECIFIC PROCEDURES (New) ---
   {
-    id: "def_d3330", cdtCode: "D3330", name: "Endodontic Therapy - Molar", category: "ENDODONTIC", unitType: "PER_TOOTH",
-    pricing: { baseFee: 1150, membershipFee: 920 },
-    selectionRules: { requiresToothSelection: true },
+    id: "def_d5110", cdtCode: "D5110", name: "Complete Denture - Maxillary (Upper)", category: "PROSTHETIC", unitType: "PER_ARCH",
+    pricing: { baseFee: 1850, membershipFee: 1450 },
+    selectionRules: { allowsArch: true },
+    defaults: { defaultEstimatedVisits: 5, defaultEstimatedDurationValue: 6, defaultEstimatedDurationUnit: "weeks" },
+    uiHints: { layout: "single" }
+  },
+  {
+    id: "def_d5120", cdtCode: "D5120", name: "Complete Denture - Mandibular (Lower)", category: "PROSTHETIC", unitType: "PER_ARCH",
+    pricing: { baseFee: 1850, membershipFee: 1450 },
+    selectionRules: { allowsArch: true },
+    defaults: { defaultEstimatedVisits: 5, defaultEstimatedDurationValue: 6, defaultEstimatedDurationUnit: "weeks" },
+    uiHints: { layout: "single" }
+  },
+  {
+    id: "def_d9944", cdtCode: "D9944", name: "Occlusal Guard - Hard (Nightguard)", category: "OTHER", unitType: "PER_ARCH",
+    pricing: { baseFee: 650, membershipFee: 495 },
+    selectionRules: { allowsArch: true },
     defaults: { defaultEstimatedVisits: 2, defaultEstimatedDurationValue: 2, defaultEstimatedDurationUnit: "weeks" },
+    uiHints: { layout: "single" }
+  },
+  {
+    id: "def_d9972", cdtCode: "D9972", name: "External Bleaching (Whitening)", category: "COSMETIC", unitType: "PER_ARCH",
+    pricing: { baseFee: 350, membershipFee: 250 },
+    selectionRules: { allowsArch: true },
+    defaults: { defaultEstimatedVisits: 1, defaultEstimatedDurationValue: 1, defaultEstimatedDurationUnit: "days" },
     uiHints: { layout: "single" }
   },
   // --- PERIO ---
@@ -79,35 +86,12 @@ export const STARTER_PROCEDURES: ProcedureDefinition[] = [
     defaults: { defaultEstimatedVisits: 2, defaultEstimatedDurationValue: 4, defaultEstimatedDurationUnit: "weeks" },
     uiHints: { layout: "single" }
   },
-  {
-    id: "def_d4355", cdtCode: "D4355", name: "Full Mouth Debridement", category: "PERIO", unitType: "FULL_MOUTH",
-    pricing: { baseFee: 185, membershipFee: 145 },
-    selectionRules: { fullMouth: true },
-    defaults: { defaultEstimatedVisits: 1, defaultEstimatedDurationValue: 1, defaultEstimatedDurationUnit: "days" },
-    uiHints: { layout: "fullRow" }
-  },
-  // --- SURGICAL ---
-  {
-    id: "def_d7140", cdtCode: "D7140", name: "Extraction - Erupted Tooth", category: "SURGICAL", unitType: "PER_TOOTH",
-    pricing: { baseFee: 250, membershipFee: 200 },
-    selectionRules: { requiresToothSelection: true, allowsMultipleTeeth: true },
-    defaults: { defaultEstimatedVisits: 1, defaultEstimatedDurationValue: 1, defaultEstimatedDurationUnit: "weeks" },
-    uiHints: { layout: "single" }
-  },
   // --- IMPLANT ---
   {
     id: "def_d6010", cdtCode: "D6010", name: "Implant Placement - Endosteal", category: "IMPLANT", unitType: "PER_TOOTH",
     pricing: { baseFee: 2200, membershipFee: 1800 },
     selectionRules: { requiresToothSelection: true },
     defaults: { defaultEstimatedVisits: 3, defaultEstimatedDurationValue: 4, defaultEstimatedDurationUnit: "months" },
-    uiHints: { layout: "single" }
-  },
-  // --- PROSTHETIC ---
-  {
-    id: "def_d5110", cdtCode: "D5110", name: "Complete Denture - Maxillary", category: "PROSTHETIC", unitType: "PER_ARCH",
-    pricing: { baseFee: 1800, membershipFee: 1450 },
-    selectionRules: { allowsArch: true },
-    defaults: { defaultEstimatedVisits: 5, defaultEstimatedDurationValue: 6, defaultEstimatedDurationUnit: "weeks" },
     uiHints: { layout: "single" }
   }
 ];

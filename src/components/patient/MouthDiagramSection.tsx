@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { TEETH_UPPER, TEETH_LOWER, DiagramData, mapPlanToDiagram, getItemsOnTooth, getToothQuadrant, getItemsOnArch, getItemsOnQuadrant } from '../../services/clinicalLogic';
 import { TreatmentPlanItem } from '../../types';
@@ -250,9 +249,13 @@ const TooltipContent = ({ items, allItems, title }: { items: TreatmentPlanItem[]
                  <ul className="space-y-2">
                      {items.map(i => {
                          const linkedSedation = allItems.find(s => s.itemType === 'ADDON' && s.addOnKind === 'SEDATION' && s.linkedItemIds?.includes(i.id));
+                         const surfacesStr = i.surfaces && i.surfaces.length > 0 ? ` (${i.surfaces.join('')})` : '';
                          return (
                              <li key={i.id} className="flex flex-col gap-0.5">
-                                 <div className="flex justify-between gap-2"><span>{i.procedureName}</span>{i.urgency === 'URGENT' && <span className="text-red-400 font-bold">!</span>}</div>
+                                 <div className="flex justify-between gap-2">
+                                     <span>{i.procedureName}{surfacesStr}</span>
+                                     {i.urgency === 'URGENT' && <span className="text-red-400 font-bold">!</span>}
+                                 </div>
                                  {linkedSedation && <div className="text-[10px] text-purple-300 flex items-center gap-1 pl-2 border-l-2 border-purple-400/30">+ {linkedSedation.procedureName.replace('Sedation – ', '')} Sedation</div>}
                              </li>
                          );

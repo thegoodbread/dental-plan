@@ -1,4 +1,3 @@
-
 import { TreatmentPlanItem, Visit } from '../types';
 import { AssignedRisk, SoapSection, SoapSectionType } from './dentalTypes';
 import { getCodeFamiliesForCode } from './codeFamilies';
@@ -10,7 +9,6 @@ export type AssertionSection =
   | 'TREATMENT_PERFORMED'
   | 'PLAN';
 
-// V3: Slot-Based Model Preparation
 export type AssertionSlot =
   | 'CC'
   | 'HPI'
@@ -23,18 +21,18 @@ export type AssertionSlot =
   | 'MISC';
 
 export interface TruthAssertion {
-  id: string;                     // stable per visit+concept
-  section: AssertionSection;      // which SOAP quadrant it belongs to
-  slot: AssertionSlot;            // V3: granular slot for sorting and future UI grouping
-  label: string;                  // human readable short label (e.g. "Crown prep #3")
-  description?: string;           // longer description if needed
-  sentence?: string;              // Optional override for narrative generation
+  id: string;                     
+  section: AssertionSection;      
+  slot: AssertionSlot;            
+  label: string;                  
+  description?: string;           
+  sentence?: string;              
   source: 'procedure' | 'risk' | 'exam' | 'manual';
-  procedureId?: string;           // link to TreatmentPlanItem.id if relevant
-  code?: string;                  // CDT or ICD
-  tooth?: string;                 // e.g. "3", "19", "UR"
-  surfaces?: string;              // e.g. "MOD"
-  checked: boolean;               // doctor has confirmed this is true for this visit
+  procedureId?: string;           
+  code?: string;                  
+  tooth?: string;                 
+  surfaces?: string;              
+  checked: boolean;               
   sortOrder: number;
 }
 
@@ -44,7 +42,6 @@ export interface TruthAssertionsBundle {
   lastGeneratedAt: string;
 }
 
-// --- Helper to build ID ---
 const makeId = (prefix: string, ...parts: string[]) => 
   `${prefix}_${parts.join('_').replace(/[^a-zA-Z0-9]/g, '')}`;
 
@@ -60,15 +57,11 @@ export function createManualAssertion(
     label: text,
     source: 'manual',
     checked: true,
-    sortOrder: 999, // Append to end of slot
+    sortOrder: 999, 
     description: 'Manually added fact'
   };
 }
 
-/**
- * Pure function to generate a bundle of truth assertions from visit data.
- * This effectively "deconstructs" the visit into atomic facts.
- */
 export function generateTruthAssertionsForVisit(
   visit: Visit,
   procedures: TreatmentPlanItem[],
@@ -81,7 +74,7 @@ export function generateTruthAssertionsForVisit(
     section: AssertionSection, 
     label: string, 
     source: TruthAssertion['source'],
-    slot: AssertionSlot, // Slot is now required for V3 compliance
+    slot: AssertionSlot, 
     extras: Partial<TruthAssertion> = {}
   ) => {
     assertions.push({
@@ -90,14 +83,12 @@ export function generateTruthAssertionsForVisit(
       slot,
       label,
       source,
-      checked: true, // Default to true for auto-generated facts
+      checked: true, 
       sortOrder: sortCounter++,
       ...extras
     });
   };
 
-  // 1. SUBJECTIVE
-  // Basic Visit Facts
   if (visit.chiefComplaint) {
     add('SUBJECTIVE', `CC: ${visit.chiefComplaint}`, 'manual', 'CC');
   } else if (procedures.length > 0) {
@@ -108,35 +99,35 @@ export function generateTruthAssertionsForVisit(
     add('SUBJECTIVE', `HPI: ${visit.hpi}`, 'manual', 'HPI');
   }
 
-  // Procedure-driven Subjective assertions
   procedures.forEach(p => {
     const loc = p.selectedTeeth?.join(',') || p.selectedQuadrants?.join(',') || '';
-    add('SUBJECTIVE', `Presents for ${p.procedureName} ${loc ? `(${loc})` : ''}`, 'procedure', 'CC', {
+    const surf = p.surfaces && p.surfaces.length > 0 ? ` ${p.surfaces.join('')}` : '';
+    add('SUBJECTIVE', `Presents for ${p.procedureName} ${loc ? `(${loc}${surf})` : ''}`, 'procedure', 'CC', {
       procedureId: p.id,
       code: p.procedureCode,
-      tooth: loc
+      tooth: loc,
+      surfaces: surf.trim()
     });
   });
 
-  // 2. OBJECTIVE
   if (visit.radiographicFindings) {
     add('OBJECTIVE', `Radiographs: ${visit.radiographicFindings}`, 'exam', 'RADIOGRAPHIC');
   }
 
   procedures.forEach(p => {
     const loc = p.selectedTeeth?.join(',') || p.selectedQuadrants?.join(',') || '';
-    const desc = p.procedureName; // Placeholder for more detailed clinical findings if we had them in item
-    add('OBJECTIVE', `${desc} required ${loc ? `on ${loc}` : ''}`, 'procedure', 'CLINICAL_FINDING', {
+    const surf = p.surfaces && p.surfaces.length > 0 ? ` ${p.surfaces.join('')}` : '';
+    const desc = p.procedureName; 
+    add('OBJECTIVE', `${desc} required ${loc ? `on ${loc}${surf}` : ''}`, 'procedure', 'CLINICAL_FINDING', {
       procedureId: p.id,
       code: p.procedureCode,
       tooth: loc,
+      surfaces: surf.trim(),
       description: `Clinical indication verified for ${p.procedureCode}`
     });
   });
 
-  // 3. ASSESSMENT
-  // Extract unique diagnoses
-  const diagnosisMap = new Map<string, string[]>(); // Code -> Procedures
+  const diagnosisMap = new Map<string, string[]>(); 
   procedures.forEach(p => {
     if (p.diagnosisCodes) {
       p.diagnosisCodes.forEach(dx => {
@@ -158,26 +149,25 @@ export function generateTruthAssertionsForVisit(
     add('ASSESSMENT', 'Diagnosis pending / See clinical notes', 'manual', 'DIAGNOSIS');
   }
 
-  // 4. TREATMENT PERFORMED
   procedures.forEach(p => {
     const loc = p.selectedTeeth?.join(',') || p.selectedQuadrants?.join(',') || '';
+    const surf = p.surfaces && p.surfaces.length > 0 ? ` ${p.surfaces.join('')}` : '';
     const family = getCodeFamiliesForCode(p.procedureCode)[0] || 'GENERAL';
     
     let detail = "Procedure completed according to standard of care.";
     if (family === 'ENDO') detail = "Canals instrumented and obturated.";
     if (family === 'EXTRACTION') detail = "Tooth extracted, hemostasis achieved.";
-    if (family === 'DIRECT_RESTORATIVE') detail = "Decay removed, restoration placed and polished.";
+    if (family === 'DIRECT_RESTORATIVE') detail = `Decay removed, restoration (${surf.trim() || 'N/A'}) placed and polished.`;
     
-    add('TREATMENT_PERFORMED', `Completed: ${p.procedureName} ${loc}`, 'procedure', 'INTERVENTION', {
+    add('TREATMENT_PERFORMED', `Completed: ${p.procedureName} ${loc}${surf}`, 'procedure', 'INTERVENTION', {
       procedureId: p.id,
       code: p.procedureCode,
       tooth: loc,
+      surfaces: surf.trim(),
       description: detail
     });
   });
 
-  // 5. PLAN
-  // Risks
   risks.filter(r => r.isActive).forEach(r => {
     add('PLAN', `Risk Discussed: ${r.titleSnapshot}`, 'risk', 'RISK', {
       description: r.bodySnapshot
@@ -194,7 +184,6 @@ export function generateTruthAssertionsForVisit(
   };
 }
 
-// V3 Slot Sorting Order
 export const SLOT_ORDER: AssertionSlot[] = [
   'CC',
   'HPI',
@@ -219,10 +208,6 @@ export const SLOT_LABELS: Record<AssertionSlot, string> = {
   'MISC': 'Miscellaneous'
 };
 
-// Inline Truth Blocks (V2.5 + V3 Slot Support)
-// Converts checked truth assertions into final SOAP content.
-// Runs AFTER deterministic generation.
-// Visually respects slot order by grouping output paragraphs.
 export function composeSectionsFromAssertions(
   generatedSections: SoapSection[],
   truth: TruthAssertionsBundle
@@ -235,10 +220,9 @@ export function composeSectionsFromAssertions(
     const relevant = truth.assertions.filter(a => a.section === sec.type && a.checked);
 
     if (relevant.length === 0) {
-      return sec; // fallback to generated narrative
+      return sec; 
     }
 
-    // Group by slot
     const bySlot: Record<string, string[]> = {};
     
     relevant.forEach(a => {
@@ -252,18 +236,15 @@ export function composeSectionsFromAssertions(
       bySlot[slot].push(text);
     });
 
-    // Assemble paragraphs based on SLOT_ORDER
     const paragraphs: string[] = [];
     
     SLOT_ORDER.forEach(slot => {
         const lines = bySlot[slot];
         if (lines && lines.length > 0) {
-            // Join items within a slot with newlines
             paragraphs.push(lines.join('\n'));
         }
     });
 
-    // Join slots with double newlines for paragraph separation
     const body = paragraphs.join('\n\n');
 
     return {
@@ -274,13 +255,12 @@ export function composeSectionsFromAssertions(
   });
 }
 
-// Completeness Engine V1
-// Determines if slots are "complete", "empty" (required but missing), or "not_required".
+export type SectionCompleteness = 'complete' | 'partial' | 'empty';
+
 export function evaluateSlotCompleteness(
   truth: TruthAssertionsBundle | undefined,
   section: SoapSectionType
 ): Record<AssertionSlot, 'complete' | 'empty' | 'not_required'> {
-  // Default all to not_required
   const result: Record<AssertionSlot, 'complete' | 'empty' | 'not_required'> = {
     'CC': 'not_required',
     'HPI': 'not_required',
@@ -298,10 +278,8 @@ export function evaluateSlotCompleteness(
   const allAssertions = truth.assertions;
   const sectionAssertions = allAssertions.filter(a => a.section === section);
   
-  // Context Inference
   const hasProcedures = allAssertions.some(a => a.source === 'procedure');
   const hasDiagnoses = allAssertions.some(a => a.slot === 'DIAGNOSIS');
-  const hasRisks = allAssertions.some(a => a.slot === 'RISK');
 
   const checkSlot = (slot: AssertionSlot, required: boolean) => {
     if (!required) {
@@ -309,10 +287,8 @@ export function evaluateSlotCompleteness(
       return;
     }
     
-    // It's required. Is it populated and checked?
     const slotAssertions = sectionAssertions.filter(a => a.slot === slot);
     if (slotAssertions.length === 0) {
-      // Required but no assertions generated/available
       result[slot] = 'empty';
     } else {
       const hasChecked = slotAssertions.some(a => a.checked);
@@ -320,16 +296,13 @@ export function evaluateSlotCompleteness(
     }
   };
 
-  // Logic per Section
   if (section === 'SUBJECTIVE') {
     checkSlot('CC', hasProcedures || sectionAssertions.some(a => a.slot === 'CC'));
-    // HPI required if CC exists OR procedures exist
     checkSlot('HPI', hasProcedures || sectionAssertions.some(a => a.slot === 'CC'));
   }
 
   if (section === 'OBJECTIVE') {
     checkSlot('CLINICAL_FINDING', hasDiagnoses || hasProcedures);
-    // Radiographic required if visit has findings (implied if assertion exists)
     const hasRadioAssertion = sectionAssertions.some(a => a.slot === 'RADIOGRAPHIC');
     checkSlot('RADIOGRAPHIC', hasRadioAssertion);
   }
@@ -343,35 +316,29 @@ export function evaluateSlotCompleteness(
   }
 
   if (section === 'PLAN') {
-    checkSlot('RISK', hasProcedures); // Simplified rule: any procedure implies risk discussion
-    checkSlot('PLAN', true); // Plan always required
+    checkSlot('RISK', hasProcedures); 
+    checkSlot('PLAN', true); 
   }
 
   return result;
 }
-
-// Section Completeness Helper
-export type SectionCompleteness = 'complete' | 'partial' | 'empty';
 
 export function getSectionCompletenessFromSlots(
   perSlot: Record<AssertionSlot, 'complete' | 'empty' | 'not_required'>
 ): SectionCompleteness {
   const relevantSlots = Object.values(perSlot).filter(status => status !== 'not_required');
   
-  if (relevantSlots.length === 0) return 'empty'; // Or 'complete'? Instructions said empty.
+  if (relevantSlots.length === 0) return 'empty'; 
   
-  // If ANY relevant slot is empty, it's partial.
   if (relevantSlots.includes('empty')) return 'partial';
   
-  // All relevant slots must be complete
   return 'complete';
 }
 
-// Note-Level Completeness Summary
 export interface NoteCompletenessSummary {
-  requiredSlots: number;    // total slots that are required across all sections
-  completedSlots: number;   // how many of those are complete
-  percent: number;          // 0–100, rounded to nearest integer
+  requiredSlots: number;    
+  completedSlots: number;   
+  percent: number;          
   perSection: Record<SoapSectionType, {
     requiredSlots: number;
     completedSlots: number;
@@ -379,7 +346,6 @@ export interface NoteCompletenessSummary {
   }>;
 }
 
-// Pure function to calculate note-level completeness from assertions bundle
 export function getNoteCompleteness(truth: TruthAssertionsBundle | undefined): NoteCompletenessSummary {
   const sectionOrder: SoapSectionType[] = ['SUBJECTIVE', 'OBJECTIVE', 'ASSESSMENT', 'TREATMENT_PERFORMED', 'PLAN'];
   
@@ -425,7 +391,6 @@ export function getNoteCompleteness(truth: TruthAssertionsBundle | undefined): N
   if (summary.requiredSlots > 0) {
     summary.percent = Math.round((summary.completedSlots / summary.requiredSlots) * 100);
   } else {
-    // If nothing required, consider it 0% started (or 100% complete? Ambiguous, sticking to 0 for "Not Started")
     summary.percent = 0;
   }
 

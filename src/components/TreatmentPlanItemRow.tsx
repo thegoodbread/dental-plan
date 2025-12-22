@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { TreatmentPlanItem, UrgencyLevel, FeeScheduleType } from '../types';
-import { Trash2, Edit2, Check, X, AlertTriangle, Clock, Smile, Calculator, ChevronDown, Star } from 'lucide-react';
+import { TreatmentPlanItem, UrgencyLevel, FeeScheduleType, ClinicProcedure } from '../types';
+import { Trash2, Edit2, Check, X, AlertTriangle, Clock, Smile, Calculator, ChevronDown, Star, AlertCircle, BookmarkPlus } from 'lucide-react';
 import { ToothSelectorModal } from './ToothSelectorModal';
 import { NumberPadModal } from './NumberPadModal';
 import { SEDATION_TYPES } from '../services/treatmentPlans';
 import { computeItemPricing } from '../utils/pricingLogic';
+import { getProcedureDisplayName, getProcedureDisplayCode } from '../utils/procedureDisplay';
+import { mergeOrUpsertClinicProcedure } from '../domain/clinicProcedureLibrary';
+import { resolveEffectiveProcedure } from '../domain/procedureResolver';
 
 const NumpadButton = ({ onClick }: { onClick: () => void }) => (
   <button
@@ -22,11 +25,9 @@ interface TreatmentPlanItemRowProps {
   feeScheduleType?: FeeScheduleType;
   onUpdate: (id: string, updates: Partial<TreatmentPlanItem>) => void;
   onDelete: (id: string) => void;
-  // New props for hierarchy
   isAddOn?: boolean;
   linkedItemNames?: string[];
   onAddSedation?: (parentItemId: string) => void;
-  // Drag & Drop
   onDragOver?: (e: React.DragEvent, item: TreatmentPlanItem) => void;
   onDragLeave?: (e: React.DragEvent, item: TreatmentPlanItem) => void;
   onDrop?: (e: React.DragEvent, item: TreatmentPlanItem) => void;
@@ -34,40 +35,79 @@ interface TreatmentPlanItemRowProps {
   isCompatibleDropTarget?: boolean;
 }
 
+const SURFACES = ['M', 'O', 'D', 'B', 'L', 'I', 'F'];
+
 export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({ 
     item, 
-    // FIX: Cast default value to FeeScheduleType to avoid widening to string type
     feeScheduleType = 'standard' as FeeScheduleType, 
     onUpdate, onDelete, 
     isAddOn = false, linkedItemNames = [], onAddSedation,
     onDragOver, onDragLeave, onDrop, isDragOver, isCompatibleDropTarget
 }) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [isDefiningLabel, setIsDefiningLabel] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isToothSelectorOpen, setIsToothSelectorOpen] = useState(false);
-  const [isNumpadOpen, setIsNumpadOpen] = useState(false);
   
-  // Local state for edit mode
   const [baseFee, setBaseFee] = useState(item.baseFee);
   const [urgency, setUrgency] = useState<UrgencyLevel>(item.urgency || 'ELECTIVE');
+  const [editSurfaces, setEditSurfaces] = useState<string[]>(item.surfaces || []);
+  const [editName, setEditName] = useState(item.procedureName);
 
   const handleSave = () => {
     onUpdate(item.id, {
+        procedureName: editName,
         baseFee: Number(baseFee),
-        urgency: isAddOn ? undefined : urgency
+        urgency: isAddOn ? undefined : urgency,
+        surfaces: editSurfaces
     });
+    setIsEditing(false);
+  };
+
+  const handleQuickDefineLabel = () => {
+    if (!editName || editName.trim() === "" || editName === item.procedureCode || editName === "Needs label") {
+        alert("Please enter a professional procedure name.");
+        return;
+    }
+
+    // 1. Update master clinic library
+    const effective = resolveEffectiveProcedure(item.procedureCode);
+    mergeOrUpsertClinicProcedure({
+        cdtCode: item.procedureCode,
+        displayName: editName,
+        baseFee: baseFee,
+        membershipFee: effective?.pricing.membershipFee ?? null
+    });
+
+    // 2. Update local item instance
+    onUpdate(item.id, { 
+        procedureName: editName,
+        isCustomProcedureNameMissing: false 
+    });
+    setIsDefiningLabel(false);
     setIsEditing(false);
   };
 
   const handleCancel = () => {
     setIsEditing(false);
+    setIsDefiningLabel(false);
     setIsConfirmingDelete(false);
   };
 
   const handleStartEditing = () => {
     setBaseFee(item.baseFee);
     setUrgency(item.urgency || 'ELECTIVE');
+    setEditSurfaces(item.surfaces || []);
+    setEditName(item.procedureName === "Needs label" ? "" : item.procedureName);
     setIsEditing(true);
+  };
+
+  const toggleSurface = (s: string) => {
+    setEditSurfaces(prev => {
+        const next = prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s];
+        // Ensure strictly sorted according to canonical MODBLIF order
+        return [...next].sort((a, b) => SURFACES.indexOf(a) - SURFACES.indexOf(b));
+    });
   };
 
   const handleImmediateSedationTypeChange = (newType: string) => {
@@ -98,8 +138,6 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
     onUpdate(item.id, { selectedArches: updated });
   };
 
-  // --- RENDER HELPERS ---
-
   const renderSelectionInput = () => {
     if (isAddOn) {
         return (
@@ -115,24 +153,44 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
     }
 
     if (item.unitType === 'PER_TOOTH') {
-      const teethText = item.selectedTeeth?.length ? `Teeth: #${item.selectedTeeth.join(', #')}` : 'No teeth selected';
       if (isEditing) {
+        const canHaveSurfaces = ['RESTORATIVE', 'ENDODONTIC', 'OTHER'].includes(item.category) || item.procedureCode.startsWith('D23');
         return (
-          <div className="flex flex-col items-start gap-2">
-            <span className="text-gray-600 text-sm">{teethText}</span>
+          <div className="flex flex-col items-start gap-3">
             <button
               onClick={() => setIsToothSelectorOpen(true)}
               className="w-full text-center py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg text-sm border border-gray-200"
             >
-              Change Selected Teeth
+              # {item.selectedTeeth?.join(', ') || 'Select Teeth'}
             </button>
+            {canHaveSurfaces && (
+                <div className="flex flex-col gap-1.5 w-full">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Surfaces</span>
+                    <div className="flex gap-1">
+                        {SURFACES.map(s => (
+                            <button
+                                key={s}
+                                onClick={() => toggleSurface(s)}
+                                className={`w-6 h-6 flex items-center justify-center rounded border text-[10px] font-bold transition-all ${editSurfaces.includes(s) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white text-gray-400 border-gray-200 hover:border-gray-300'}`}
+                            >
+                                {s}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
           </div>
         );
       }
       return (
-        <span className="text-gray-900 font-medium">
-          {item.selectedTeeth?.length ? `#${item.selectedTeeth.join(', #')}` : 'No teeth selected'}
-        </span>
+        <div className="flex flex-col">
+          <span className="text-gray-900 font-bold text-sm">
+            {item.selectedTeeth?.length ? `#${item.selectedTeeth.join(', #')}` : 'No teeth'}
+          </span>
+          {item.surfaces && item.surfaces.length > 0 && (
+            <span className="text-blue-600 font-black text-xs tracking-widest">{item.surfaces.join('')}</span>
+          )}
+        </div>
       );
     }
 
@@ -180,7 +238,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
   };
 
   const renderUrgencyBadge = (u: UrgencyLevel) => {
-    if (isAddOn) return null; // No urgency for add-ons
+    if (isAddOn) return null; 
     switch (u) {
       case 'URGENT': return <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-100 uppercase"><AlertTriangle size={10} /> Urgent</span>;
       case 'SOON': return <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-100 uppercase"><Clock size={10} /> Soon</span>;
@@ -191,7 +249,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
   const rowBackground = isDragOver 
     ? 'bg-blue-50 ring-2 ring-inset ring-blue-500' 
     : isCompatibleDropTarget 
-        ? 'bg-blue-50/30 ring-1 ring-inset ring-blue-300 border-blue-200' // Subtle glow for compatibility
+        ? 'bg-blue-50/30 ring-1 ring-inset ring-blue-300 border-blue-200' 
         : isEditing 
             ? 'bg-blue-50/30' 
             : isAddOn 
@@ -201,9 +259,10 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
   const textClass = isAddOn ? 'text-gray-600' : 'text-gray-900';
   const displayedSedationType = item.sedationType || item.procedureName.replace('Sedation – ', '');
 
-  // Dynamic Pricing Calculation
-  // FIX: feeScheduleType is now correctly typed as FeeScheduleType
   const pricing = computeItemPricing(item, feeScheduleType);
+  const displayName = getProcedureDisplayName(item);
+  const displayCode = getProcedureDisplayCode(item);
+  const needsLabel = displayName === "Needs label" || item.isCustomProcedureNameMissing;
 
   return (
     <>
@@ -213,7 +272,6 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
         onDrop={isAddOn ? undefined : (e) => onDrop?.(e, item)}
         className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 group transition-all ${rowBackground}`}
       >
-        {/* Procedure */}
         <td className={`px-4 py-3 align-top ${isAddOn ? 'pl-10 relative' : ''}`}>
           {isAddOn && (
              <div className="absolute left-0 top-0 bottom-0 w-8 border-r border-gray-100 flex justify-center pt-4">
@@ -234,16 +292,47 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
                        </select>
                        <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
                    </div>
-                 <div className="text-xs text-gray-500 font-mono mb-1">{item.procedureCode}</div>
+                 <div className="text-xs text-gray-500 font-mono mb-1">{displayCode}</div>
              </div>
           ) : (
              <>
-                 <div className={`font-medium text-sm ${textClass}`}>{item.procedureName}</div>
-                 <div className="text-xs text-gray-500 font-mono mb-1">{item.procedureCode}</div>
+                 {isEditing || isDefiningLabel ? (
+                     <div className="flex flex-col gap-2">
+                        <input 
+                            autoFocus
+                            value={editName}
+                            onChange={e => setEditName(e.target.value)}
+                            className="w-full text-sm font-bold text-slate-950 border-b-2 border-blue-500 focus:outline-none bg-white px-2 py-1 rounded shadow-inner"
+                            placeholder="Clinical Procedure Name..."
+                        />
+                        {isDefiningLabel && (
+                            <div className="flex items-center justify-between bg-blue-600 text-white rounded-md px-2 py-1 shadow-sm">
+                                <span className="text-[10px] font-bold uppercase tracking-wider">Save to Clinic Library?</span>
+                                <div className="flex gap-1">
+                                    <button onClick={handleQuickDefineLabel} className="p-1 hover:bg-white/20 rounded" title="Confirm and Save to Library"><Check size={14}/></button>
+                                    <button onClick={() => setIsDefiningLabel(false)} className="p-1 hover:bg-white/20 rounded"><X size={14}/></button>
+                                </div>
+                            </div>
+                        )}
+                     </div>
+                 ) : (
+                     <div className="flex items-center gap-2">
+                        <div className={`font-medium text-sm ${needsLabel ? 'text-red-500 italic' : textClass}`}>{displayName}</div>
+                        {needsLabel && (
+                            <button 
+                                onClick={() => { setEditName(""); setIsDefiningLabel(true); }}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100 hover:bg-red-100 transition-colors"
+                            >
+                                <BookmarkPlus size={10} /> Define Label
+                            </button>
+                        )}
+                     </div>
+                 )}
+                 <div className="text-xs text-gray-500 font-mono mb-1">{displayCode}</div>
              </>
           )}
           
-          {isEditing && !isAddOn ? (
+          {isEditing && !isAddOn && !isDefiningLabel ? (
             <select 
               value={urgency} 
               onChange={e => setUrgency(e.target.value as UrgencyLevel)}
@@ -254,18 +343,16 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
               <option value="URGENT">Urgent</option>
             </select>
           ) : (
-            !isAddOn && <div className="mt-1">{renderUrgencyBadge(item.urgency || 'ELECTIVE')}</div>
+            !isAddOn && !isDefiningLabel && <div className="mt-1">{renderUrgencyBadge(item.urgency || 'ELECTIVE')}</div>
           )}
         </td>
 
-        {/* Selection Area */}
         <td className="px-4 py-3 text-sm align-top">
           {renderSelectionInput()}
         </td>
 
-        {/* Cost (Active Fee / Base Fee) */}
         <td className="px-4 py-3 text-right text-sm align-top pt-3">
-          {isEditing ? (
+          {isEditing || isDefiningLabel ? (
             <div className="flex items-center justify-end gap-1.5 w-full">
                 <div className="relative grow">
                     <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">$</span>
@@ -277,7 +364,6 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
                         onChange={e => setBaseFee(parseFloat(e.target.value) || 0)}
                     />
                 </div>
-                <NumpadButton onClick={() => setIsNumpadOpen(false)} />
             </div>
           ) : (
             <div className="flex flex-col items-end">
@@ -291,12 +377,10 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
           )}
         </td>
 
-        {/* Units */}
         <td className="px-4 py-3 text-center text-sm font-medium text-gray-700 align-top pt-3">
           {item.units}
         </td>
 
-        {/* Net Fee (Calculated Total) */}
         <td className={`px-4 py-3 text-right text-sm font-bold align-top pt-3 ${isAddOn ? 'text-gray-700 bg-slate-100/50' : 'text-gray-900 bg-gray-50/50'}`}>
           <div className="flex flex-col items-end">
               <span>${pricing.netFee.toFixed(2)}</span>
@@ -308,11 +392,10 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
           </div>
         </td>
 
-        {/* Actions */}
         <td className="px-4 py-3 text-right align-top pt-3">
-          {isEditing ? (
+          {(isEditing || isDefiningLabel) ? (
             <div className="flex justify-end gap-2">
-              <button onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Check size={16}/></button>
+              <button onClick={isDefiningLabel ? handleQuickDefineLabel : handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Check size={16}/></button>
               <button onClick={handleCancel} className="p-1 text-gray-400 hover:bg-gray-100 rounded"><X size={16}/></button>
             </div>
           ) : isConfirmingDelete ? (
@@ -338,17 +421,6 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
             onChange={(teeth) => onUpdate(item.id, { selectedTeeth: teeth })}
         />
       )}
-      
-      <NumberPadModal
-        isOpen={isNumpadOpen}
-        onClose={() => setIsNumpadOpen(false)}
-        onDone={(newValue) => {
-            setBaseFee(parseFloat(newValue) || 0);
-            setIsNumpadOpen(false);
-        }}
-        initialValue={String(baseFee)}
-        title="Base Fee ($)"
-      />
     </>
   );
 };

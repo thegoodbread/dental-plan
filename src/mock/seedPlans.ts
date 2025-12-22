@@ -1,5 +1,3 @@
-
-// FIX: Replaced FeeUnitType with exported ProcedureUnitType
 import { TreatmentPlan, TreatmentPlanItem, ShareLink, ProcedureUnitType, UrgencyLevel, FeeCategory, FeeScheduleType, ItemType, Patient, TreatmentPhase } from '../types';
 
 // Helper to create IDs
@@ -33,7 +31,7 @@ const itemsA: TreatmentPlanItem[] = [
     treatmentPlanId: planA_Id,
     feeScheduleEntryId: 'f1', // D2391
     procedureCode: 'D2391',
-    procedureName: 'Resin-based composite - 1 surface, posterior',
+    procedureName: 'Resin Composite - 1 Surface, Posterior',
     category: 'RESTORATIVE',
     unitType: 'PER_TOOTH',
     selectedTeeth: [3],
@@ -50,7 +48,7 @@ const itemsA: TreatmentPlanItem[] = [
     treatmentPlanId: planA_Id,
     feeScheduleEntryId: 'f2', // D2740
     procedureCode: 'D2740',
-    procedureName: 'Crown - porcelain/ceramic',
+    procedureName: 'Porcelain/Ceramic Crown',
     category: 'RESTORATIVE',
     unitType: 'PER_TOOTH',
     selectedTeeth: [11],
@@ -89,7 +87,7 @@ const itemsD: TreatmentPlanItem[] = [
     treatmentPlanId: planD_Id,
     feeScheduleEntryId: 'f5', // D3330
     procedureCode: 'D3330',
-    procedureName: 'Endodontic therapy, molar',
+    procedureName: 'Endodontic Therapy - Molar',
     category: 'ENDODONTIC',
     unitType: 'PER_TOOTH',
     selectedTeeth: [19],
@@ -107,7 +105,7 @@ const itemsD: TreatmentPlanItem[] = [
     treatmentPlanId: planD_Id,
     feeScheduleEntryId: 'f7', // D6010
     procedureCode: 'D6010',
-    procedureName: 'Surgical placement of implant body',
+    procedureName: 'Surgical Placement of Implant Body',
     category: 'IMPLANT',
     unitType: 'PER_TOOTH',
     selectedTeeth: [30],
@@ -121,10 +119,6 @@ const itemsD: TreatmentPlanItem[] = [
   }
 ];
 
-/**
- * Hardened Demo Phases:
- * All estimates are removed. Non-monitor phases must be derived from items on load.
- */
 const phasesD: TreatmentPhase[] = [
   {
     id: 'phase-D-1',
@@ -152,7 +146,7 @@ const phasesD: TreatmentPhase[] = [
     sortOrder: 1,
     itemIds: [],
     isMonitorPhase: true,
-    durationIsManual: true, // INVARIANT: Valid manual override for healing
+    durationIsManual: true,
     estimatedDurationValue: 3,
     estimatedDurationUnit: 'months'
   }

@@ -1,4 +1,3 @@
-
 import { AssignedRisk, SoapSection } from './domain/dentalTypes';
 
 export type UserRole = 'DOCTOR' | 'TREATMENT_COORDINATOR' | 'ADMIN';
@@ -45,7 +44,6 @@ export interface SelectionRules {
   maxSelections?: number;
 }
 
-// FIX: Added missing ProcedureDefinition interface used in the procedure library and CSV logic
 export interface ProcedureDefinition {
   id: string;
   cdtCode: string;
@@ -128,6 +126,7 @@ export interface EffectiveProcedure {
     layout: 'single' | 'fullRow';
   };
   metaCoverage: 'full' | 'partial' | 'none';
+  isLabelMissing: boolean;
 }
 
 // --- EMPLOYEE MODELS ---
@@ -173,7 +172,7 @@ export interface FeeScheduleEntry {
   procedureCode: string;
   procedureName: string;
   category: FeeCategory;
-  unitType: any; // Mapped from ProcedureUnitType for UI
+  unitType: any; 
   baseFee: number;
   membershipFee?: number | null;
   isActive: boolean;
@@ -292,6 +291,7 @@ export interface TreatmentPlanItem {
     narrativeText?: string;
   };
   sedationType?: string;
+  isCustomProcedureNameMissing?: boolean;
 }
 
 export interface TreatmentPlan {

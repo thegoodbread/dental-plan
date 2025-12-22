@@ -8,8 +8,11 @@ export function resolveEffectiveProcedure(cdtCode: string): EffectiveProcedure |
 
     if (!clinic && !meta) return null;
 
-    // Use safe fallbacks if meta is missing
-    const effectiveMeta: ProcedureMeta = meta || {
+    // A label is missing if the clinic has not defined a human-friendly name.
+    const isLabelMissing = !clinic || !clinic.displayName || clinic.displayName.trim() === "" || clinic.displayName === cdtCode;
+
+    // Use safe fallbacks if behavioural meta is missing
+    const effectiveMeta: ProcedureMeta = meta ?? {
         cdtCode: cdtCode,
         category: "OTHER",
         unitType: "PER_PROCEDURE",
@@ -29,32 +32,33 @@ export function resolveEffectiveProcedure(cdtCode: string): EffectiveProcedure |
         uiHints: { layout: "single" }
     };
 
-    const effectiveClinic: ClinicProcedure = clinic || {
+    const effectiveClinic: ClinicProcedure = clinic ?? {
         cdtCode: cdtCode,
-        displayName: meta ? meta.cdtCode : "Unknown Procedure",
+        displayName: "Needs label",
         baseFee: 0,
         membershipFee: null
     };
 
     return {
         cdtCode: effectiveMeta.cdtCode,
-        displayName: effectiveClinic.displayName,
-        category: effectiveClinic.categoryOverride || effectiveMeta.category,
-        unitType: effectiveClinic.unitTypeOverride || effectiveMeta.unitType,
+        displayName: isLabelMissing ? "Needs label" : effectiveClinic.displayName,
+        category: effectiveClinic.categoryOverride ?? effectiveMeta.category,
+        unitType: effectiveClinic.unitTypeOverride ?? effectiveMeta.unitType,
         selectionRules: effectiveMeta.selectionRules,
         defaults: {
-            defaultEstimatedVisits: effectiveClinic.defaultEstimatedVisits || effectiveMeta.defaults.defaultEstimatedVisits,
-            defaultEstimatedDurationValue: effectiveClinic.defaultEstimatedDurationValue || effectiveMeta.defaults.defaultEstimatedDurationValue,
-            defaultEstimatedDurationUnit: effectiveClinic.defaultEstimatedDurationUnit || effectiveMeta.defaults.defaultEstimatedDurationUnit
+            defaultEstimatedVisits: effectiveClinic.defaultEstimatedVisits ?? effectiveMeta.defaults.defaultEstimatedVisits,
+            defaultEstimatedDurationValue: effectiveClinic.defaultEstimatedDurationValue ?? effectiveMeta.defaults.defaultEstimatedDurationValue,
+            defaultEstimatedDurationUnit: effectiveClinic.defaultEstimatedDurationUnit ?? effectiveMeta.defaults.defaultEstimatedDurationUnit
         },
         pricing: {
-            baseFee: effectiveClinic.baseFee,
-            membershipFee: effectiveClinic.membershipFee
+            baseFee: effectiveClinic.baseFee ?? 0,
+            membershipFee: effectiveClinic.membershipFee ?? null
         },
         uiHints: {
-            layout: effectiveClinic.layoutOverride || effectiveMeta.uiHints.layout
+            layout: effectiveClinic.layoutOverride ?? effectiveMeta.uiHints.layout
         },
-        metaCoverage: meta ? 'full' : 'none'
+        metaCoverage: meta ? 'full' : 'none',
+        isLabelMissing
     };
 }
 
@@ -63,7 +67,7 @@ export function listEffectiveProcedures(): EffectiveProcedure[] {
     const metaCodes = PROCEDURE_META_PACK.map(m => m.cdtCode);
     const clinicCodes = clinicLib.map(c => c.cdtCode);
     
-    // Union of all codes
+    // Correctly union all codes
     const allCodes = Array.from(new Set([...metaCodes, ...clinicCodes]));
     
     return allCodes

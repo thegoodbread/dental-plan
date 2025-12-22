@@ -1,4 +1,4 @@
-import { TreatmentPhase, TreatmentPlanItem, FeeCategory } from '../types';
+import { TreatmentPhase, TreatmentPlanItem, FeeCategory, PhaseBucketKey } from '../types';
 import { estimateVisits, estimateDuration } from '../services/clinicalLogic';
 
 export interface DerivedPhaseMetadata {
@@ -20,16 +20,62 @@ const CATEGORY_DESCRIPTIONS: Record<FeeCategory, string> = {
   ORTHO: 'aligning teeth',
   PREVENTIVE: 'preventive care',
   DIAGNOSTIC: 'diagnostic evaluation',
-  OTHER: 'adjunctive care'
+  OTHER: 'adjunctive care',
+  // FIX: Removed invalid key 'SURGICAL_UPPER' as it is not part of the FeeCategory type.
 };
+
+/**
+ * SMARTER TITLE ENGINE
+ * Logic that considers the "Why" and "When" of a phase.
+ */
+export function generateSmarterPhaseTitle(sortOrder: number, bucket: PhaseBucketKey, items: TreatmentPlanItem[]): string {
+  const phaseNum = sortOrder + 1;
+  const codes = items.map(i => i.procedureCode.toUpperCase());
+  const categories = Array.from(new Set(items.map(i => i.category)));
+
+  // 1. Surgical/Implant dominance
+  if (categories.includes('IMPLANT') || codes.some(c => c.startsWith('D60'))) {
+    return `Phase ${phaseNum}: Surgical Reconstruction`;
+  }
+
+  // 2. Endodontic/Acute care
+  if (categories.includes('ENDODONTIC')) {
+    return `Phase ${phaseNum}: Endodontic Therapy`;
+  }
+
+  // 3. Positional logic for Perio/Preventive
+  if (categories.includes('PERIO') || categories.includes('PREVENTIVE')) {
+    if (sortOrder === 0) return `Phase ${phaseNum}: Foundation`;
+    if (sortOrder >= 3) return `Phase ${phaseNum}: Maintenance`;
+    return `Phase ${phaseNum}: Periodontal Health`;
+  }
+
+  // 4. Positional logic for Restorative
+  if (categories.includes('RESTORATIVE') || categories.includes('PROSTHETIC')) {
+    if (sortOrder === 0) return `Phase ${phaseNum}: Initial Restorations`;
+    if (sortOrder >= 2) return `Phase ${phaseNum}: Functional Reconstruction`;
+    return `Phase ${phaseNum}: Restorative Phase`;
+  }
+
+  // 5. Default categorical fallbacks
+  switch (bucket) {
+    case 'FOUNDATION': return `Phase ${phaseNum}: Foundation`;
+    case 'RESTORATIVE': return `Phase ${phaseNum}: Restorative`;
+    case 'IMPLANT': return `Phase ${phaseNum}: Reconstruction`;
+    case 'ELECTIVE': return `Phase ${phaseNum}: Enhancement`;
+    default: return `Phase ${phaseNum}: Treatment Phase`;
+  }
+}
 
 export function generatePhaseDescription(items: TreatmentPlanItem[]): string {
   if (items.length === 0) return "Pending treatment selection.";
   const uniqueCategories = Array.from(new Set(items.map(i => i.category)));
   const descriptions = uniqueCategories.map(c => CATEGORY_DESCRIPTIONS[c as FeeCategory]).filter(Boolean);
   if (descriptions.length === 0) return "Planned dental treatment.";
+  
   const text = descriptions.join(' and ');
-  return text.charAt(0).toUpperCase() + text.slice(1) + '.';
+  const prefix = items.length > 2 ? "Comprehensive approach " : "Focusing on ";
+  return prefix + text + '.';
 }
 
 function normalizeToDays(val: number, unit: string): number {
@@ -40,14 +86,7 @@ function normalizeToDays(val: number, unit: string): number {
     return val;
 }
 
-/**
- * INVARIANT: Phase-level duration overrides are allowed ONLY for monitor phases.
- * Standard clinical phases MUST always recompute from their constituent items
- * to prevent "frozen" timeline values when procedures move.
- */
 export function calculatePhaseDurationLabel(items: TreatmentPlanItem[], phase: TreatmentPhase): string | null {
-  const isProd = process.env.NODE_ENV === 'production';
-  // Strict check: only monitor phases with the manual flag can bypass item-based calculation
   const isOverrideAllowed = phase.isMonitorPhase === true && phase.durationIsManual === true;
 
   if (isOverrideAllowed) {
@@ -59,11 +98,8 @@ export function calculatePhaseDurationLabel(items: TreatmentPlanItem[], phase: T
         if (val !== 1 && !unitText.endsWith('s')) unitText = unitText + 's';
         return `Est. ${val} ${unitText}`;
     }
-  } else if (!isProd && phase.durationIsManual && !phase.isMonitorPhase) {
-      console.warn(`[Timeline Engine] Ignored manual duration override for non-monitor phase: ${phase.title}. Reverting to item-based computation.`);
   }
 
-  // COMPUTE DYNAMICALLY FROM ITEMS (Fallback for clinical phases)
   if (items.length === 0) return null;
 
   let totalDays = 0;
@@ -90,34 +126,13 @@ export function calculatePhaseDurationLabel(items: TreatmentPlanItem[], phase: T
   return `Est. ${weeks} ${weeks === 1 ? 'Week' : 'Weeks'}`;
 }
 
-/**
- * INVARIANT: Phase resolution order must be:
- * 1) item.phaseId match
- * 2) phase.itemIds manifest inclusion
- * 3) bucketKey mapping
- */
 function resolveItemPhaseId(item: TreatmentPlanItem, phases: TreatmentPhase[]): string | undefined {
-    // 1. Precise ID Match
     if (item.phaseId && phases.some(p => p.id === item.phaseId)) return item.phaseId;
-    
-    // 2. Manifest-based resolution (Authoritative list on phase)
     const manifestOwner = phases.find(p => p.itemIds && p.itemIds.includes(item.id));
     if (manifestOwner) return manifestOwner.id;
-
-    // 3. Semantic Fallback (Bucket Key)
-    const itemBucket = (item as any).bucketKey || (item as any).phaseBucketKey || (item as any).phaseKey;
-    if (itemBucket) {
-        const match = phases.find(p => p.bucketKey === itemBucket);
-        if (match) return match.id;
-    }
-    
     return undefined;
 }
 
-/**
- * INVARIANT: Every plan with items must have a timeline.
- * If no phases exist, create a stable synthetic default phase.
- */
 export function derivePhaseTimeline(
   phases: TreatmentPhase[] | undefined | null, 
   allItems: TreatmentPlanItem[],
@@ -125,7 +140,6 @@ export function derivePhaseTimeline(
 ): DerivedPhaseMetadata[] {
   let effectivePhases = Array.isArray(phases) && phases.length > 0 ? [...phases] : [];
 
-  // 1. Synthetic Phase Fallback
   if (effectivePhases.length === 0 && allItems.length > 0) {
     const stablePlanId = planId || 'temp';
     effectivePhases = [{
@@ -145,28 +159,14 @@ export function derivePhaseTimeline(
   const itemsByPhase: Record<string, TreatmentPlanItem[]> = {};
   effectivePhases.forEach(p => itemsByPhase[p.id] = []);
 
-  // 2. Identify catch-all phase (prefer first clinical/non-monitor phase)
   const fallbackPhase = effectivePhases.find(p => !p.isMonitorPhase) || effectivePhases[0];
-  const isProd = process.env.NODE_ENV === 'production';
 
   allItems.forEach(item => {
     let targetId = resolveItemPhaseId(item, effectivePhases);
-    
-    // 3. NO DISAPPEARING ITEMS: Re-attach orphans to fallback
-    if (!targetId && fallbackPhase) {
-        if (!isProd) {
-            const label = item.procedureName || item.procedureCode || item.id;
-            console.debug(`[Timeline Engine] Reattaching orphaned item "${label}" to fallback phase: ${fallbackPhase.title}`);
-        }
-        targetId = fallbackPhase.id;
-    }
-    
-    if (targetId && itemsByPhase[targetId]) {
-      itemsByPhase[targetId].push(item);
-    }
+    if (!targetId && fallbackPhase) targetId = fallbackPhase.id;
+    if (targetId && itemsByPhase[targetId]) itemsByPhase[targetId].push(item);
   });
 
-  // 4. Deterministic Sort & Return
   return effectivePhases
     .slice() 
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))

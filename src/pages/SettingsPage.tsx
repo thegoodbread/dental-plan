@@ -1,12 +1,30 @@
 import React, { useState, useEffect, useMemo } from 'react';
-// FIX: Added X to lucide-react imports for closing editing modes
-import { Search, Plus, Save, Trash2, Download, Upload, RotateCcw, Users, BookOpen, Shield, ShieldCheck, ChevronDown, ChevronRight, AlertCircle, FileText, X } from 'lucide-react';
+import { 
+    Search, Plus, Save, Trash2, Download, Upload, RotateCcw, Users, BookOpen, 
+    Shield, ShieldCheck, ChevronDown, ChevronRight, AlertCircle, FileText, X,
+    Edit2, Filter, AlertTriangle, Check, Clock
+} from 'lucide-react';
 import { listEffectiveProcedures, resolveEffectiveProcedure } from '../domain/procedureResolver';
-import { getClinicProcedureLibrary, saveClinicProcedureLibrary, resetClinicProcedureLibraryToDefaults, mergeOrUpsertClinicProcedure } from '../domain/clinicProcedureLibrary';
+import { 
+    getClinicProcedureLibrary, saveClinicProcedureLibrary, 
+    resetClinicProcedureLibraryToDefaults, mergeOrUpsertClinicProcedure 
+} from '../domain/clinicProcedureLibrary';
 import { exportLibraryToCsv, parseCsvToLibrary } from '../domain/procedureCsv';
-import { ClinicProcedure, EffectiveProcedure, Employee, EmployeeRole, EmployeePermissions } from '../types';
+import { 
+    ClinicProcedure, EffectiveProcedure, Employee, EmployeeRole, 
+    EmployeePermissions, FeeCategory, ProcedureUnitType 
+} from '../types';
 
-// --- EMPLOYEE STORAGE ---
+// --- CONSTANTS ---
+const CATEGORIES: FeeCategory[] = [
+    'DIAGNOSTIC', 'PREVENTIVE', 'RESTORATIVE', 'ENDODONTIC', 'PERIO', 
+    'IMPLANT', 'PROSTHETIC', 'ORTHO', 'COSMETIC', 'SURGICAL', 'OTHER'
+];
+
+const UNIT_TYPES: ProcedureUnitType[] = [
+    'PER_TOOTH', 'PER_QUADRANT', 'PER_ARCH', 'FULL_MOUTH', 'PER_PROCEDURE', 'PER_VISIT', 'TIME_BASED'
+];
+
 const KEY_EMPLOYEES = "cc_employees_v1";
 const ROLE_PRESETS: Record<EmployeeRole, EmployeePermissions> = {
     Dentist: { canEditPlans: true, canEditFees: false, canPresentPlans: true, canViewClaimsGuide: true, canEditClinicalNotes: true, canManageEmployees: false, canExportData: false },
@@ -20,10 +38,6 @@ const ROLE_PRESETS: Record<EmployeeRole, EmployeePermissions> = {
 
 export const SettingsPage: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'LIBRARY' | 'EMPLOYEES'>('LIBRARY');
-
-    useEffect(() => {
-        console.debug("[Settings] mounted");
-    }, []);
 
     return (
         <div className="flex flex-col h-full bg-gray-50">
@@ -60,31 +74,52 @@ export const SettingsPage: React.FC = () => {
 const ProcedureLibraryModule = () => {
     const [lib, setLib] = useState<EffectiveProcedure[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
-    const [editingCode, setEditingCode] = useState<string | null>(null);
+    const [filterMissing, setFilterMissing] = useState(false);
+    
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editingProc, setEditingProc] = useState<EffectiveProcedure | null>(null);
     const [editForm, setEditForm] = useState<Partial<ClinicProcedure>>({});
 
     const load = () => setLib(listEffectiveProcedures());
     useEffect(() => { load(); }, []);
 
-    const filtered = useMemo(() => lib.filter(p => 
-        p.cdtCode.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        p.displayName.toLowerCase().includes(searchTerm.toLowerCase())
-    ), [lib, searchTerm]);
+    const filtered = useMemo(() => lib.filter(p => {
+        const matchesSearch = p.cdtCode.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                             p.displayName.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesMissing = !filterMissing || p.isLabelMissing;
+        return matchesSearch && matchesMissing;
+    }), [lib, searchTerm, filterMissing]);
 
     const handleStartEdit = (p: EffectiveProcedure) => {
-        setEditingCode(p.cdtCode);
-        setEditForm({ cdtCode: p.cdtCode, displayName: p.displayName, baseFee: p.pricing.baseFee, membershipFee: p.pricing.membershipFee });
+        setEditingProc(p);
+        const clinic = getClinicProcedureLibrary().find(c => c.cdtCode === p.cdtCode);
+        setEditForm({
+            cdtCode: p.cdtCode,
+            displayName: p.isLabelMissing ? "" : p.displayName,
+            baseFee: p.pricing.baseFee,
+            membershipFee: p.pricing.membershipFee,
+            categoryOverride: clinic?.categoryOverride,
+            unitTypeOverride: clinic?.unitTypeOverride,
+            defaultEstimatedVisits: clinic?.defaultEstimatedVisits,
+            defaultEstimatedDurationValue: clinic?.defaultEstimatedDurationValue,
+            defaultEstimatedDurationUnit: clinic?.defaultEstimatedDurationUnit,
+            layoutOverride: clinic?.layoutOverride
+        });
+        setIsEditModalOpen(true);
     };
 
     const handleSaveEdit = () => {
-        if (!editForm.cdtCode) return;
+        if (!editForm.cdtCode || !editForm.displayName) {
+            alert("Name is required.");
+            return;
+        }
         mergeOrUpsertClinicProcedure(editForm as ClinicProcedure);
-        setEditingCode(null);
+        setIsEditModalOpen(false);
         load();
     };
 
     const handleReset = () => {
-        if (confirm("Reset library to factory defaults? All custom pricing will be lost.")) {
+        if (confirm("Reset clinic fees to factory defaults? All custom labels and pricing will be lost.")) {
             resetClinicProcedureLibraryToDefaults();
             load();
         }
@@ -97,7 +132,15 @@ const ProcedureLibraryModule = () => {
         const { data, errors } = parseCsvToLibrary(text);
         if (errors.length > 0) alert(`Import had errors:\n${errors.join('\n')}`);
         if (data.length > 0) {
-            saveClinicProcedureLibrary(data);
+            // Upsert each item
+            const current = getClinicProcedureLibrary();
+            const updated = [...current];
+            data.forEach(newItem => {
+                const idx = updated.findIndex(c => c.cdtCode === newItem.cdtCode);
+                if (idx >= 0) updated[idx] = newItem;
+                else updated.push(newItem);
+            });
+            saveClinicProcedureLibrary(updated);
             load();
         }
     };
@@ -109,29 +152,38 @@ const ProcedureLibraryModule = () => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `clinic_fees_${new Date().toISOString().split('T')[0]}.csv`;
+        a.download = `clinic_catalog_fees_${new Date().toISOString().split('T')[0]}.csv`;
         a.click();
     };
 
     return (
         <div className="flex flex-col h-full bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-4 bg-gray-50/50">
-                <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                    <input 
-                        type="text" placeholder="Search CDT code or name..." 
-                        className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                    />
+                <div className="flex items-center gap-4 flex-1">
+                    <div className="relative max-w-sm flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                        <input 
+                            type="text" placeholder="Search CDT code or name..." 
+                            className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    <button 
+                        onClick={() => setFilterMissing(!filterMissing)}
+                        className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-lg border transition-all ${filterMissing ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+                    >
+                        <AlertTriangle size={14} />
+                        Missing Labels Only
+                    </button>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={handleExport} className="flex items-center gap-2 px-3 py-2 text-xs font-bold bg-white border border-gray-300 rounded-lg hover:bg-gray-50"><Download size={14}/> Export</button>
+                    <button onClick={handleExport} className="flex items-center gap-2 px-3 py-2 text-xs font-bold bg-white border border-gray-300 rounded-lg hover:bg-gray-50"><Download size={14}/> Export Fees</button>
                     <label className="flex items-center gap-2 px-3 py-2 text-xs font-bold bg-white border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
                         <Upload size={14}/> Import CSV
                         <input type="file" accept=".csv" className="hidden" onChange={handleImport} />
                     </label>
-                    <button onClick={handleReset} className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50"><RotateCcw size={14}/> Reset</button>
+                    <button onClick={handleReset} className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50"><RotateCcw size={14}/> Reset Defaults</button>
                 </div>
             </div>
 
@@ -139,77 +191,190 @@ const ProcedureLibraryModule = () => {
                 <table className="w-full text-left border-collapse">
                     <thead className="sticky top-0 bg-white shadow-sm z-10">
                         <tr className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">
-                            <th className="px-6 py-4">CDT Code</th>
-                            <th className="px-6 py-4">Display Name</th>
-                            <th className="px-6 py-4 text-right">Base Fee</th>
+                            <th className="px-6 py-4">Display Name / Code</th>
+                            <th className="px-6 py-4 text-right">Standard Fee</th>
                             <th className="px-6 py-4 text-right">Member Fee</th>
-                            <th className="px-6 py-4">Scope</th>
-                            <th className="px-6 py-4">Coverage</th>
-                            <th className="px-6 py-4"></th>
+                            <th className="px-6 py-4">Unit Scope</th>
+                            <th className="px-6 py-4">Defaults</th>
+                            <th className="px-6 py-4 text-right">Action</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                         {filtered.map(p => (
-                            <tr key={p.cdtCode} className="hover:bg-blue-50/30 group">
-                                <td className="px-6 py-4 font-mono text-xs font-bold text-gray-500">{p.cdtCode}</td>
+                            <tr key={p.cdtCode} className="hover:bg-blue-50/30 group transition-colors">
                                 <td className="px-6 py-4">
-                                    {editingCode === p.cdtCode ? (
-                                        <input 
-                                            value={editForm.displayName || ""} 
-                                            onChange={e => setEditForm({...editForm, displayName: e.target.value})}
-                                            className="w-full p-1 border border-blue-400 rounded text-sm"
-                                        />
-                                    ) : (
-                                        <div className="text-sm font-bold text-gray-900">{p.displayName}</div>
-                                    )}
+                                    <div className="flex items-center gap-2">
+                                        <div className={`text-sm font-bold ${p.isLabelMissing ? 'text-amber-600 italic' : 'text-gray-900'}`}>
+                                            {p.displayName}
+                                        </div>
+                                        {p.isLabelMissing && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded uppercase">Needs Label</span>}
+                                    </div>
+                                    <div className="text-[10px] font-mono font-bold text-gray-400 mt-0.5">{p.cdtCode} • {p.category}</div>
                                 </td>
                                 <td className="px-6 py-4 text-right">
-                                    {editingCode === p.cdtCode ? (
-                                        <input 
-                                            type="number" value={editForm.baseFee || 0} 
-                                            onChange={e => setEditForm({...editForm, baseFee: parseFloat(e.target.value) || 0})}
-                                            className="w-24 p-1 border border-blue-400 rounded text-sm text-right"
-                                        />
-                                    ) : (
-                                        <div className="text-sm font-bold text-gray-900">${p.pricing.baseFee.toFixed(2)}</div>
-                                    )}
+                                    <div className="text-sm font-bold text-gray-900">${(p.pricing.baseFee ?? 0).toFixed(2)}</div>
                                 </td>
                                 <td className="px-6 py-4 text-right">
-                                    {editingCode === p.cdtCode ? (
-                                        <input 
-                                            type="number" value={editForm.membershipFee || ""} 
-                                            onChange={e => setEditForm({...editForm, membershipFee: e.target.value ? parseFloat(e.target.value) : null})}
-                                            className="w-24 p-1 border border-blue-400 rounded text-sm text-right"
-                                        />
-                                    ) : (
-                                        <div className="text-sm text-teal-600 font-bold">{p.pricing.membershipFee ? `$${p.pricing.membershipFee.toFixed(2)}` : "-"}</div>
-                                    )}
+                                    <div className="text-sm text-teal-600 font-bold">{p.pricing.membershipFee !== null ? `$${p.pricing.membershipFee.toFixed(2)}` : "-"}</div>
                                 </td>
                                 <td className="px-6 py-4">
                                     <span className="text-[10px] font-bold bg-gray-100 px-2 py-1 rounded text-gray-500">{p.unitType}</span>
                                 </td>
                                 <td className="px-6 py-4">
-                                    {p.metaCoverage === 'full' ? (
-                                        <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full flex items-center gap-1 w-fit"><ShieldCheck size={10}/> CLINICAL RULES</span>
-                                    ) : (
-                                        <span className="text-[10px] font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded-full w-fit">GENERIC</span>
-                                    )}
+                                    <div className="text-[10px] text-gray-500 font-medium leading-tight">
+                                        {p.defaults.defaultEstimatedVisits} Visit(s)
+                                        {p.defaults.defaultEstimatedDurationValue && <div className="text-gray-400 mt-px">+{p.defaults.defaultEstimatedDurationValue} {p.defaults.defaultEstimatedDurationUnit}</div>}
+                                    </div>
                                 </td>
                                 <td className="px-6 py-4 text-right">
-                                    {editingCode === p.cdtCode ? (
-                                        <div className="flex justify-end gap-2">
-                                            <button onClick={handleSaveEdit} className="p-1.5 text-white bg-blue-600 rounded-md shadow-sm hover:bg-blue-700 transition-all"><Save size={16}/></button>
-                                            <button onClick={() => setEditingCode(null)} className="p-1.5 text-gray-500 bg-gray-100 rounded-md hover:bg-gray-200 transition-all"><X size={16}/></button>
-                                        </div>
-                                    ) : (
-                                        <button onClick={() => handleStartEdit(p)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md opacity-0 group-hover:opacity-100 transition-all"><Plus size={16}/></button>
-                                    )}
+                                    <button onClick={() => handleStartEdit(p)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-all">
+                                        <Edit2 size={16}/>
+                                    </button>
                                 </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
+                {filtered.length === 0 && (
+                    <div className="py-20 text-center text-gray-400">
+                        <Search size={48} className="mx-auto mb-4 opacity-10" />
+                        <p className="text-sm font-medium">No procedures match your search or filter.</p>
+                    </div>
+                )}
             </div>
+
+            {/* EDIT MODAL */}
+            {isEditModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
+                    <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                        <header className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">Customize Clinical Catalog</h3>
+                                <p className="text-xs text-gray-500 mt-0.5">Code: <span className="font-mono font-bold text-gray-900">{editingProc?.cdtCode}</span></p>
+                            </div>
+                            <button onClick={() => setIsEditModalOpen(false)} className="p-2 text-gray-400 hover:bg-gray-100 rounded-full"><X size={20}/></button>
+                        </header>
+                        
+                        <div className="flex-1 overflow-y-auto p-6 space-y-8">
+                            {/* Naming Section */}
+                            <section>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Display Label (Primary UI Name)</label>
+                                <input 
+                                    autoFocus
+                                    className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                    placeholder="Enter a professional name..."
+                                    value={editForm.displayName || ""}
+                                    onChange={e => setEditForm({...editForm, displayName: e.target.value})}
+                                />
+                            </section>
+
+                            <div className="grid grid-cols-2 gap-6">
+                                {/* Pricing Section */}
+                                <section className="space-y-4">
+                                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2">Pricing Structure</h4>
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-600 mb-1">Standard Base Fee ($)</label>
+                                            <input 
+                                                type="number"
+                                                className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                                                value={editForm.baseFee ?? ""}
+                                                onChange={e => setEditForm({...editForm, baseFee: parseFloat(e.target.value) || 0})}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-600 mb-1">Membership Rate ($)</label>
+                                            <input 
+                                                type="number"
+                                                placeholder="Leave blank for Standard"
+                                                className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                                                value={editForm.membershipFee ?? ""}
+                                                onChange={e => setEditForm({...editForm, membershipFee: e.target.value ? parseFloat(e.target.value) : null})}
+                                            />
+                                        </div>
+                                    </div>
+                                </section>
+
+                                {/* Behavior Overrides */}
+                                <section className="space-y-4">
+                                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2">Behavior Overrides</h4>
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-600 mb-1">Category</label>
+                                            <select 
+                                                className="w-full p-2 bg-white border border-gray-300 rounded-lg text-sm"
+                                                value={editForm.categoryOverride || editingProc?.category}
+                                                onChange={e => setEditForm({...editForm, categoryOverride: e.target.value as any})}
+                                            >
+                                                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-600 mb-1">Unit Scope</label>
+                                            <select 
+                                                className="w-full p-2 bg-white border border-gray-300 rounded-lg text-sm"
+                                                value={editForm.unitTypeOverride || editingProc?.unitType}
+                                                onChange={e => setEditForm({...editForm, unitTypeOverride: e.target.value as any})}
+                                            >
+                                                {UNIT_TYPES.map(u => <option key={u} value={u}>{u.replace('_', ' ')}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                </section>
+                            </div>
+
+                            {/* Defaults Section */}
+                            <section className="bg-gray-50 p-4 rounded-xl space-y-4">
+                                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                    {/* FIX: Added missing Clock icon import from lucide-react. */}
+                                    <Clock size={12}/> Timeline Defaults
+                                </h4>
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 mb-1">Est. Visits</label>
+                                        <input 
+                                            type="number"
+                                            className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                                            value={editForm.defaultEstimatedVisits ?? ""}
+                                            onChange={e => setEditForm({...editForm, defaultEstimatedVisits: parseInt(e.target.value) || 1})}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 mb-1">Interval Value</label>
+                                        <input 
+                                            type="number"
+                                            placeholder="e.g. 2"
+                                            className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                                            value={editForm.defaultEstimatedDurationValue ?? ""}
+                                            onChange={e => setEditForm({...editForm, defaultEstimatedDurationValue: parseInt(e.target.value) || undefined})}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 mb-1">Interval Unit</label>
+                                        <select 
+                                            className="w-full p-2 bg-white border border-gray-300 rounded-lg text-sm"
+                                            value={editForm.defaultEstimatedDurationUnit || ""}
+                                            onChange={e => setEditForm({...editForm, defaultEstimatedDurationUnit: e.target.value as any || undefined})}
+                                        >
+                                            <option value="">None</option>
+                                            <option value="days">Days</option>
+                                            <option value="weeks">Weeks</option>
+                                            <option value="months">Months</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+
+                        <footer className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
+                            <button onClick={() => setIsEditModalOpen(false)} className="px-6 py-2 text-sm font-bold text-gray-600 hover:bg-gray-200 rounded-lg transition-colors">Cancel</button>
+                            <button onClick={handleSaveEdit} className="px-8 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2">
+                                <Check size={18}/> Update Library
+                            </button>
+                        </footer>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -275,7 +440,7 @@ const EmployeeDirectoryModule = () => {
                                 </div>
                             </div>
                             <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-all">
-                                <button onClick={() => { setEditingId(e.id); setForm(e); }} className="p-2 text-gray-400 hover:text-blue-600"><Plus size={18}/></button>
+                                <button onClick={() => { setEditingId(e.id); setForm(e); }} className="p-2 text-gray-400 hover:text-blue-600"><Edit2 size={18}/></button>
                                 <button onClick={() => handleDelete(e.id)} className="p-2 text-gray-400 hover:text-red-600"><Trash2 size={18}/></button>
                             </div>
                         </div>

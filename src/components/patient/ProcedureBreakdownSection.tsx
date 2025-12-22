@@ -1,10 +1,10 @@
-
 import React, { useState, useMemo } from 'react';
 import { TreatmentPlan, TreatmentPlanItem } from '../../types';
 import { Calendar, AlertTriangle, Shield, Smile, ChevronDown, Star, Syringe, Plus } from 'lucide-react';
 import { estimateVisits, getItemsOnTooth, getItemsOnQuadrant } from '../../services/clinicalLogic';
 import { getProcedureIcon } from '../../utils/getProcedureIcon';
 import { computeItemPricing } from '../../utils/pricingLogic';
+import { getProcedurePrimaryLabel } from '../../utils/procedureDisplay';
 
 interface ProcedureBreakdownSectionProps {
   plan: TreatmentPlan;
@@ -54,7 +54,8 @@ const PhaseGroup: React.FC<{
     };
 
     const renderLocation = (item: TreatmentPlanItem) => {
-        if (item.selectedTeeth && item.selectedTeeth.length > 0) return `Teeth: ${item.selectedTeeth.join(', ')}`;
+        const surfaces = item.surfaces && item.surfaces.length > 0 ? ` (${item.surfaces.join('')})` : '';
+        if (item.selectedTeeth && item.selectedTeeth.length > 0) return `Teeth: #${item.selectedTeeth.join(', #')}${surfaces}`;
         if (item.selectedQuadrants && item.selectedQuadrants.length > 0) return `Quads: ${item.selectedQuadrants.join(', ')}`;
         if (item.selectedArches && item.selectedArches.length > 0) return `Arch: ${item.selectedArches.join(', ')}`;
         return 'Full Mouth';
@@ -81,6 +82,8 @@ const PhaseGroup: React.FC<{
         const highlighted = isHighlighted(item);
         
         const pricing = computeItemPricing(item, plan.feeScheduleType);
+        // Patient View: Use patient context for names
+        const displayName = getProcedurePrimaryLabel(item, 'patient');
 
         return (
             <div key={item.id} className="relative" onMouseEnter={() => onHoverItem(item.id)} onMouseLeave={() => onHoverItem(null)}>
@@ -92,11 +95,11 @@ const PhaseGroup: React.FC<{
                         <div className="flex-1 min-w-0">
                             <div className="flex justify-between items-start gap-4">
                                 <div className="flex-1">
-                                    <div className={`font-bold text-gray-900 leading-tight ${isAddOn ? 'text-sm' : 'text-base'}`}>{item.procedureName}</div>
+                                    <div className={`font-bold text-gray-900 leading-tight ${isAddOn ? 'text-sm' : 'text-base'}`}>{displayName}</div>
                                     {isAddOn && parentName && <div className="text-[11px] text-gray-500 mt-0.5 font-medium">Applies to: {parentName}</div>}
                                     {!isAddOn && (
                                         <div className="text-sm text-gray-500 mt-2 font-medium flex flex-wrap items-center gap-3">
-                                            <span className="bg-gray-100 px-2 py-0.5 rounded text-xs text-gray-600">{renderLocation(item)}</span>
+                                            <span className="bg-gray-100 px-2 py-0.5 rounded text-xs text-gray-600 font-bold">{renderLocation(item)}</span>
                                             <span className="flex items-center gap-1 text-gray-400 text-xs"><Calendar size={12} /> {estimateVisits(item)} visit(s)</span>
                                         </div>
                                     )}
@@ -160,7 +163,7 @@ const PhaseGroup: React.FC<{
                                     {linkedAddOns.map(addon => (
                                         <div key={addon.id} className="relative">
                                             <div className="absolute left-[-12px] md:left-[-16px] top-[24px] w-[12px] md:w-[16px] border-b border-gray-300/40 h-px"></div>
-                                            {renderCard(addon, true, item.procedureName)}
+                                            {renderCard(addon, true, getProcedurePrimaryLabel(item, 'patient'))}
                                         </div>
                                     ))}
                                 </div>
@@ -168,9 +171,6 @@ const PhaseGroup: React.FC<{
                         </div>
                     );
                 })}
-                {addOns.filter(s => !s.linkedItemIds || s.linkedItemIds.length === 0 || !procedures.some(p => p.id === s.linkedItemIds![0])).map(addon => (
-                     <div key={addon.id} className="opacity-75">{renderCard(addon, true, 'Unknown Procedure')}</div>
-                ))}
             </div>
             <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-48' : 'max-h-0'}`}>
                 <div className="mt-4 bg-slate-50/80 border border-gray-200/80 rounded-lg p-4 text-sm space-y-2 shadow-sm">
@@ -207,7 +207,7 @@ export const ProcedureBreakdownSection: React.FC<ProcedureBreakdownSectionProps>
 
   return (
     <section className="py-12 md:py-16 px-4 md:px-6 bg-gray-50 border-b border-gray-200">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-4xl auto">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">What We'll Do</h2>
         <p className="text-gray-500 mb-8 md:mb-10">Your personalized treatment plan, organized by priority.</p>
         <div className="space-y-8 xl:space-y-12">

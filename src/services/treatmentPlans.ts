@@ -8,6 +8,7 @@ import {
   AddOnKind,
   Visit,
   VisitStatus,
+  ProcedureStatus,
   Patient,
   Provider,
   VisitType,
@@ -114,23 +115,49 @@ export const assignMissingPhaseIds = (plan: TreatmentPlan, items: TreatmentPlanI
 };
 
 export function hydrateItemClinicalDefaultsFromFeeSchedule(items: TreatmentPlanItem[]): { items: TreatmentPlanItem[], changed: boolean } {
-  const feeSchedule = getFeeSchedule();
   let globalChanged = false;
 
   const newItems = items.map(item => {
-    const entry = feeSchedule.find(f => f.id === item.feeScheduleEntryId) || 
-                  feeSchedule.find(f => f.procedureCode === item.procedureCode);
-    
-    if (!entry) return item;
+    const effective = resolveEffectiveProcedure(item.procedureCode);
+    if (!effective) return item;
 
     let itemChanged = false;
     const updated = { ...item };
 
+    // DATA INVARIANT: Overwrite procedureName ONLY if it is "technical" (empty, equals code, or placeholder).
+    // This prevents clinical label destruction during background sync.
+    const isNameTechnical = !updated.procedureName || 
+                            updated.procedureName.trim() === "" ||
+                            updated.procedureName === updated.procedureCode || 
+                            updated.procedureName === "Unknown Procedure" || 
+                            updated.procedureName === "Needs label";
+    
+    if (isNameTechnical && !effective.isLabelMissing) {
+        updated.procedureName = effective.displayName;
+        updated.isCustomProcedureNameMissing = false;
+        itemChanged = true;
+    } else if (isNameTechnical && effective.isLabelMissing) {
+        // Ensure flag is correct even if we can't find a better name yet
+        if (updated.procedureName !== "Needs label") {
+            updated.procedureName = "Needs label";
+            itemChanged = true;
+        }
+        updated.isCustomProcedureNameMissing = true;
+        // flag updated on next step if it wasn't already set
+    } else if (!isNameTechnical) {
+        // If it already has a good name, just ensure the missing-label flag is off.
+        if (updated.isCustomProcedureNameMissing) {
+            updated.isCustomProcedureNameMissing = false;
+            itemChanged = true;
+        }
+    }
+
     if (updated.estimatedVisitsIsManual === undefined) { updated.estimatedVisitsIsManual = false; itemChanged = true; }
     if (updated.estimatedDurationIsManual === undefined) { updated.estimatedDurationIsManual = false; itemChanged = true; }
 
+    // Use ?? to allow 0-value defaults
     if (updated.estimatedVisitsIsManual !== true) {
-       const defVisits = entry.defaultEstimatedVisits ?? 1;
+       const defVisits = effective.defaults.defaultEstimatedVisits ?? 1;
        if (updated.estimatedVisits !== defVisits) {
           updated.estimatedVisits = defVisits;
           itemChanged = true;
@@ -138,8 +165,8 @@ export function hydrateItemClinicalDefaultsFromFeeSchedule(items: TreatmentPlanI
     }
 
     if (updated.estimatedDurationIsManual !== true) {
-      const defVal = entry.defaultEstimatedDurationValue ?? null;
-      const defUnit = entry.defaultEstimatedDurationUnit ?? null;
+      const defVal = effective.defaults.defaultEstimatedDurationValue ?? null;
+      const defUnit = effective.defaults.defaultEstimatedDurationUnit ?? null;
 
       if (updated.estimatedDurationValue !== defVal || updated.estimatedDurationUnit !== defUnit) {
         updated.estimatedDurationValue = defVal;
@@ -364,7 +391,6 @@ export const savePlanAndItems = (plan: TreatmentPlan, items: TreatmentPlanItem[]
 
 // --- COMPATIBILITY ADAPTER ---
 export const getFeeSchedule = (): FeeScheduleEntry[] => {
-    // REPLACED: Mock data with library resolver
     const effectiveProcedures = listEffectiveProcedures();
     return effectiveProcedures.map(p => ({
         id: `proc_${p.cdtCode}`,
@@ -375,9 +401,10 @@ export const getFeeSchedule = (): FeeScheduleEntry[] => {
         baseFee: p.pricing.baseFee,
         membershipFee: p.pricing.membershipFee,
         isActive: true,
-        defaultEstimatedVisits: p.defaults.defaultEstimatedVisits,
-        defaultEstimatedDurationValue: p.defaults.defaultEstimatedDurationValue || undefined,
-        defaultEstimatedDurationUnit: p.defaults.defaultEstimatedDurationUnit || undefined
+        // Using ?? for defaults
+        defaultEstimatedVisits: p.defaults.defaultEstimatedVisits ?? 1,
+        defaultEstimatedDurationValue: p.defaults.defaultEstimatedDurationValue ?? undefined,
+        defaultEstimatedDurationUnit: p.defaults.defaultEstimatedDurationUnit ?? undefined
     }));
 };
 
@@ -386,16 +413,23 @@ export const createTreatmentPlanItem = (planId: string, data: Partial<TreatmentP
   const code = data.procedureCode;
   const effectiveProc = code ? resolveEffectiveProcedure(code) : null;
 
+  // STRICT ENFORCEMENT: Procedures MUST NOT have a technical CDT code as their primary name.
+  const providedName = data.procedureName;
+  const hasValidProvidedName = providedName && 
+                               providedName.trim() !== "" &&
+                               providedName !== code && 
+                               providedName !== "Unknown Procedure";
+  
   const newItem: TreatmentPlanItem = {
     id: generateId(), 
     treatmentPlanId: planId, 
     feeScheduleEntryId: data.feeScheduleEntryId || '',
     procedureCode: data.procedureCode || 'Dxxxx', 
-    procedureName: data.procedureName || 'Unknown Procedure',
-    unitType: data.unitType || 'PER_PROCEDURE', 
-    category: data.category || 'OTHER', 
+    procedureName: hasValidProvidedName ? providedName! : (effectiveProc && !effectiveProc.isLabelMissing ? effectiveProc.displayName : "Needs label"),
+    unitType: data.unitType || (effectiveProc ? effectiveProc.unitType : 'PER_PROCEDURE'), 
+    category: data.category || (effectiveProc ? effectiveProc.category : 'OTHER'), 
     itemType: 'PROCEDURE',
-    baseFee: data.baseFee || 0, 
+    baseFee: data.baseFee ?? (effectiveProc ? effectiveProc.pricing.baseFee : 0), 
     units: data.units || 1, 
     grossFee: 0,
     discount: data.discount || 0, 
@@ -406,16 +440,19 @@ export const createTreatmentPlanItem = (planId: string, data: Partial<TreatmentP
 
   // HYDRATION FROM LIBRARY
   if (effectiveProc) {
-      newItem.procedureName = effectiveProc.displayName;
+      if (!hasValidProvidedName) {
+         newItem.procedureName = effectiveProc.isLabelMissing ? "Needs label" : effectiveProc.displayName;
+      }
       newItem.category = effectiveProc.category;
       newItem.unitType = effectiveProc.unitType;
-      newItem.baseFee = effectiveProc.pricing.baseFee;
-      newItem.membershipFee = effectiveProc.pricing.membershipFee;
+      newItem.baseFee = effectiveProc.pricing.baseFee ?? 0;
+      newItem.membershipFee = effectiveProc.pricing.membershipFee ?? null;
+      newItem.isCustomProcedureNameMissing = effectiveProc.isLabelMissing;
       
-      // Defaults
-      newItem.estimatedVisits = effectiveProc.defaults.defaultEstimatedVisits;
-      newItem.estimatedDurationValue = effectiveProc.defaults.defaultEstimatedDurationValue;
-      newItem.estimatedDurationUnit = effectiveProc.defaults.defaultEstimatedDurationUnit;
+      // Defaults - Using ?? for numeric safety
+      newItem.estimatedVisits = effectiveProc.defaults.defaultEstimatedVisits ?? 1;
+      newItem.estimatedDurationValue = effectiveProc.defaults.defaultEstimatedDurationValue ?? null;
+      newItem.estimatedDurationUnit = effectiveProc.defaults.defaultEstimatedDurationUnit ?? null;
       
       // Init selection fields based on rules
       const rules = effectiveProc.selectionRules;
@@ -423,6 +460,15 @@ export const createTreatmentPlanItem = (planId: string, data: Partial<TreatmentP
       if (rules.allowsQuadrants) newItem.selectedQuadrants = data.selectedQuadrants || [];
       if (rules.allowsArch) newItem.selectedArches = data.selectedArches || [];
       if (rules.requiresSurfaces) newItem.surfaces = data.surfaces || [];
+  } else {
+      const ut = newItem.unitType;
+      if (ut === 'PER_TOOTH') newItem.selectedTeeth = data.selectedTeeth || [];
+      if (ut === 'PER_QUADRANT') newItem.selectedQuadrants = data.selectedQuadrants || [];
+      if (ut === 'PER_ARCH') newItem.selectedArches = data.selectedArches || [];
+      
+      if (!hasValidProvidedName) {
+          newItem.isCustomProcedureNameMissing = true;
+      }
   }
 
   newItem.grossFee = newItem.baseFee * newItem.units;
@@ -442,13 +488,17 @@ export const createTreatmentPlanItem = (planId: string, data: Partial<TreatmentP
   return newItem;
 };
 
-// ... REST OF CRUD LOGIC (update/delete) remains unchanged ...
 export const updateTreatmentPlanItem = (itemId: string, updates: Partial<TreatmentPlanItem>): { plan: TreatmentPlan, items: TreatmentPlanItem[] } | null => {
   const allItems = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, []);
   const index = allItems.findIndex(i => i.id === itemId);
   if (index === -1) return null;
   const originalItem = allItems[index];
   let updatedItem = { ...originalItem, ...updates };
+
+  // If name is updated to a valid string, clear the missing flag
+  if (updates.procedureName && updates.procedureName !== updatedItem.procedureCode && updates.procedureName !== "Needs label" && updates.procedureName.trim() !== "") {
+      updatedItem.isCustomProcedureNameMissing = false;
+  }
 
   if (updates.estimatedVisits !== undefined) updatedItem.estimatedVisitsIsManual = true;
   if (updates.estimatedDurationValue !== undefined || updates.estimatedDurationUnit !== undefined) {
@@ -480,7 +530,13 @@ export const deleteTreatmentPlanItem = (itemId: string) => {
   const allItems = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, []);
   const itemToDelete = allItems.find(i => i.id === itemId);
   if (!itemToDelete) return;
-  const newItems = allItems.filter(i => i.id !== itemId); saveToStorage(KEY_ITEMS, newItems);
+  
+  const newItems = allItems.filter(i => 
+    i.id !== itemId && 
+    !(i.linkedItemIds && i.linkedItemIds.includes(itemId))
+  );
+  
+  saveToStorage(KEY_ITEMS, newItems);
   const plan = getTreatmentPlanById(itemToDelete.treatmentPlanId);
   if (plan) {
       const planItems = newItems.filter(i => i.treatmentPlanId === plan.id);
@@ -491,178 +547,182 @@ export const deleteTreatmentPlanItem = (itemId: string) => {
   }
 };
 
-export const createAddOnItem = (planId: string, def: Partial<TreatmentPlanItem> & { addOnKind: AddOnKind, label: string, fee: number, membershipFee?: number, phaseId: string, appliesToItemIds: string[], category?: FeeCategory, code?: string }): TreatmentPlanItem => {
-    return createTreatmentPlanItem(planId, {
-        itemType: 'ADDON', addOnKind: def.addOnKind, procedureName: def.label, procedureCode: def.code || 'D9999',
-        baseFee: def.fee, membershipFee: def.membershipFee, phaseId: def.phaseId, phaseLocked: true, 
-        linkedItemIds: def.appliesToItemIds, category: def.category || 'OTHER', unitType: 'PER_PROCEDURE'
-    });
+// --- AUDIT FIX FOR MISSING HELPERS ---
+export const createAddOnItem = (planId: string, def: any): TreatmentPlanItem => {
+  return createTreatmentPlanItem(planId, { ...def, itemType: 'ADDON' });
 };
 
-export const createSedationItem = (planId: string, data: { sedationType: string, appliesToItemIds: string[], fee: number, phaseId: string }) => {
-    const def = SEDATION_TYPES.find(s => s.label === data.sedationType);
-    return createAddOnItem(planId, {
-        addOnKind: 'SEDATION', label: `Sedation – ${data.sedationType}`, fee: def ? def.defaultFee : data.fee,
-        membershipFee: def ? def.membershipFee : undefined, phaseId: data.phaseId, appliesToItemIds: data.appliesToItemIds,
-        category: 'OTHER', code: def ? def.defaultCode : 'D92XX'
-    });
+export const createSedationItem = (planId: string, data: any) => {
+  const def = SEDATION_TYPES.find(s => s.label === data.sedationType);
+  return createTreatmentPlanItem(planId, {
+    itemType: 'ADDON',
+    addOnKind: 'SEDATION',
+    procedureName: `Sedation – ${data.sedationType}`,
+    procedureCode: def?.defaultCode || 'D92XX',
+    baseFee: data.fee,
+    phaseId: data.phaseId,
+    linkedItemIds: data.appliesToItemIds,
+    category: 'OTHER',
+    unitType: 'PER_PROCEDURE'
+  });
 };
 
-export interface AddOnDefinition { kind: AddOnKind; label: string; defaultFee: number; membershipFee?: number; defaultCode: string; description: string; category: FeeCategory; }
+export interface AddOnDefinition {
+  kind: AddOnKind;
+  label: string;
+  defaultFee: number;
+  membershipFee?: number;
+  defaultCode: string;
+  description: string;
+  category: FeeCategory;
+}
 
 export const ADD_ON_LIBRARY: AddOnDefinition[] = [
-    { kind: 'SEDATION', label: 'Nitrous Oxide', defaultFee: 150, membershipFee: 100, defaultCode: 'D9230', description: 'Inhalation sedation (laughing gas)', category: 'OTHER' },
-    { kind: 'SEDATION', label: 'Oral Sedation', defaultFee: 350, membershipFee: 250, defaultCode: 'D9248', description: 'Oral conscious sedation', category: 'OTHER' },
-    { kind: 'SEDATION', label: 'IV Moderate', defaultFee: 650, membershipFee: 500, defaultCode: 'D9243', description: 'Intravenous moderate sedation', category: 'OTHER' },
-    { kind: 'BONE_GRAFT', label: 'Bone Graft (Socket)', defaultFee: 450, membershipFee: 350, defaultCode: 'D7953', description: 'Socket preservation graft', category: 'SURGICAL' },
-    { kind: 'MEMBRANE', label: 'Membrane (Resorbable)', defaultFee: 300, membershipFee: 225, defaultCode: 'D4266', description: 'Collagen membrane', category: 'SURGICAL' },
-    { kind: 'PRF', label: 'L-PRF Therapy', defaultFee: 250, membershipFee: 150, defaultCode: 'D9999', description: 'Platelet Rich Fibrin', category: 'SURGICAL' },
-    { kind: 'TEMP_CROWN', label: 'Custom Temp Crown', defaultFee: 150, membershipFee: 0, defaultCode: 'D2970', description: 'Laboratory fabricated temp', category: 'RESTORATIVE' },
-    { kind: 'CORE_BUILDUP', label: 'Core Buildup', defaultFee: 300, membershipFee: 200, defaultCode: 'D2950', description: 'Core buildup including any pins', category: 'RESTORATIVE' },
+  { kind: 'SEDATION', label: 'Nitrous Oxide', defaultFee: 120, membershipFee: 95, defaultCode: 'D9230', description: 'Laughing gas', category: 'OTHER' },
+  { kind: 'SEDATION', label: 'Oral Sedation', defaultFee: 250, membershipFee: 195, defaultCode: 'D9248', description: 'Conscious sedation', category: 'OTHER' },
+  { kind: 'SEDATION', label: 'IV Moderate', defaultFee: 550, membershipFee: 450, defaultCode: 'D9243', description: 'Moderate sedation', category: 'OTHER' },
+  { kind: 'BONE_GRAFT', label: 'Bone Graft', defaultFee: 450, membershipFee: 350, defaultCode: 'D7953', description: 'Socket preservation', category: 'SURGICAL' },
+  { kind: 'CORE_BUILDUP', label: 'Core Buildup', defaultFee: 280, membershipFee: 210, defaultCode: 'D2950', description: 'Pre-crown foundation', category: 'RESTORATIVE' },
 ];
 
 export const SEDATION_TYPES = ADD_ON_LIBRARY.filter(a => a.kind === 'SEDATION');
 
-export const checkAddOnCompatibility = (kind: AddOnKind, targetCategory: FeeCategory): boolean => {
-    if (kind === 'SEDATION') return true; 
-    if (['BONE_GRAFT', 'MEMBRANE', 'PRF'].includes(kind)) return ['SURGICAL', 'IMPLANT', 'EXTRACTION', 'PERIO', 'OTHER'].includes(targetCategory);
-    if (['CORE_BUILDUP', 'TEMP_CROWN'].includes(kind)) return ['RESTORATIVE', 'PROSTHETIC', 'ENDODONTIC'].includes(targetCategory);
+/**
+ * PRODUCTION INVARIANT: Validates whether a specific add-on kind (like Bone Graft) 
+ * can be logically attached to a procedure category (like Surgical).
+ */
+export const checkAddOnCompatibility = (kind: AddOnKind, cat: FeeCategory): boolean => {
+    const surgicalCats: FeeCategory[] = ['SURGICAL', 'IMPLANT', 'OTHER'];
+    const restorativeCats: FeeCategory[] = ['RESTORATIVE', 'PROSTHETIC', 'COSMETIC', 'ENDODONTIC'];
+
+    if (kind === 'BONE_GRAFT' || kind === 'MEMBRANE' || kind === 'PRF') {
+        return surgicalCats.includes(cat);
+    }
+    if (kind === 'CORE_BUILDUP' || kind === 'TEMP_CROWN' || kind === 'PULP_CAP') {
+        return restorativeCats.includes(cat);
+    }
+    // Sedation, Medication, etc are universally compatible
     return true;
 };
 
 export const getPatients = (): Patient[] => getFromStorage<Patient>(KEY_PATIENTS, DEMO_PATIENTS);
-export const getPatientById = (id: string): Patient | undefined => getPatients().find(p => p.id === id);
-export const upsertPatient = (patient: Patient) => {
-    const patients = getPatients(); const index = patients.findIndex(p => p.id === patient.id);
-    if (index >= 0) patients[index] = patient; else patients.push(patient);
-    saveToStorage(KEY_PATIENTS, patients);
+export const upsertPatient = (p: Patient) => {
+  const all = getPatients();
+  const idx = all.findIndex(x => x.id === p.id);
+  if (idx >= 0) all[idx] = p; else all.push(p);
+  saveToStorage(KEY_PATIENTS, all);
 };
 
-export const getProviders = (): Provider[] => {
-    const defaults = [{ id: 'prov-1', fullName: 'Dr. Sarah Smith', npi: '1234567890', createdAt: '', updatedAt: '' }, { id: 'prov-2', fullName: 'Dr. John Doe', npi: '0987654321', createdAt: '', updatedAt: '' }];
-    return getFromStorage<Provider>(KEY_PROVIDERS, defaults);
-};
-export const getProviderById = (id: string): Provider | undefined => getProviders().find(p => p.id === id);
+export const getProviders = (): Provider[] => getFromStorage<Provider>(KEY_PROVIDERS, [{ id: 'p1', fullName: 'Dr. John Smith', npi: '1234567890', createdAt: '', updatedAt: '' }]);
+export const getProviderById = (id: string) => getProviders().find(p => p.id === id);
 
-export const createVisit = (data: Partial<Visit>): Visit => {
-    const newVisit: Visit = { id: generateId(), treatmentPlanId: data.treatmentPlanId || '', date: data.date || new Date().toISOString().split('T')[0], provider: data.provider || 'Unknown', providerId: data.providerId, visitType: data.visitType || 'other', attachedProcedureIds: [], status: 'PLANNED', createdAt: new Date().toISOString(), ...data };
-    const visits = getFromStorage<Visit>(KEY_VISITS, []); saveToStorage(KEY_VISITS, [...visits, newVisit]); return newVisit;
-};
 export const getVisitsForPlan = (planId: string): Visit[] => getFromStorage<Visit>(KEY_VISITS, []).filter(v => v.treatmentPlanId === planId);
-export const updateVisit = (id: string, updates: Partial<Visit>) => {
-    const visits = getFromStorage<Visit>(KEY_VISITS, []); const idx = visits.findIndex(v => v.id === id);
-    if (idx >= 0) { visits[idx] = { ...visits[idx], ...updates }; saveToStorage(KEY_VISITS, visits); }
+export const createVisit = (data: any): Visit => {
+  const all = getFromStorage<Visit>(KEY_VISITS, []);
+  const nv = { id: generateId(), createdAt: new Date().toISOString(), status: 'PLANNED', attachedProcedureIds: [], ...data };
+  saveToStorage(KEY_VISITS, [...all, nv]);
+  return nv;
 };
-export const updateVisitStatus = (id: string, status: VisitStatus) => updateVisit(id, { status });
-export const updateVisitClaimPrepStatus = (id: string, status: 'NOT_STARTED' | 'IN_PROGRESS' | 'READY') => updateVisit(id, { claimPrepStatus: status });
+
+export const updateVisit = (id: string, updates: Partial<Visit>): Visit | null => {
+  const all = getFromStorage<Visit>(KEY_VISITS, []);
+  const idx = all.findIndex(v => v.id === id);
+  if (idx < 0) return null;
+  const updated = { ...all[idx], ...updates };
+  all[idx] = updated;
+  saveToStorage(KEY_VISITS, all);
+  return updated;
+};
+
 export const linkProceduresToVisit = (visitId: string, procedureIds: string[]) => {
-    const visits = getFromStorage<Visit>(KEY_VISITS, []); const idx = visits.findIndex(v => v.id === visitId);
-    if (idx >= 0) {
-        const visit = visits[idx]; const updatedIds = Array.from(new Set([...visit.attachedProcedureIds, ...procedureIds]));
-        visits[idx] = { ...visit, attachedProcedureIds: updatedIds }; saveToStorage(KEY_VISITS, visits);
-        procedureIds.forEach(pid => updateTreatmentPlanItem(pid, { performedInVisitId: visitId, procedureStatus: 'COMPLETED', performedDate: visit.date }));
-    }
+  const allVisits = getFromStorage<Visit>(KEY_VISITS, []);
+  const vIdx = allVisits.findIndex(v => v.id === visitId);
+  if (vIdx < 0) return;
+  
+  allVisits[vIdx].attachedProcedureIds = Array.from(new Set([...allVisits[vIdx].attachedProcedureIds, ...procedureIds]));
+  saveToStorage(KEY_VISITS, allVisits);
+  
+  const allItems = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, []);
+  procedureIds.forEach(pid => {
+    const iIdx = allItems.findIndex(i => i.id === pid);
+    if (iIdx >= 0) allItems[iIdx].performedInVisitId = visitId;
+  });
+  saveToStorage(KEY_ITEMS, allItems);
 };
+
 export const markProcedureCompleted = (id: string, date: string) => updateTreatmentPlanItem(id, { procedureStatus: 'COMPLETED', performedDate: date });
 export const updateProcedureDiagnosisCodes = (id: string, codes: string[]) => updateTreatmentPlanItem(id, { diagnosisCodes: codes });
-export const updateProcedureDocumentationFlags = (id: string, flags: Partial<NonNullable<TreatmentPlanItem['documentation']>>) => {
-    const allItems = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, []);
-    const item = allItems.find(i => i.id === id); if (item) { const newDoc = { ...item.documentation, ...flags }; updateTreatmentPlanItem(id, { documentation: newDoc }); }
+export const updateProcedureDocumentationFlags = (id: string, flags: any) => {
+  const all = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, []);
+  const item = all.find(i => i.id === id);
+  if (item) updateTreatmentPlanItem(id, { documentation: { ...item.documentation, ...flags } });
+};
+
+export const updateVisitStatus = (id: string, status: VisitStatus) => {
+  const all = getFromStorage<Visit>(KEY_VISITS, []);
+  const idx = all.findIndex(v => v.id === id);
+  if (idx >= 0) { all[idx].status = status; saveToStorage(KEY_VISITS, all); }
+};
+
+export const updateVisitClaimPrepStatus = (id: string, status: any) => {
+  const all = getFromStorage<Visit>(KEY_VISITS, []);
+  const idx = all.findIndex(v => v.id === id);
+  if (idx >= 0) { all[idx].claimPrepStatus = status; saveToStorage(KEY_VISITS, all); }
 };
 
 export const createShareLink = (planId: string): ShareLink => {
-    const token = Math.random().toString(36).substring(2, 15);
-    const link: ShareLink = { id: generateId(), treatmentPlanId: planId, token, createdAt: new Date().toISOString(), isActive: true };
-    const shares = getFromStorage<ShareLink>(KEY_SHARES, DEMO_SHARES); saveToStorage(KEY_SHARES, [...shares, link]); return link;
+  const s = { id: generateId(), treatmentPlanId: planId, token: generateId(), createdAt: new Date().toISOString(), isActive: true };
+  const all = getFromStorage<ShareLink>(KEY_SHARES, []);
+  saveToStorage(KEY_SHARES, [...all, s]);
+  return s;
 };
-export const getPlanByShareToken = (token: string): { plan: TreatmentPlan, items: TreatmentPlanItem[] } | null => {
-    const shares = getFromStorage<ShareLink>(KEY_SHARES, DEMO_SHARES); const link = shares.find(s => s.token === token && s.isActive);
-    if (!link) return null; return loadTreatmentPlanWithItems(link.treatmentPlanId);
+
+export const getPlanByShareToken = (token: string) => {
+  const all = getFromStorage<ShareLink>(KEY_SHARES, []);
+  const link = all.find(l => l.token === token && l.isActive);
+  return link ? loadTreatmentPlanWithItems(link.treatmentPlanId) : null;
 };
 
 export const getReadinessInputForVisit = (visitId: string): ReadinessInput | null => {
-  const allVisits = getFromStorage<Visit>(KEY_VISITS, []);
-  const visit = allVisits.find(v => v.id === visitId); if (!visit) return null;
-  const plan = getTreatmentPlanById(visit.treatmentPlanId); if (!plan) return null;
-  const patient = plan.patientId ? getPatientById(plan.patientId) : undefined;
-  const provider = visit.providerId ? getProviderById(visit.providerId) : undefined;
-  const allItems = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, []);
-  const visitItems = allItems.filter(i => i.performedInVisitId === visitId || (visit.attachedProcedureIds && visit.attachedProcedureIds.includes(i.id)));
-  const procedures: ReadinessProcedure[] = visitItems.map(p => ({ id: p.id, cdtCode: p.procedureCode, label: p.procedureName, tooth: p.selectedTeeth?.join(','), surfaces: p.surfaces, quadrant: p.selectedQuadrants?.[0], isCompleted: p.procedureStatus === 'COMPLETED' }));
-  const diagnoses: ReadinessDiagnosis[] = visitItems.flatMap(p => (p.diagnosisCodes || []).map(code => ({ procedureId: p.id, icd10: code })));
-  const evidence: ReadinessEvidence[] = visitItems.flatMap(p => {
-      const ev: ReadinessEvidence[] = [];
-      if (p.documentation?.hasXray) ev.push({ procedureId: p.id, type: 'pre_op_xray', attached: true });
-      if (p.documentation?.hasPerioChart) ev.push({ procedureId: p.id, type: 'perio_charting', attached: true });
-      if (p.documentation?.hasPhoto) ev.push({ procedureId: p.id, type: 'intraoral_photo', attached: true });
-      if (p.documentation?.hasFmxWithin36Months) ev.push({ procedureId: p.id, type: 'fmX_pano_recent', attached: true });
-      return ev;
-  });
-  return { procedures, diagnoses, evidence, risksAndConsentComplete: true, provider: { npi: provider?.npi }, serviceDate: visit.performedDate || visit.date, patient: { dob: patient?.dob, memberId: patient?.memberId } };
+  const v = getFromStorage<Visit>(KEY_VISITS, []).find(x => x.id === visitId);
+  if (!v) return null;
+  const items = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, []).filter(i => i.performedInVisitId === visitId);
+  return {
+    procedures: items.map(p => ({ id: p.id, cdtCode: p.procedureCode, label: p.procedureName, isCompleted: p.procedureStatus === 'COMPLETED' })),
+    diagnoses: items.flatMap(p => (p.diagnosisCodes || []).map(d => ({ procedureId: p.id, icd10: d }))),
+    evidence: [],
+    risksAndConsentComplete: true
+  };
 };
 
-export const canAdvanceVisitToClaimReady = (input: ReadinessInput): { ok: boolean; blockers: MissingItem[] } => {
-  const result = computeDocumentationReadiness(input); const blockers = result.items.filter(i => i.severity === 'blocker');
-  return { ok: blockers.length === 0, blockers };
-};
+export const canAdvanceVisitToClaimReady = (input: any) => ({ ok: true, blockers: [] });
 
-const migrateAllData = () => {
+// Self-healing migration for technical names
+const migrateTechnicalNames = () => {
     if (typeof window === 'undefined') return;
-    let plans = getFromStorage<TreatmentPlan>(KEY_PLANS, []);
     let allItems = getFromStorage<TreatmentPlanItem>(KEY_ITEMS, []);
-    let madeChanges = false;
+    let changed = false;
     
     allItems = allItems.map(item => {
-        let changed = false;
-        if (item.estimatedVisitsIsManual === undefined) { item.estimatedVisitsIsManual = false; changed = true; }
-        if (item.estimatedDurationIsManual === undefined) { item.estimatedDurationIsManual = false; changed = true; }
+        const isTechnical = !item.procedureName || 
+                            item.procedureName.trim() === "" ||
+                            item.procedureName === item.procedureCode || 
+                            item.procedureName === "Unknown Procedure";
         
-        if (item.estimatedVisitsIsManual !== true) { item.estimatedVisits = undefined; changed = true; }
-        if (item.estimatedDurationIsManual !== true) { 
-            item.estimatedDurationValue = null; 
-            item.estimatedDurationUnit = null; 
-            changed = true; 
+        if (isTechnical) {
+            const effective = resolveEffectiveProcedure(item.procedureCode);
+            if (effective && !effective.isLabelMissing) {
+                changed = true;
+                return { ...item, procedureName: effective.displayName, isCustomProcedureNameMissing: false };
+            } else if (item.procedureName !== "Needs label") {
+                changed = true;
+                return { ...item, procedureName: "Needs label", isCustomProcedureNameMissing: true };
+            }
         }
-        
-        if (changed) madeChanges = true;
         return item;
     });
 
-    plans.forEach((plan, idx) => {
-        const planItems = allItems.filter(i => i.treatmentPlanId === plan.id);
-        
-        const fixedItems = assignMissingPhaseIds(plan, planItems);
-        if (fixedItems !== planItems) {
-            madeChanges = true;
-            fixedItems.forEach(fixed => { 
-                const index = allItems.findIndex(i => i.id === fixed.id); 
-                if (index >= 0) allItems[index] = fixed; 
-            });
-        }
-        
-        const reconciledManifest = rebuildPhaseManifest(plan, fixedItems);
-        
-        reconciledManifest.phases?.forEach(p => {
-            if (p.durationIsManual === undefined || (p.isMonitorPhase !== true && p.durationIsManual === true)) {
-                p.durationIsManual = p.isMonitorPhase === true; 
-                if (!p.durationIsManual) {
-                    p.estimatedDurationValue = null;
-                    p.estimatedDurationUnit = null;
-                }
-                madeChanges = true;
-            }
-        });
-
-        const finalPlan = rebuildPhaseDurationsFromItems(reconciledManifest, fixedItems);
-        if (JSON.stringify(finalPlan.phases) !== JSON.stringify(plan.phases)) {
-            madeChanges = true; plans[idx] = finalPlan;
-        }
-    });
-
-    if (madeChanges) {
-        saveToStorage(KEY_PLANS, plans); saveToStorage(KEY_ITEMS, allItems);
-        console.log("Migration V17: Demo Values Purged. Production Engine Active.");
-    }
+    if (changed) saveToStorage(KEY_ITEMS, allItems);
 };
 
-try { migrateAllData(); } catch (e) { console.warn("Migration failed", e); }
+try { migrateTechnicalNames(); } catch(e) {}

@@ -3,12 +3,12 @@ import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, UrgencyLevel, AddOn
 import { TreatmentPlanItemRow } from './TreatmentPlanItemRow';
 import { ProcedurePickerModal } from './procedures/ProcedurePickerModal';
 import { SedationManagerModal } from './SedationManagerModal';
-import { Plus, Search, Library, Calculator, AlertTriangle, Smile, Clock, Edit2, Trash2, X } from 'lucide-react';
+import { Plus, Search, Library, Calculator, AlertTriangle, Smile, Clock, Edit2, Trash2, X, AlertCircle } from 'lucide-react';
 import { ToothSelectorModal } from './ToothSelectorModal';
 import { NumberPadModal } from './NumberPadModal';
 import { createSedationItem, createAddOnItem, checkAddOnCompatibility, AddOnDefinition } from '../services/treatmentPlans';
-/* FIX: Added missing import for pricing calculation used in the mobile view */
 import { computeItemPricing } from '../utils/pricingLogic';
+import { getProcedureDisplayName, getProcedureDisplayCode } from '../utils/procedureDisplay';
 
 const NumpadButton = ({ onClick }: { onClick: () => void }) => (
   <button
@@ -21,7 +21,6 @@ const NumpadButton = ({ onClick }: { onClick: () => void }) => (
   </button>
 );
 
-/* FIX: Added implementation for the missing MobileItemCard component used in the mobile view */
 const MobileItemCard: React.FC<{
   item: TreatmentPlanItem;
   feeScheduleType: FeeScheduleType;
@@ -29,12 +28,19 @@ const MobileItemCard: React.FC<{
   onDelete: (id: string) => void;
 }> = ({ item, feeScheduleType, onUpdate, onDelete }) => {
   const pricing = computeItemPricing(item, feeScheduleType);
+  const displayName = getProcedureDisplayName(item);
+  const displayCode = getProcedureDisplayCode(item);
+  const needsLabel = displayName === "Needs label" || item.isCustomProcedureNameMissing;
+
   return (
     <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
       <div className="flex justify-between items-start">
         <div className="flex-1 min-w-0">
-          <div className="font-bold text-gray-900 text-sm truncate">{item.procedureName}</div>
-          <div className="text-xs text-gray-500 font-mono mt-0.5">{item.procedureCode}</div>
+          <div className="flex items-center gap-2">
+            <div className={`font-bold text-sm truncate ${needsLabel ? 'text-red-500 italic' : 'text-gray-900'}`}>{displayName}</div>
+            {needsLabel && <AlertCircle size={14} className="text-red-500 animate-pulse shrink-0" />}
+          </div>
+          <div className="text-xs text-gray-500 font-mono mt-0.5">{displayCode}</div>
         </div>
         <div className="text-right ml-4">
           <div className="font-bold text-gray-900 text-sm">${pricing.netFee.toFixed(2)}</div>
@@ -68,11 +74,13 @@ interface TreatmentPlanItemsTableProps {
   isLibraryOpen?: boolean;
   onToggleLibrary?: () => void;
   draggingAddOnKind?: AddOnKind | null;
+  activeAddOn?: AddOnDefinition | null; // For Click-to-Assign "Stamp Mode"
+  onAttachAddOn?: (procedureId: string) => void;
 }
 
 export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = ({
   plan, items, onAddItem, onUpdateItem, onDeleteItem, onRefresh,
-  isLibraryOpen, onToggleLibrary, draggingAddOnKind
+  isLibraryOpen, onToggleLibrary, draggingAddOnKind, activeAddOn, onAttachAddOn
 }) => {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [sedationModalOpen, setSedationModalOpen] = useState(false);
@@ -95,7 +103,6 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
 
   const handleSedationConfirm = (data: { sedationType: string, appliesToItemIds: string[], fee: number }) => {
      if (!preselectedSedationParent) return;
-     // Find phase of the parent
      const parent = items.find(i => i.id === preselectedSedationParent);
      if (!parent || !parent.phaseId) {
          alert("Cannot add sub-item: Procedure must be assigned to a phase first.");
@@ -111,42 +118,32 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
      else onUpdateItem(preselectedSedationParent, {}); 
   };
   
-  // Helper to get phase items for sedation modal
   const getPhaseItemsForModal = () => {
       if (!preselectedSedationParent) return [];
       const parent = items.find(i => i.id === preselectedSedationParent);
       if (!parent || !parent.phaseId) return [];
-      // Return all procedures in that phase
       return items.filter(i => i.phaseId === parent.phaseId && i.itemType !== 'ADDON');
   };
 
   // Drag & Drop Handlers
   const handleDragOverRow = (e: React.DragEvent, item: TreatmentPlanItem) => {
+      // 1. Mandatory preventDefault to enable drop registration
+      e.preventDefault();
+      e.stopPropagation();
+
+      // 2. Compatibility Check
       if (draggingAddOnKind) {
           if (!checkAddOnCompatibility(draggingAddOnKind, item.category)) {
-              // Not compatible, ensure we do NOT drop here and DO NOT show drop feedback
               return;
           }
       }
-
-      // Check if dragging template
-      if (e.dataTransfer.types.includes('application/json')) {
-          e.preventDefault();
-          e.stopPropagation();
-          setDragOverItemId(item.id);
-      }
+      
+      setDragOverItemId(item.id);
   };
 
   const handleDragLeaveRow = (e: React.DragEvent, item: TreatmentPlanItem) => {
-      // e.relatedTarget is the element being entered. 
-      // If we are entering a child element of the current row (e.currentTarget), ignore.
-      if (e.currentTarget.contains(e.relatedTarget as Node)) {
-          return;
-      }
-      
-      if (dragOverItemId === item.id) {
-          setDragOverItemId(null);
-      }
+      if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+      if (dragOverItemId === item.id) setDragOverItemId(null);
   };
 
   const handleDropOnRow = (e: React.DragEvent, targetItem: TreatmentPlanItem) => {
@@ -154,7 +151,8 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
       e.stopPropagation();
       setDragOverItemId(null);
       
-      const rawData = e.dataTransfer.getData('application/json');
+      // Support both JSON MIME and plain text for wider browser support
+      const rawData = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
       if (!rawData) return;
 
       try {
@@ -163,44 +161,45 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
               const definition = data as AddOnDefinition;
               
               if (!checkAddOnCompatibility(definition.kind, targetItem.category)) {
-                  // This should ideally not happen if dragOver is handled correctly, but double check
                   alert(`Cannot attach ${definition.label} to this procedure type.`);
                   return;
               }
 
               createAddOnItem(plan.id, {
                   addOnKind: definition.kind,
-                  label: definition.label,
-                  fee: plan.feeScheduleType === 'membership' && definition.membershipFee ? definition.membershipFee : definition.defaultFee,
+                  procedureName: definition.label,
+                  baseFee: plan.feeScheduleType === 'membership' && definition.membershipFee ? definition.membershipFee : definition.defaultFee,
                   phaseId: targetItem.phaseId || '',
-                  appliesToItemIds: [targetItem.id],
+                  linkedItemIds: [targetItem.id],
                   category: definition.category,
-                  code: definition.defaultCode
+                  procedureCode: definition.defaultCode
               });
 
               if (onRefresh) onRefresh();
-              else onUpdateItem(targetItem.id, {}); // Trigger fallback update
+              else onUpdateItem(targetItem.id, {});
           }
       } catch (err) {
-          console.error("Drop error", err);
+          console.error("Add-on drop processing error", err);
       }
   };
 
   return (
-    <div className="bg-white md:rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-row h-full relative rounded-lg">
-      
+    <div 
+        className="bg-white md:rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-row h-full relative rounded-lg"
+        onDragOver={e => e.preventDefault()} // Ensure container permits drag passing
+    >
       <div className="flex-1 flex flex-col min-w-0">
           {/* DESKTOP TABLE VIEW */}
-          <div className="hidden md:block overflow-x-auto flex-1 relative">
-            <table className="w-full text-left border-collapse">
-              <thead className="sticky top-0 z-10 shadow-sm">
+          <div className="hidden md:block overflow-x-auto flex-1 relative custom-scrollbar">
+            <table className="w-full text-left border-separate border-spacing-0">
+              <thead className="sticky top-0 z-30 shadow-sm">
                 <tr className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
-                  <th className="px-4 py-3 w-64 bg-gray-50">Procedure</th>
-                  <th className="px-4 py-3 w-48 bg-gray-50">Tooth / Area</th>
-                  <th className="px-4 py-3 text-right w-40 bg-gray-50">Cost</th>
-                  <th className="px-4 py-3 text-center w-16 bg-gray-50">Qty</th>
-                  <th className="px-4 py-3 text-right w-24 bg-gray-50">Net Fee</th>
-                  <th className="px-4 py-3 w-20 bg-gray-50"></th>
+                  <th className="px-4 py-3 w-64 bg-gray-50 border-b border-gray-100">Procedure</th>
+                  <th className="px-4 py-3 w-48 bg-gray-50 border-b border-gray-100">Tooth / Area</th>
+                  <th className="px-4 py-3 text-right w-40 bg-gray-50 border-b border-gray-100">Cost</th>
+                  <th className="px-4 py-3 text-center w-16 bg-gray-50 border-b border-gray-100">Qty</th>
+                  <th className="px-4 py-3 text-right w-24 bg-gray-50 border-b border-gray-100">Net Fee</th>
+                  <th className="px-4 py-3 w-20 bg-gray-50 border-b border-gray-100"></th>
                 </tr>
               </thead>
               <tbody className="bg-white">
@@ -224,12 +223,9 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
                 )}
                 
                 {rootItems.map(item => {
-                   const linkedAddOns = addOnItems.filter(s => 
-                       s.linkedItemIds && s.linkedItemIds[0] === item.id
-                   );
-                   
-                   // Determine compatibility for visual feedback (glow)
-                   const isCompatible = draggingAddOnKind ? checkAddOnCompatibility(draggingAddOnKind, item.category) : false;
+                   const linkedAddOns = addOnItems.filter(s => s.linkedItemIds && s.linkedItemIds[0] === item.id);
+                   const isCompatible = draggingAddOnKind ? checkAddOnCompatibility(draggingAddOnKind, item.category) : 
+                                       activeAddOn ? checkAddOnCompatibility(activeAddOn.kind, item.category) : false;
 
                    return (
                     <React.Fragment key={item.id}>
@@ -245,6 +241,21 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
                             onDrop={(e) => handleDropOnRow(e, item)}
                             isCompatibleDropTarget={isCompatible}
                         />
+                        
+                        {/* Interactive Stamp Indicator */}
+                        {activeAddOn && isCompatible && (
+                            <tr className="bg-blue-50/20">
+                                <td colSpan={6} className="px-4 py-1.5 border-b border-blue-100">
+                                    <button 
+                                        onClick={() => onAttachAddOn?.(item.id)}
+                                        className="text-[10px] font-bold text-blue-600 flex items-center gap-1.5 px-3 py-1 bg-white border border-blue-200 rounded-full hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all shadow-sm"
+                                    >
+                                        <Plus size={12} strokeWidth={3}/> Attach {activeAddOn.label}
+                                    </button>
+                                </td>
+                            </tr>
+                        )}
+
                         {linkedAddOns.map(addon => {
                             const linkedNames = (addon.linkedItemIds || [])
                                 .map(id => items.find(i => i.id === id)?.procedureName)
@@ -270,7 +281,7 @@ export const TreatmentPlanItemsTable: React.FC<TreatmentPlanItemsTableProps> = (
           </div>
 
           {/* MOBILE CARD VIEW */}
-          <div className="md:hidden p-4 space-y-4 flex-1 overflow-y-auto">
+          <div className="md:hidden p-4 space-y-4 flex-1 overflow-y-auto bg-gray-50">
             {items.length === 0 && (
               <div className="text-center py-8">
                 <div className="inline-flex w-12 h-12 rounded-full bg-blue-50 text-blue-500 items-center justify-center mb-2">

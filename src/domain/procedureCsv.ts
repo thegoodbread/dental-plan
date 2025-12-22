@@ -5,14 +5,14 @@ export function exportLibraryToCsv(list: ClinicProcedure[]): string {
     const rows = list.map(p => [
         p.cdtCode,
         `"${p.displayName.replace(/"/g, '""')}"`,
-        p.baseFee,
-        p.membershipFee || "",
-        p.categoryOverride || "",
-        p.unitTypeOverride || "",
-        p.defaultEstimatedVisits || "",
-        p.defaultEstimatedDurationValue || "",
-        p.defaultEstimatedDurationUnit || "",
-        p.layoutOverride || ""
+        p.baseFee ?? 0,
+        p.membershipFee ?? "",
+        p.categoryOverride ?? "",
+        p.unitTypeOverride ?? "",
+        p.defaultEstimatedVisits ?? "",
+        p.defaultEstimatedDurationValue ?? "",
+        p.defaultEstimatedDurationUnit ?? "",
+        p.layoutOverride ?? ""
     ].join(","));
     
     return [headers, ...rows].join("\n");
@@ -27,7 +27,6 @@ export function parseCsvToLibrary(csv: string): { data: ClinicProcedure[], error
         return { data: [], errors: ["CSV is empty or missing header."] };
     }
 
-    // Very simple CSV parser (doesn't handle complex quoted commas perfectly, but works for standard sheets)
     lines.slice(1).forEach((line, idx) => {
         const parts = line.split(",").map(p => p.trim().replace(/^"|"$/g, ''));
         if (parts.length < 3) {
@@ -47,13 +46,13 @@ export function parseCsvToLibrary(csv: string): { data: ClinicProcedure[], error
             cdtCode,
             displayName,
             baseFee,
-            membershipFee: parts[3] ? parseFloat(parts[3]) : null,
-            categoryOverride: parts[4] as FeeCategory || undefined,
-            unitTypeOverride: parts[5] as ProcedureUnitType || undefined,
+            membershipFee: parts[3] !== "" ? parseFloat(parts[3]) : null,
+            categoryOverride: (parts[4] as FeeCategory) || undefined,
+            unitTypeOverride: (parts[5] as ProcedureUnitType) || undefined,
             defaultEstimatedVisits: parts[6] ? parseInt(parts[6]) : undefined,
             defaultEstimatedDurationValue: parts[7] ? parseFloat(parts[7]) : undefined,
-            defaultEstimatedDurationUnit: parts[8] as any || undefined,
-            layoutOverride: parts[9] as any || undefined
+            defaultEstimatedDurationUnit: (parts[8] as any) || undefined,
+            layoutOverride: (parts[9] as any) || undefined
         });
     });
 
