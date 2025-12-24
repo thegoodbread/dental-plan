@@ -1,3 +1,4 @@
+
 import { TreatmentPlan, TreatmentPlanItem, ShareLink, ProcedureUnitType, UrgencyLevel, FeeCategory, FeeScheduleType, ItemType, Patient, TreatmentPhase } from '../types';
 
 // Helper to create IDs
@@ -12,6 +13,7 @@ const ITEM_DEFAULTS = {
   estimatedInsurance: null,
   estimatedPatientPortion: null,
   itemType: 'PROCEDURE' as ItemType,
+  procedureStatus: 'PLANNED' as const,
 };
 
 // --- REAL PATIENTS ---
@@ -29,7 +31,7 @@ const itemsA: TreatmentPlanItem[] = [
     ...ITEM_DEFAULTS,
     id: id('item'),
     treatmentPlanId: planA_Id,
-    feeScheduleEntryId: 'f1', // D2391
+    feeScheduleEntryId: 'f1',
     procedureCode: 'D2391',
     procedureName: 'Resin Composite - 1 Surface, Posterior',
     category: 'RESTORATIVE',
@@ -37,8 +39,8 @@ const itemsA: TreatmentPlanItem[] = [
     selectedTeeth: [3],
     baseFee: 200,
     membershipFee: 160,
-    grossFee: 200,
     netFee: 200,
+    grossFee: 200,
     urgency: 'SOON',
     sortOrder: 1
   },
@@ -46,7 +48,7 @@ const itemsA: TreatmentPlanItem[] = [
     ...ITEM_DEFAULTS,
     id: id('item'),
     treatmentPlanId: planA_Id,
-    feeScheduleEntryId: 'f2', // D2740
+    feeScheduleEntryId: 'f2',
     procedureCode: 'D2740',
     procedureName: 'Porcelain/Ceramic Crown',
     category: 'RESTORATIVE',
@@ -54,8 +56,8 @@ const itemsA: TreatmentPlanItem[] = [
     selectedTeeth: [11],
     baseFee: 1200,
     membershipFee: 950,
-    grossFee: 1200,
     netFee: 1200,
+    grossFee: 1200,
     urgency: 'URGENT',
     sortOrder: 2
   }
@@ -64,6 +66,7 @@ const itemsA: TreatmentPlanItem[] = [
 export const PLAN_A: TreatmentPlan = {
   id: planA_Id,
   patientId: 'pat_alex',
+  caseAlias: 'Alex Rivera',
   planNumber: 'TP-DEMO-A',
   title: 'Restorative Care',
   status: 'PRESENTED',
@@ -85,7 +88,7 @@ const itemsD: TreatmentPlanItem[] = [
     ...ITEM_DEFAULTS,
     id: id('item'),
     treatmentPlanId: planD_Id,
-    feeScheduleEntryId: 'f5', // D3330
+    feeScheduleEntryId: 'f5',
     procedureCode: 'D3330',
     procedureName: 'Endodontic Therapy - Molar',
     category: 'ENDODONTIC',
@@ -93,8 +96,8 @@ const itemsD: TreatmentPlanItem[] = [
     selectedTeeth: [19],
     baseFee: 1100,
     membershipFee: 850,
-    grossFee: 1100,
     netFee: 1100,
+    grossFee: 1100,
     urgency: 'URGENT',
     sortOrder: 1,
     phaseId: 'phase-D-1'
@@ -103,7 +106,7 @@ const itemsD: TreatmentPlanItem[] = [
     ...ITEM_DEFAULTS,
     id: id('item'),
     treatmentPlanId: planD_Id,
-    feeScheduleEntryId: 'f7', // D6010
+    feeScheduleEntryId: 'f7',
     procedureCode: 'D6010',
     procedureName: 'Surgical Placement of Implant Body',
     category: 'IMPLANT',
@@ -111,8 +114,8 @@ const itemsD: TreatmentPlanItem[] = [
     selectedTeeth: [30],
     baseFee: 2200,
     membershipFee: 1800,
-    grossFee: 2200,
     netFee: 2200,
+    grossFee: 2200,
     urgency: 'SOON',
     sortOrder: 2,
     phaseId: 'phase-D-3'
@@ -127,7 +130,9 @@ const phasesD: TreatmentPhase[] = [
     title: 'Phase 1: Foundation',
     sortOrder: 0,
     itemIds: [itemsD[0].id],
-    durationIsManual: false 
+    durationIsManual: false,
+    estimatedDurationValue: null,
+    estimatedDurationUnit: null
   },
   {
     id: 'phase-D-3',
@@ -136,7 +141,9 @@ const phasesD: TreatmentPhase[] = [
     title: 'Phase 3: Reconstruction',
     sortOrder: 2,
     itemIds: [itemsD[1].id],
-    durationIsManual: false
+    durationIsManual: false,
+    estimatedDurationValue: null,
+    estimatedDurationUnit: null
   },
   {
     id: 'phase-D-monitor',
@@ -155,6 +162,7 @@ const phasesD: TreatmentPhase[] = [
 export const PLAN_D: TreatmentPlan = {
   id: planD_Id,
   patientId: 'pat_taylor',
+  caseAlias: 'Taylor Brooks',
   planNumber: 'TP-DEMO-D',
   title: 'Comprehensive Rehab',
   status: 'DRAFT',

@@ -1,3 +1,4 @@
+
 import { TreatmentPhase, TreatmentPlanItem, FeeCategory, PhaseBucketKey } from '../types';
 import { estimateVisits, estimateDuration } from '../services/clinicalLogic';
 
@@ -21,7 +22,6 @@ const CATEGORY_DESCRIPTIONS: Record<FeeCategory, string> = {
   PREVENTIVE: 'preventive care',
   DIAGNOSTIC: 'diagnostic evaluation',
   OTHER: 'adjunctive care',
-  // FIX: Removed invalid key 'SURGICAL_UPPER' as it is not part of the FeeCategory type.
 };
 
 /**
@@ -150,7 +150,10 @@ export function derivePhaseTimeline(
         sortOrder: 0,
         itemIds: allItems.map(i => i.id),
         durationIsManual: false,
-        isMonitorPhase: false
+        isMonitorPhase: false,
+        // FIX: Added missing estimated duration properties
+        estimatedDurationValue: null,
+        estimatedDurationUnit: null
     }];
   }
 

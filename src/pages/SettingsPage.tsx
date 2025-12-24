@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Search, Plus, Save, Trash2, Download, Upload, RotateCcw, Users, BookOpen, 
@@ -51,7 +52,7 @@ export const SettingsPage: React.FC = () => {
                         onClick={() => setActiveTab('LIBRARY')}
                         className={`pb-4 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'LIBRARY' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
                     >
-                        <BookOpen size={18} /> Procedure Library
+                        < BookOpen size={18} /> Procedure Library
                     </button>
                     <button 
                         onClick={() => setActiveTab('EMPLOYEES')}
@@ -500,14 +501,14 @@ const EmployeeDirectoryModule = () => {
                             {form.permissions && Object.entries(form.permissions).map(([key, val]) => (
                                 <label key={key} className="flex items-center justify-between cursor-pointer group">
                                     <span className="text-xs text-gray-700 font-medium capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
-                                    <input type="checkbox" checked={val} onChange={e => setForm({...form, permissions: {...form.permissions!, [key]: e.target.checked}})} className="w-4 h-4 rounded text-blue-600"/>
+                                    {/* FIX: Cast val to boolean to avoid type error */}
+                                    <input type="checkbox" checked={val as boolean} onChange={e => setForm({...form, permissions: {...form.permissions!, [key]: e.target.checked}})} className="w-4 h-4 rounded text-blue-600"/>
                                 </label>
                             ))}
                         </div>
                     </div>
                     <footer className="p-6 border-t border-gray-100 flex gap-3">
                         <button onClick={() => { setIsAdding(false); setEditingId(null); }} className="flex-1 py-2 text-sm font-bold text-gray-500 hover:bg-gray-100 rounded-lg transition-all">Cancel</button>
-                        {/* FIX: Corrected invalid onClick syntax from handleSave} to onClick={handleSave} to resolve parser errors. */}
                         <button onClick={handleSave} className="flex-1 py-2 text-sm font-bold text-white bg-blue-600 rounded-lg shadow-md hover:bg-blue-700 transition-all">Save Changes</button>
                     </footer>
                 </div>

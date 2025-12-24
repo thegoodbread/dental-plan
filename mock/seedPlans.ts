@@ -90,6 +90,8 @@ const itemsA: TreatmentPlanItem[] = [
 
 export const PLAN_A: TreatmentPlan = {
   id: planA_Id,
+  // FIX: Added missing patientId
+  patientId: 'pat_demo_1',
   caseAlias: 'Patient-8432',
   planNumber: 'TP-DEMO-SINGLE',
   title: 'Restorative & Implant Plan',
@@ -168,6 +170,8 @@ const itemsB: TreatmentPlanItem[] = [
 
 export const PLAN_B: TreatmentPlan = {
   id: planB_Id,
+  // FIX: Added missing patientId
+  patientId: 'pat_demo_2',
   caseAlias: 'Patient-5519',
   planNumber: 'TP-DEMO-QUAD',
   title: 'Periodontal Therapy',
@@ -230,6 +234,8 @@ const itemsC: TreatmentPlanItem[] = [
 
 export const PLAN_C: TreatmentPlan = {
   id: planC_Id,
+  // FIX: Added missing patientId
+  patientId: 'pat_demo_3',
   caseAlias: 'Patient-2387',
   planNumber: 'TP-DEMO-ARCH',
   title: 'Upper Arch Restoration',
@@ -348,6 +354,8 @@ const itemsD: TreatmentPlanItem[] = [
 
 export const PLAN_D: TreatmentPlan = {
   id: planD_Id,
+  // FIX: Added missing patientId
+  patientId: 'pat_demo_4',
   caseAlias: 'Patient-9102',
   planNumber: 'TP-DEMO-COMPLEX',
   title: 'Comprehensive Rehab',

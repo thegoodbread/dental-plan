@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import * as ReactRouterDOM from 'react-router-dom';
 import { 
@@ -7,7 +8,7 @@ import {
 import { 
   loadTreatmentPlanWithItems, updateTreatmentPlan, createShareLink,
   createTreatmentPlanItem, updateTreatmentPlanItem, deleteTreatmentPlanItem,
-  savePlanAndItems, setPlanPricingMode, createAddOnItem
+  savePlanAndItems, setPlanPricingMode, createAddOnItem, getPhaseIdForItem
 } from '../services/treatmentPlans';
 import { TreatmentPlan, TreatmentPlanItem, FeeScheduleEntry, TreatmentPlanStatus, InsuranceMode, FeeScheduleType, AddOnKind } from '../types';
 import { StatusBadge } from '../components/ui/StatusBadge';
@@ -160,7 +161,16 @@ export const TreatmentPlanDetailPage: React.FC = () => {
   const handleAddItem = (fee: any) => {
     if (!plan) return;
     const { id: entryId, ...selections } = fee;
-    createTreatmentPlanItem(plan.id, { ...selections, feeScheduleEntryId: entryId });
+    
+    // Automatically determine the recommended phase for the new procedure
+    const recommendedPhaseId = getPhaseIdForItem(plan, { ...selections } as any);
+
+    createTreatmentPlanItem(plan.id, { 
+      ...selections, 
+      feeScheduleEntryId: entryId,
+      phaseId: recommendedPhaseId || undefined 
+    });
+    
     loadData(plan.id);
   };
 
@@ -185,16 +195,17 @@ export const TreatmentPlanDetailPage: React.FC = () => {
 
     createAddOnItem(plan.id, {
         addOnKind: selectedAddOn.kind,
-        label: selectedAddOn.label,
-        fee: plan.feeScheduleType === 'membership' && selectedAddOn.membershipFee ? selectedAddOn.membershipFee : selectedAddOn.defaultFee,
+        procedureName: selectedAddOn.label,
+        baseFee: plan.feeScheduleType === 'membership' && selectedAddOn.membershipFee ? selectedAddOn.membershipFee : selectedAddOn.defaultFee,
         phaseId: targetItem.phaseId || '',
-        linkedItemIds: [targetItem.id], // FIX: Changed from appliesToItemIds to linkedItemIds to match services/treatmentPlans.ts
+        linkedItemIds: [targetItem.id],
         category: selectedAddOn.category,
-        code: selectedAddOn.defaultCode
+        procedureCode: selectedAddOn.defaultCode
     });
 
-    // Deselect after successful stamp to prevent accidental double-clicks
+    // Clear Stamp mode state
     setSelectedAddOn(null);
+    setDraggingAddOnKind(null);
     loadData(plan.id, false); 
   };
 
@@ -227,7 +238,6 @@ export const TreatmentPlanDetailPage: React.FC = () => {
   if (loading) return <div className="p-8">Loading...</div>;
   if (!plan) return <div className="p-8 text-red-600">Plan not found</div>;
 
-  // FIX: Added missing getStatusButtonClass function to define status-specific button styling
   const getStatusButtonClass = (buttonStatus: TreatmentPlanStatus): string => {
     const base = "flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium bg-white border rounded-lg shadow-sm transition-colors";
     const isActive = plan.status === buttonStatus;
@@ -292,7 +302,17 @@ export const TreatmentPlanDetailPage: React.FC = () => {
                 <div className="flex-1 min-h-[300px] md:min-h-0">
                     {viewMode === 'CLINICAL' ? (
                       <TreatmentPlanItemsTable 
-                          plan={plan} items={items} onAddItem={handleAddItem} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} onRefresh={() => loadData(plan.id, false)} isLibraryOpen={isLibraryOpen} onToggleLibrary={() => setIsLibraryOpen(!isLibraryOpen)} draggingAddOnKind={draggingAddOnKind} activeAddOn={selectedAddOn} onAttachAddOn={handleAttachAddOn}
+                          plan={plan} 
+                          items={items} 
+                          onAddItem={handleAddItem} 
+                          onUpdateItem={handleUpdateItem} 
+                          onDeleteItem={handleDeleteItem} 
+                          onRefresh={() => loadData(plan.id, false)} 
+                          isLibraryOpen={isLibraryOpen} 
+                          onToggleLibrary={() => setIsLibraryOpen(!isLibraryOpen)} 
+                          draggingAddOnKind={draggingAddOnKind} 
+                          activeAddOn={selectedAddOn} 
+                          onAttachAddOn={handleAttachAddOn}
                       />
                     ) : (
                       <FinancialsTable plan={plan} items={items} onUpdateItem={handleUpdateItem} saveStatus={saveStatus} insuranceMode={plan.insuranceMode} />

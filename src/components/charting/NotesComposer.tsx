@@ -293,6 +293,8 @@ export const NotesComposer: React.FC<NotesComposerProps> = ({
           treatmentPlanId: currentTreatmentPlanId,
           date: new Date().toISOString(),
           provider: 'Dr. Smith',
+          // FIX: Added missing providerId
+          providerId: 'p1',
           visitType: 'restorative',
           attachedProcedureIds: proceduresForNote.map(p => p.id),
           createdAt: new Date().toISOString(),

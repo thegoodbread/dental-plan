@@ -17,28 +17,31 @@ interface ProcedureBreakdownSectionProps {
 
 const PhaseGroup: React.FC<{
     phaseIndex: number;
-    group: { title: string; items: TreatmentPlanItem[] };
+    title: string;
+    groupItems: TreatmentPlanItem[];
     plan: TreatmentPlan;
     allItems: TreatmentPlanItem[];
     hoveredTooth: number | null;
     hoveredQuadrant: string | null;
     hoveredItemId: string | null;
     onHoverItem: (id: string | null) => void;
-}> = ({ phaseIndex, group, plan, allItems, hoveredTooth, hoveredQuadrant, hoveredItemId, onHoverItem }) => {
+}> = ({ phaseIndex, title, groupItems, plan, allItems, hoveredTooth, hoveredQuadrant, hoveredItemId, onHoverItem }) => {
     const [isExpanded, setIsExpanded] = useState(false);
-    const procedures = useMemo(() => group.items.filter(i => i.itemType !== 'ADDON'), [group.items]);
-    const addOns = useMemo(() => group.items.filter(i => i.itemType === 'ADDON'), [group.items]);
+    
+    // Group into root procedures and their dependent add-ons
+    const procedures = useMemo(() => groupItems.filter(i => i.itemType !== 'ADDON'), [groupItems]);
+    const addOns = useMemo(() => groupItems.filter(i => i.itemType === 'ADDON'), [groupItems]);
 
     const { subtotal: phaseSubtotal, savings: totalPhaseSavings } = useMemo(() => {
-        return group.items.reduce((acc, item) => {
+        return groupItems.reduce((acc, item) => {
             const pricing = computeItemPricing(item, plan.feeScheduleType);
             acc.subtotal += pricing.netFee;
             acc.savings += pricing.memberSavings;
             return acc;
         }, { subtotal: 0, savings: 0 });
-    }, [group.items, plan.feeScheduleType]);
+    }, [groupItems, plan.feeScheduleType]);
     
-    const phaseVisits = group.items.reduce((sum, item) => sum + estimateVisits(item), 0);
+    const phaseVisits = groupItems.reduce((sum, item) => sum + estimateVisits(item), 0);
 
     const isHighlighted = (item: TreatmentPlanItem) => {
         if (hoveredTooth) {
@@ -57,7 +60,7 @@ const PhaseGroup: React.FC<{
         const surfaces = item.surfaces && item.surfaces.length > 0 ? ` (${item.surfaces.join('')})` : '';
         if (item.selectedTeeth && item.selectedTeeth.length > 0) return `Teeth: #${item.selectedTeeth.join(', #')}${surfaces}`;
         if (item.selectedQuadrants && item.selectedQuadrants.length > 0) return `Quads: ${item.selectedQuadrants.join(', ')}`;
-        if (item.selectedArches && item.selectedArches.length > 0) return `Arch: ${item.selectedArches.join(', ')}`;
+        if (item.selectedArches && item.selectedArches.length > 0) return `Arch: ${item.selectedArches.map(a => a === 'UPPER' ? 'Upper' : 'Lower').join(', ')}`;
         return 'Full Mouth';
     };
 
@@ -82,7 +85,6 @@ const PhaseGroup: React.FC<{
         const highlighted = isHighlighted(item);
         
         const pricing = computeItemPricing(item, plan.feeScheduleType);
-        // Patient View: Use patient context for names
         const displayName = getProcedurePrimaryLabel(item, 'patient');
 
         return (
@@ -126,20 +128,22 @@ const PhaseGroup: React.FC<{
                         </div>
                     </div>
                 </div>
-                <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-40' : 'max-h-0'}`}>
-                    {pricing.memberSavings > 0 ? (
-                        <div className="px-5 py-3 text-xs text-gray-500 bg-slate-50/80 rounded-b-xl border-x border-b border-gray-200 border-t border-slate-200 space-y-2">
-                            <div className="flex justify-between items-center"><span>Standard Fee</span><span className="font-medium text-gray-500 line-through">${pricing.grossStandard.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></div>
-                            <div className="flex justify-between items-center text-green-500"><span className="font-medium">Member Savings</span><span className="font-bold">-${pricing.memberSavings.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></div>
-                            <div className="border-t border-slate-200 !my-1"></div>
-                            <div className="flex justify-between items-center"><span className="font-bold text-gray-700">Your Price</span><span className="font-bold text-gray-900 text-sm">${pricing.netFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></div>
-                        </div>
-                    ) : (
-                        <div className="px-5 py-3 text-xs text-gray-500 bg-slate-50/80 rounded-b-xl border-x border-b border-gray-200 border-t border-slate-200 flex justify-between items-center">
-                            <span className="font-medium">{item.units > 1 ? `${item.units} × ` : ''}Standard Fee</span>
-                            <span className="font-bold text-gray-700">${pricing.netFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                        </div>
-                    )}
+                <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-48' : 'max-h-0'}`}>
+                    <div className="px-5 py-3 text-xs text-gray-500 bg-slate-50/80 rounded-b-xl border-x border-b border-gray-200 border-t border-slate-200 space-y-2">
+                        {pricing.memberSavings > 0 ? (
+                            <>
+                                <div className="flex justify-between items-center"><span>Standard Fee</span><span className="font-medium text-gray-500 line-through">${pricing.grossStandard.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></div>
+                                <div className="flex justify-between items-center text-green-500"><span className="font-medium">Member Savings</span><span className="font-bold">-${pricing.memberSavings.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></div>
+                            </>
+                        ) : (
+                            <div className="flex justify-between items-center">
+                                <span className="font-medium">{item.units > 1 ? `${item.units} × ` : ''}Standard Fee</span>
+                                <span className="font-bold text-gray-700">${pricing.grossStandard.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                        )}
+                        <div className="border-t border-slate-200 !my-1"></div>
+                        <div className="flex justify-between items-center"><span className="font-bold text-gray-700">Net Fee</span><span className="font-bold text-gray-900 text-sm">${pricing.netFee.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></div>
+                    </div>
                 </div>
             </div>
         );
@@ -149,18 +153,18 @@ const PhaseGroup: React.FC<{
         <div className="relative">
             <div className="flex items-center gap-4 mb-4 md:mb-6 sticky top-0 bg-gray-50 z-10 py-2">
                 <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-sm shadow-md shadow-blue-200">{phaseIndex + 1}</div>
-                <h3 className="font-bold text-xl text-gray-900">{group.title}</h3>
+                <h3 className="font-bold text-xl text-gray-900">{title}</h3>
             </div>
             <div className="flex flex-col gap-4">
                 {procedures.map(item => {
-                    const linkedAddOns = addOns.filter(s => s.linkedItemIds && s.linkedItemIds[0] === item.id);
+                    const itemAddOns = addOns.filter(s => s.linkedItemIds && s.linkedItemIds[0] === item.id);
                     return (
                         <div key={item.id} className="flex flex-col gap-2">
                             {renderCard(item, false)}
-                            {linkedAddOns.length > 0 && (
+                            {itemAddOns.length > 0 && (
                                 <div className="flex flex-col gap-2 pl-6 md:pl-8 relative">
                                     <div className="absolute left-3 md:left-4 top-[-8px] bottom-6 w-px bg-gray-300/40"></div>
-                                    {linkedAddOns.map(addon => (
+                                    {itemAddOns.map(addon => (
                                         <div key={addon.id} className="relative">
                                             <div className="absolute left-[-12px] md:left-[-16px] top-[24px] w-[12px] md:w-[16px] border-b border-gray-300/40 h-px"></div>
                                             {renderCard(addon, true, getProcedurePrimaryLabel(item, 'patient'))}
@@ -171,11 +175,6 @@ const PhaseGroup: React.FC<{
                         </div>
                     );
                 })}
-            </div>
-            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-48' : 'max-h-0'}`}>
-                <div className="mt-4 bg-slate-50/80 border border-gray-200/80 rounded-lg p-4 text-sm space-y-2 shadow-sm">
-                    <div className="flex justify-between font-bold"><span className="text-gray-600">Phase Subtotal</span><span className="text-gray-900">${phaseSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></div>
-                </div>
             </div>
             <div className="mt-4 flex justify-between items-center p-2 pl-4 bg-gray-100/70 rounded-lg border border-gray-200/80">
                 <div className="text-sm font-semibold text-gray-700">
@@ -194,25 +193,59 @@ const PhaseGroup: React.FC<{
 };
 
 export const ProcedureBreakdownSection: React.FC<ProcedureBreakdownSectionProps> = ({ plan, items, hoveredTooth, hoveredQuadrant, hoveredItemId, onHoverItem }) => {
-  const itemMap = useMemo(() => new Map(items.map(item => [item.id, item])), [items]);
+  
   const displayGroups = useMemo(() => {
-    if (plan.phases && plan.phases.length > 0) {
-      return [...plan.phases].sort((a, b) => a.sortOrder - b.sortOrder).map(phase => ({
-          title: phase.title,
-          items: phase.itemIds.map(id => itemMap.get(id)).filter((item): item is TreatmentPlanItem => !!item)
-        })).filter(group => group.items.length > 0);
+    // Collect all phases from the plan
+    const phases = (plan.phases || []).slice().sort((a, b) => a.sortOrder - b.sortOrder);
+    
+    // Group items based on their current phaseId property (authoritative clinical link)
+    const groups: { phaseId: string; title: string; items: TreatmentPlanItem[] }[] = [];
+    
+    phases.forEach(phase => {
+        const phaseItems = items.filter(i => i.phaseId === phase.id);
+        if (phaseItems.length > 0) {
+            groups.push({
+                phaseId: phase.id,
+                title: phase.title,
+                items: phaseItems.sort((a, b) => a.sortOrder - b.sortOrder)
+            });
+        }
+    });
+
+    // Fallback: If an item has NO phaseId or a broken link, put it in the first group
+    const assignedIds = new Set(groups.flatMap(g => g.items.map(i => i.id)));
+    const unassignedItems = items.filter(i => !assignedIds.has(i.id));
+    
+    if (unassignedItems.length > 0) {
+        if (groups.length > 0) {
+            groups[0].items = [...unassignedItems, ...groups[0].items];
+        } else {
+            groups.push({ phaseId: 'fallback', title: 'Planned Procedures', items: unassignedItems });
+        }
     }
-    return [{ title: 'All Procedures', items: items }];
-  }, [plan.phases, items, itemMap]);
+
+    return groups;
+  }, [plan.phases, items]);
 
   return (
     <section className="py-12 md:py-16 px-4 md:px-6 bg-gray-50 border-b border-gray-200">
-      <div className="max-w-4xl auto">
+      <div className="max-w-4xl mx-auto">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">What We'll Do</h2>
         <p className="text-gray-500 mb-8 md:mb-10">Your personalized treatment plan, organized by priority.</p>
         <div className="space-y-8 xl:space-y-12">
           {displayGroups.map((group, idx) => (
-            group.items.length > 0 && <PhaseGroup key={idx} phaseIndex={idx} group={group} plan={plan} allItems={items} hoveredTooth={hoveredTooth} hoveredQuadrant={hoveredQuadrant} hoveredItemId={hoveredItemId} onHoverItem={onHoverItem} />
+             <PhaseGroup 
+                key={group.phaseId} 
+                phaseIndex={idx} 
+                title={group.title} 
+                groupItems={group.items} 
+                plan={plan} 
+                allItems={items} 
+                hoveredTooth={hoveredTooth} 
+                hoveredQuadrant={hoveredQuadrant} 
+                hoveredItemId={hoveredItemId} 
+                onHoverItem={onHoverItem} 
+            />
           ))}
         </div>
       </div>

@@ -80,6 +80,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
 
     onUpdate(item.id, { 
         procedureName: editName,
+        baseFee: baseFee,
         isCustomProcedureNameMissing: false 
     });
     setIsDefiningLabel(false);
@@ -267,7 +268,7 @@ export const TreatmentPlanItemRow: React.FC<TreatmentPlanItemRowProps> = ({
         onDragOver={isAddOn ? undefined : (e) => onDragOver?.(e, item)}
         onDragLeave={isAddOn ? undefined : (e) => onDragLeave?.(e, item)}
         onDrop={isAddOn ? undefined : (e) => onDrop?.(e, item)}
-        className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 group transition-all ${rowBackground}`}
+        className={`border-b border-gray-100 last:border-0 hover:bg-gray-50/50 group transition-all ${rowBackground}`}
       >
         <td className={`px-4 py-3 align-top ${isAddOn ? 'pl-10 relative' : ''}`}>
           {isAddOn && (

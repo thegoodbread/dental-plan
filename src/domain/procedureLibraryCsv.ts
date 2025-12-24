@@ -31,13 +31,13 @@ export function parseCsvToLibrary(csv: string): ProcedureDefinition[] {
     const getVal = (h: string) => parts[headers.indexOf(h)]?.replace(/^"|"$/g, "");
 
     const cdt = getVal("cdtCode") || "DXXXX";
+    const unitType = (getVal("unitType") as ProcedureUnitType) || "PER_PROCEDURE";
     return {
       id: `imp_${cdt}_${Date.now()}_${idx}`,
       cdtCode: cdt,
       name: getVal("name") || "Untitled",
       category: (getVal("category") as FeeCategory) || "OTHER",
-      // FIX: Cast to valid ProcedureUnitType
-      unitType: (getVal("unitType") as ProcedureUnitType) || "PER_PROCEDURE",
+      unitType,
       pricing: {
         baseFee: parseFloat(getVal("baseFee")) || 0,
         membershipFee: parseFloat(getVal("membershipFee")) || undefined
@@ -48,11 +48,13 @@ export function parseCsvToLibrary(csv: string): ProcedureDefinition[] {
         defaultEstimatedDurationUnit: (getVal("defaultEstimatedDurationUnit") as any) || "days"
       },
       selectionRules: {
-        requiresToothSelection: getVal("unitType") === "PER_TOOTH",
-        allowsMultipleTeeth: getVal("unitType") === "PER_TOOTH",
-        allowsQuadrants: getVal("unitType") === "PER_QUADRANT",
-        allowsArch: getVal("unitType") === "PER_ARCH",
-        requiresSurfaces: cdt.startsWith("D23")
+        requiresToothSelection: unitType === "PER_TOOTH",
+        allowsMultipleTeeth: unitType === "PER_TOOTH",
+        allowsQuadrants: unitType === "PER_QUADRANT",
+        allowsArch: unitType === "PER_ARCH",
+        requiresSurfaces: cdt.startsWith("D23"),
+        // FIX: Added required fullMouth property
+        fullMouth: false
       },
       uiHints: {
         layout: (getVal("layout") as any) || "single"

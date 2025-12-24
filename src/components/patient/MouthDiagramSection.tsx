@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { TEETH_UPPER, TEETH_LOWER, DiagramData, mapPlanToDiagram, getItemsOnTooth, getToothQuadrant, getItemsOnArch, getItemsOnQuadrant } from '../../services/clinicalLogic';
 import { TreatmentPlanItem } from '../../types';
@@ -51,7 +52,8 @@ export const MouthDiagramSection: React.FC<MouthDiagramSectionProps> = ({
         const arch = tooth <= 16 ? 'UPPER' : 'LOWER';
         if (item.selectedArches?.includes(arch)) return true;
     }
-    if (item.unitType === 'PER_MOUTH') return true;
+    // FIX: Changed 'PER_MOUTH' to 'FULL_MOUTH' to match ProcedureUnitType
+    if (item.unitType === 'FULL_MOUTH') return true;
     return false;
   };
 

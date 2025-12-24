@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { TreatmentPlan, TreatmentPlanItem } from "../types";
 
@@ -8,6 +9,7 @@ export const explainPlanForPatient = async (plan: TreatmentPlan, items: Treatmen
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     const proceduresText = items.map(i => {
+       // FIX: selection lists are now properly typed on TreatmentPlanItem
        const area = i.selectedTeeth?.length ? `(Teeth: ${i.selectedTeeth.join(', ')})` :
                     i.selectedQuadrants?.length ? `(Quads: ${i.selectedQuadrants.join(', ')})` :
                     i.selectedArches?.length ? `(Arch: ${i.selectedArches.join(', ')})` : '';

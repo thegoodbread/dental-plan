@@ -14,6 +14,8 @@ const mockVisit = (updates?: Partial<Visit>): Visit => ({
   treatmentPlanId: 'tp1',
   date: '2024-01-01',
   provider: 'Dr. Test',
+  // FIX: Added required providerId
+  providerId: 'p1',
   visitType: 'restorative',
   attachedProcedureIds: [],
   createdAt: '2024-01-01',

@@ -38,7 +38,7 @@ export const PROCEDURE_META_PACK: ProcedureMeta[] = [
         uiHints: { layout: "single" }
     },
 
-    // --- PROSTHETIC / ARCH (New) ---
+    // --- PROSTHETIC / ARCH ---
     {
         cdtCode: "D5110", category: "PROSTHETIC", unitType: "PER_ARCH",
         selectionRules: { ...BASE_RULES, allowsArch: true },
@@ -51,10 +51,40 @@ export const PROCEDURE_META_PACK: ProcedureMeta[] = [
         defaults: { defaultEstimatedVisits: 5, defaultEstimatedDurationValue: 6, defaultEstimatedDurationUnit: "weeks" },
         uiHints: { layout: "single" }
     },
+    {
+        cdtCode: "D5213", category: "PROSTHETIC", unitType: "PER_ARCH",
+        selectionRules: { ...BASE_RULES, allowsArch: true },
+        defaults: { defaultEstimatedVisits: 4, defaultEstimatedDurationValue: 4, defaultEstimatedDurationUnit: "weeks" },
+        uiHints: { layout: "single" }
+    },
+    {
+        cdtCode: "D5214", category: "PROSTHETIC", unitType: "PER_ARCH",
+        selectionRules: { ...BASE_RULES, allowsArch: true },
+        defaults: { defaultEstimatedVisits: 4, defaultEstimatedDurationValue: 4, defaultEstimatedDurationUnit: "weeks" },
+        uiHints: { layout: "single" }
+    },
+    {
+        cdtCode: "D5820", category: "PROSTHETIC", unitType: "PER_ARCH",
+        selectionRules: { ...BASE_RULES, allowsArch: true },
+        defaults: { defaultEstimatedVisits: 2, defaultEstimatedDurationValue: 2, defaultEstimatedDurationUnit: "weeks" },
+        uiHints: { layout: "single" }
+    },
+    {
+        cdtCode: "D5821", category: "PROSTHETIC", unitType: "PER_ARCH",
+        selectionRules: { ...BASE_RULES, allowsArch: true },
+        defaults: { defaultEstimatedVisits: 2, defaultEstimatedDurationValue: 2, defaultEstimatedDurationUnit: "weeks" },
+        uiHints: { layout: "single" }
+    },
 
-    // --- ADJUNCTIVE / COSMETIC (New) ---
+    // --- ADJUNCTIVE / COSMETIC / OTHER ---
     {
         cdtCode: "D9944", category: "OTHER", unitType: "PER_ARCH",
+        selectionRules: { ...BASE_RULES, allowsArch: true },
+        defaults: { defaultEstimatedVisits: 2, defaultEstimatedDurationValue: 2, defaultEstimatedDurationUnit: "weeks" },
+        uiHints: { layout: "single" }
+    },
+    {
+        cdtCode: "D9945", category: "OTHER", unitType: "PER_ARCH",
         selectionRules: { ...BASE_RULES, allowsArch: true },
         defaults: { defaultEstimatedVisits: 2, defaultEstimatedDurationValue: 2, defaultEstimatedDurationUnit: "weeks" },
         uiHints: { layout: "single" }

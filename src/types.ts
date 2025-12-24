@@ -1,137 +1,37 @@
-import { AssignedRisk, SoapSection } from './domain/dentalTypes';
-
-export type UserRole = 'DOCTOR' | 'TREATMENT_COORDINATOR' | 'ADMIN';
+import { AssignedRisk, SoapSection, SoapSectionType, ToothNumber, VisitType as DomainVisitType } from './domain/dentalTypes';
 
 export type TreatmentPlanStatus = 'DRAFT' | 'PRESENTED' | 'ACCEPTED' | 'DECLINED' | 'ON_HOLD';
 
-// Extended Procedure Unit Types
-export type ProcedureUnitType = 
-  | 'PER_TOOTH' 
-  | 'PER_QUADRANT' 
-  | 'PER_ARCH' 
-  | 'FULL_MOUTH' 
-  | 'PER_PROCEDURE' 
-  | 'PER_VISIT' 
-  | 'TIME_BASED';
-
 export type FeeCategory = 
-  | 'DIAGNOSTIC'
-  | 'PREVENTIVE'
-  | 'RESTORATIVE'
-  | 'ENDODONTIC'
-  | 'PERIO'
-  | 'IMPLANT'
-  | 'PROSTHETIC'
-  | 'ORTHO'
-  | 'COSMETIC'
-  | 'OTHER'
-  | 'SURGICAL'; 
+  | 'DIAGNOSTIC' | 'PREVENTIVE' | 'RESTORATIVE' | 'ENDODONTIC' 
+  | 'PERIO' | 'IMPLANT' | 'PROSTHETIC' | 'ORTHO' | 'COSMETIC' 
+  | 'OTHER' | 'SURGICAL';
 
-export type UrgencyLevel = 'URGENT' | 'SOON' | 'ELECTIVE';
+export type PayerTier = 'GENERIC' | 'CONSERVATIVE' | 'STRICT';
+export type AdjudicationRole = 'PRIMARY' | 'SUPPORTING' | 'ADJUNCT';
+
+// FIX: Added missing exported types used for pricing, insurance, and item categorization
 export type InsuranceMode = 'simple' | 'advanced';
 export type FeeScheduleType = 'standard' | 'membership';
+export type ItemType = 'PROCEDURE' | 'ADDON';
+export type AddOnKind = 'SEDATION' | 'BONE_GRAFT' | 'MEMBRANE' | 'PRF' | 'CORE_BUILDUP' | 'TEMP_CROWN' | 'PULP_CAP';
+export type UrgencyLevel = 'ELECTIVE' | 'SOON' | 'URGENT';
+export type ProcedureUnitType = 'PER_TOOTH' | 'PER_QUADRANT' | 'PER_ARCH' | 'FULL_MOUTH' | 'PER_PROCEDURE' | 'PER_VISIT' | 'TIME_BASED';
+
 export type PhaseBucketKey = 'FOUNDATION' | 'RESTORATIVE' | 'IMPLANT' | 'ELECTIVE' | 'OTHER';
 
-// --- NEW PROCEDURE LIBRARY MODELS ---
+export const PHASE_BUCKET_LABELS: Record<PhaseBucketKey, string> = {
+  FOUNDATION: 'Foundation',
+  RESTORATIVE: 'Restorative',
+  IMPLANT: 'Implant',
+  ELECTIVE: 'Elective',
+  OTHER: 'Other'
+};
 
-export interface SelectionRules {
-  requiresToothSelection: boolean;
-  allowsMultipleTeeth: boolean;
-  requiresSurfaces: boolean;
-  allowsQuadrants: boolean;
-  allowsArch: boolean;
-  fullMouth: boolean;
-  maxSelections?: number;
-}
+export type VisitStatus = 'PLANNED' | 'COMPLETED' | 'CANCELLED';
+export type ProcedureStatus = 'PLANNED' | 'COMPLETED' | 'SCHEDULED';
 
-export interface ProcedureDefinition {
-  id: string;
-  cdtCode: string;
-  name: string;
-  category: FeeCategory;
-  unitType: ProcedureUnitType;
-  pricing: {
-    baseFee: number;
-    membershipFee: number | null;
-  };
-  selectionRules: {
-    requiresToothSelection?: boolean;
-    allowsMultipleTeeth?: boolean;
-    requiresSurfaces?: boolean;
-    allowsQuadrants?: boolean;
-    allowsArch?: boolean;
-    fullMouth?: boolean;
-    maxSelections?: number;
-  };
-  defaults: {
-    defaultEstimatedVisits: number;
-    defaultEstimatedDurationValue: number | null;
-    defaultEstimatedDurationUnit: 'days' | 'weeks' | 'months' | null;
-  };
-  uiHints: {
-    layout: 'single' | 'fullRow';
-  };
-}
-
-export interface ProcedureMeta {
-  cdtCode: string;
-  category: FeeCategory;
-  unitType: ProcedureUnitType;
-  selectionRules: SelectionRules;
-  defaults: {
-    defaultEstimatedVisits: number;
-    defaultEstimatedDurationValue: number | null;
-    defaultEstimatedDurationUnit: 'days' | 'weeks' | 'months' | null;
-  };
-  uiHints: {
-    layout: 'single' | 'fullRow';
-    badges?: string[];
-  };
-  claims?: {
-    checklistTemplateId?: string;
-    narrativeTemplateId?: string;
-    requiredTruthSlots?: string[];
-  };
-}
-
-export interface ClinicProcedure {
-  cdtCode: string;
-  displayName: string;
-  baseFee: number;
-  membershipFee: number | null;
-  categoryOverride?: FeeCategory;
-  unitTypeOverride?: ProcedureUnitType;
-  defaultEstimatedVisits?: number;
-  defaultEstimatedDurationValue?: number | null;
-  defaultEstimatedDurationUnit?: 'days' | 'weeks' | 'months' | null;
-  layoutOverride?: 'single' | 'fullRow';
-}
-
-export interface EffectiveProcedure {
-  cdtCode: string;
-  displayName: string;
-  category: FeeCategory;
-  unitType: ProcedureUnitType;
-  selectionRules: SelectionRules;
-  defaults: {
-    defaultEstimatedVisits: number;
-    defaultEstimatedDurationValue: number | null;
-    defaultEstimatedDurationUnit: 'days' | 'weeks' | 'months' | null;
-  };
-  pricing: {
-    baseFee: number;
-    membershipFee: number | null;
-  };
-  uiHints: {
-    layout: 'single' | 'fullRow';
-  };
-  metaCoverage: 'full' | 'partial' | 'none';
-  isLabelMissing: boolean;
-}
-
-// --- EMPLOYEE MODELS ---
-
-export type EmployeeRole = "Dentist" | "Hygienist" | "Assistant" | "FrontDesk" | "OfficeManager" | "Billing" | "Admin";
+export type EmployeeRole = 'Dentist' | 'Hygienist' | 'OfficeManager' | 'Assistant' | 'FrontDesk' | 'Billing' | 'Admin';
 
 export interface EmployeePermissions {
   canEditPlans: boolean;
@@ -147,142 +47,257 @@ export interface Employee {
   id: string;
   firstName: string;
   lastName: string;
-  email?: string;
   role: EmployeeRole;
   permissions: EmployeePermissions;
   clinicalSettings?: {
-    defaultProviderName?: string;
-    signatureText?: string;
     licenseNumber?: string;
   };
 }
 
-// --- EXISTING MODELS ---
+export type SedationReason = 
+  | 'MANAGEMENT_OF_SEVERE_ANXIETY' 
+  | 'PROCEDURE_COMPLEXITY_AND_DURATION' 
+  | 'MEDICAL_CONTRAINDICATION_TO_LOCAL_ONLY' 
+  | 'HYPER_SENSITIVE_GAG_REFLEX';
 
-export const PHASE_BUCKET_LABELS: Record<PhaseBucketKey, string> = {
-  FOUNDATION: 'Foundation',
-  RESTORATIVE: 'Restorative',
-  IMPLANT: 'Implant',
-  ELECTIVE: 'Elective',
-  OTHER: 'Other'
-};
+export type ClinicalSectionId = 
+  | 'PROVIDER_ID' 
+  | 'CHIEF_COMPLAINT' 
+  | 'HPI' 
+  | 'FINDINGS' 
+  | 'EVIDENCE' 
+  | 'PROCEDURES';
+
+export interface VisitProcedureRole {
+  procedureId: string;
+  role: AdjudicationRole;
+}
+
+export interface PayerProfile {
+  id: string;
+  label: string;
+  requiredModuleIds: string[];
+  requiredEvidenceTypes: string[];
+  enforceCompletionStatus: boolean;
+  minConfidenceForSubmission: number;
+}
+
+// FIX: Added fullMouth property to SelectionRules
+export interface SelectionRules {
+    requiresToothSelection: boolean;
+    allowsMultipleTeeth: boolean;
+    requiresSurfaces: boolean;
+    allowsQuadrants: boolean;
+    allowsArch: boolean;
+    fullMouth: boolean;
+    maxSelections?: number;
+}
+
+export interface ProcedureDefinition {
+    id: string;
+    cdtCode: string;
+    name: string;
+    category: FeeCategory;
+    unitType: ProcedureUnitType;
+    pricing: {
+      baseFee: number;
+      membershipFee?: number;
+    };
+    defaults: {
+      defaultEstimatedVisits: number;
+      defaultEstimatedDurationValue: number;
+      defaultEstimatedDurationUnit: 'days' | 'weeks' | 'months';
+    };
+    selectionRules: SelectionRules;
+    uiHints: {
+      layout: 'single' | 'fullRow';
+    };
+}
+
+export interface EffectiveProcedure {
+    cdtCode: string;
+    displayName: string;
+    category: FeeCategory;
+    unitType: ProcedureUnitType;
+    selectionRules: SelectionRules;
+    defaults: {
+        defaultEstimatedVisits: number;
+        defaultEstimatedDurationValue: number | null;
+        defaultEstimatedDurationUnit: 'days' | 'weeks' | 'months' | null;
+    };
+    pricing: {
+        baseFee: number;
+        membershipFee: number | null;
+    };
+    uiHints: {
+        layout: 'single' | 'fullRow';
+    };
+    metaCoverage: 'full' | 'none';
+    isLabelMissing: boolean;
+}
+
+export interface ClinicProcedure {
+    cdtCode: string;
+    displayName: string;
+    baseFee: number;
+    membershipFee: number | null;
+    categoryOverride?: FeeCategory;
+    unitTypeOverride?: ProcedureUnitType;
+    defaultEstimatedVisits?: number;
+    defaultEstimatedDurationValue?: number;
+    defaultEstimatedDurationUnit?: 'days' | 'weeks' | 'months';
+    layoutOverride?: 'single' | 'fullRow';
+}
+
+export interface ProcedureMeta {
+    cdtCode: string;
+    category: FeeCategory;
+    unitType: ProcedureUnitType;
+    selectionRules: SelectionRules;
+    defaults: {
+        defaultEstimatedVisits: number;
+        defaultEstimatedDurationValue: number | null;
+        defaultEstimatedDurationUnit: 'days' | 'weeks' | 'months' | null;
+    };
+    uiHints: {
+        layout: 'single' | 'fullRow';
+        badges?: string[];
+    };
+}
 
 export interface FeeScheduleEntry {
-  id: string;
-  procedureCode: string;
-  procedureName: string;
-  category: FeeCategory;
-  unitType: any; 
-  baseFee: number;
-  membershipFee?: number | null;
-  isActive: boolean;
-  defaultEstimatedDurationValue?: number;
-  defaultEstimatedDurationUnit?: 'days' | 'weeks' | 'months';
-  defaultEstimatedVisits?: number;
+    id: string;
+    procedureCode: string;
+    procedureName: string;
+    category: FeeCategory;
+    unitType: ProcedureUnitType;
+    baseFee: number;
+    membershipFee: number | null;
+    isActive: boolean;
+    defaultEstimatedVisits: number;
+    defaultEstimatedDurationValue?: number;
+    defaultEstimatedDurationUnit?: 'days' | 'weeks' | 'months';
 }
 
-export interface Patient {
-  id: string;
-  firstName: string;
-  lastName: string;
-  dob?: string;
-  memberId?: string;
-  createdAt: string;
-  updatedAt: string;
+export interface ShareLink {
+    id: string;
+    treatmentPlanId: string;
+    token: string;
+    createdAt: string;
+    isActive: boolean;
 }
-
-export interface Provider {
-  id: string;
-  fullName: string;
-  npi: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Visit {
-  id: string;
-  treatmentPlanId: string;
-  date: string;
-  provider: string;
-  providerId?: string;
-  visitType: VisitType;
-  attachedProcedureIds: string[];
-  createdAt: string;
-  status?: VisitStatus;
-  claimPrepStatus?: 'NOT_STARTED' | 'IN_PROGRESS' | 'READY';
-  soapSections?: SoapSection[];
-  seededProcedureIds?: string[];
-  assignedRisks?: AssignedRisk[];
-  performedDate?: string;
-  clinicalNote?: string;
-  chiefComplaint?: string;
-  hpi?: string;
-  radiographicFindings?: string;
-  noteStatus?: 'draft' | 'signed';
-  noteSignedAt?: string;
-}
-
-export type VisitType = "exam" | "restorative" | "surgery" | "hygiene" | "emergency" | "consult" | "ortho" | "endo" | "other";
-export type ProcedureStatus = 'PLANNED' | 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'DEFERRED' | 'CANCELLED';
-export type VisitStatus = 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CLAIM_PREP' | 'CLAIM_READY';
-export type ClaimStatus = 'NOT_READY' | 'READY' | 'SUBMITTED_EXTERNALLY' | 'PAID' | 'DENIED' | 'ADJUSTED';
-export type ItemType = 'PROCEDURE' | 'ADDON';
-export type AddOnKind = 'SEDATION' | 'BONE_GRAFT' | 'MEMBRANE' | 'PRF' | 'TEMP_CROWN' | 'CORE_BUILDUP' | 'PULP_CAP' | 'MEDICATION' | 'OCCLUSAL_ADJUSTMENT' | 'FOLLOWUP' | 'OTHER';
 
 export interface TreatmentPhase {
-  id: string;
-  planId: string;
-  bucketKey: PhaseBucketKey;
-  title: string;
-  description?: string;
-  sortOrder: number;
-  itemIds: string[];
-  estimatedVisits?: number;
-  estimatedDurationValue?: number | null;
-  estimatedDurationUnit?: 'days' | 'weeks' | 'months' | null;
-  durationIsManual?: boolean;
-  isMonitorPhase?: boolean;
-  titleIsManual?: boolean;
+    id: string;
+    planId: string;
+    bucketKey: PhaseBucketKey;
+    title: string;
+    sortOrder: number;
+    itemIds: string[];
+    durationIsManual: boolean;
+    estimatedDurationValue: number | null;
+    estimatedDurationUnit: 'days' | 'weeks' | 'months' | null;
+    isMonitorPhase?: boolean;
+    titleIsManual?: boolean;
 }
+
+export type VisitType = DomainVisitType;
+
+export interface Provider {
+    id: string;
+    fullName: string;
+    npi: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+// --- AUTHORITATIVE CLAIM COMPILER SCHEMA ---
+
+export interface ClaimCompilerInput {
+  provider: {
+    id: string;
+    npi: string;
+    specialty?: string;
+  };
+  visit: {
+    serviceDate: string;
+    payerTier: PayerTier;
+  };
+  procedures: Array<{
+    id: string;
+    cdtCode: string;
+    label: string;
+    category: FeeCategory;
+    role: AdjudicationRole;
+    isCompleted: boolean;
+    performedDate?: string;
+    diagnosisCodes?: string[];
+    documentationFlags: {
+      hasXray?: boolean;
+      hasPhoto?: boolean;
+      hasPerioChart?: boolean;
+    };
+    justificationFlags?: {
+      sedationReason?: string;
+      buildupReason?: string;
+      graftRationale?: string;
+    };
+    tooth?: string;
+    surfaces?: string[];
+  }>;
+  visitFacts: {
+    chiefComplaint?: string;
+    hpi?: string;
+    findings?: string;
+    consentObtained?: boolean;
+  };
+}
+
+export interface AcceptanceIssue {
+  code: string;
+  severity: 'blocker' | 'warning';
+  message: string;
+  ruleId: string;
+  targetField?: string;
+  procedureId?: string;
+  procedureIds?: string[];
+  field?: string;
+}
+
+export interface ClaimAcceptanceDecision {
+  allowed: boolean;
+  confidenceScore: number;
+  // FIX: Added missing primaryProcedureId field
+  primaryProcedureId?: string | null;
+  blockers: AcceptanceIssue[];
+  warnings: AcceptanceIssue[];
+}
+
+// --- CORE APP TYPES ---
 
 export interface TreatmentPlanItem {
   id: string;
   treatmentPlanId: string;
-  feeScheduleEntryId: string;
+  // FIX: Added missing fields for linking and clinical estimation
+  feeScheduleEntryId?: string;
   procedureCode: string;
   procedureName: string;
-  unitType: any;
   category: FeeCategory;
+  // FIX: Added unitType, itemType, grossFee, sortOrder, urgency, status
+  unitType: ProcedureUnitType;
   itemType: ItemType;
-  linkedItemIds?: string[];
-  addOnKind?: AddOnKind;
-  selectedTeeth?: number[] | null;
-  surfaces?: string[];
-  selectedQuadrants?: ('UR' | 'UL' | 'LL' | 'LR')[] | null;
-  selectedArches?: ('UPPER' | 'LOWER')[] | null;
-  urgency?: UrgencyLevel;
-  estimatedVisits?: number;
-  estimatedVisitsIsManual?: boolean;
-  estimatedDurationValue?: number | null;
-  estimatedDurationUnit?: 'days' | 'weeks' | 'months' | null;
-  estimatedDurationIsManual?: boolean;
-  phaseId?: string | null;
-  phaseLocked?: boolean;
   baseFee: number;
-  baseFeeIsManual?: boolean; // NEW: track manual overrides
   membershipFee?: number | null;
-  membershipFeeIsManual?: boolean; // NEW: track manual overrides
-  units: number;
-  grossFee: number;
-  discount: number;
+  baseFeeIsManual?: boolean;
+  membershipFeeIsManual?: boolean;
   netFee: number;
-  coveragePercent?: number | null;
-  estimatedInsurance?: number | null;
-  estimatedPatientPortion?: number | null;
-  notes?: string | null;
+  grossFee?: number;
+  units: number;
+  discount: number;
   sortOrder: number;
-  performedInVisitId?: string | null;
+  urgency?: UrgencyLevel;
   procedureStatus?: ProcedureStatus;
+  performedInVisitId?: string;
   performedDate?: string;
   diagnosisCodes?: string[];
   documentation?: {
@@ -290,43 +305,87 @@ export interface TreatmentPlanItem {
     hasPhoto?: boolean;
     hasPerioChart?: boolean;
     hasFmxWithin36Months?: boolean;
+    sedationReason?: string;
     narrativeText?: string;
   };
-  sedationType?: string;
+  selectedTeeth?: number[];
+  // FIX: Added location selections and metadata flags
+  selectedQuadrants?: ('UR'|'UL'|'LR'|'LL')[];
+  selectedArches?: ('UPPER'|'LOWER')[];
+  surfaces?: string[];
+  phaseId?: string;
+  phaseLocked?: boolean;
   isCustomProcedureNameMissing?: boolean;
+  estimatedVisitsIsManual?: boolean;
+  estimatedVisits?: number;
+  estimatedDurationIsManual?: boolean;
+  estimatedDurationValue?: number | null;
+  estimatedDurationUnit?: 'days' | 'weeks' | 'months' | null;
+  addOnKind?: AddOnKind;
+  linkedItemIds?: string[];
+  sedationType?: string;
+  notes?: string;
+  coveragePercent?: number | null;
+  estimatedInsurance?: number | null;
+  estimatedPatientPortion?: number | null;
 }
 
 export interface TreatmentPlan {
   id: string;
-  patientId?: string;
-  caseAlias?: string;
+  // FIX: Added missing fields for patient link, financials, and clinical organization
+  patientId: string;
   planNumber: string;
   title: string;
   status: TreatmentPlanStatus;
-  totalFee: number;
-  estimatedInsurance?: number | null;
-  clinicDiscount: number;
-  membershipSavings?: number | null;
-  patientPortion: number;
   insuranceMode: InsuranceMode;
   feeScheduleType: FeeScheduleType;
+  totalFee: number;
+  estimatedInsurance?: number;
+  clinicDiscount: number;
+  membershipSavings?: number;
+  patientPortion: number;
+  caseAlias: string;
   createdAt: string;
   updatedAt: string;
-  presentedAt?: string | null;
-  decidedAt?: string | null;
-  notesInternal?: string | null;
-  explanationForPatient?: string | null;
+  presentedAt?: string;
   itemIds: string[];
   items?: TreatmentPlanItem[];
   phases?: TreatmentPhase[];
+  notesInternal?: string;
+  explanationForPatient?: string;
   assignedRisks?: AssignedRisk[];
 }
 
-export interface ShareLink {
+export interface Visit {
   id: string;
   treatmentPlanId: string;
-  token: string;
-  expiresAt?: string | null;
+  date: string;
+  provider: string;
+  providerId: string;
+  // FIX: Added missing visitType, status, procedures, and metadata
+  visitType: VisitType;
+  status?: VisitStatus;
+  chiefComplaint?: string;
+  hpi?: string;
+  radiographicFindings?: string;
+  attachedProcedureIds: string[];
   createdAt: string;
-  isActive: boolean;
+  claimPrepStatus?: any;
+  assignedRisks?: AssignedRisk[];
+  soapSections?: SoapSection[];
+  seededProcedureIds?: string[];
+  clinicalNote?: string;
+  noteStatus?: 'draft' | 'signed';
+  noteSignedAt?: string;
+}
+
+export interface Patient {
+  id: string;
+  firstName: string;
+  lastName: string;
+  dob: string;
+  // FIX: Added missing memberId and timestamps
+  memberId?: string;
+  createdAt: string;
+  updatedAt: string;
 }

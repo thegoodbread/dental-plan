@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, X, Clock, AlertCircle, FileText, Upload, Download, Info, Star, PlusCircle, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { FeeScheduleEntry, FeeCategory, SelectionRules, ProcedureDefinition, EffectiveProcedure, ProcedureUnitType } from '../../types';
 import { getFeeSchedule } from '../../services/treatmentPlans';
 import { resolveEffectiveProcedure, listEffectiveProcedures } from '../../domain/procedureResolver';
@@ -114,6 +114,7 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
         baseFee: configuringProc.pricing.baseFee,
         membershipFee: configuringProc.pricing.membershipFee,
         isActive: true,
+        defaultEstimatedVisits: configuringProc.defaults.defaultEstimatedVisits,
         selectedTeeth: selectedTeeth.length ? selectedTeeth : undefined,
         selectedQuadrants: selectedQuads.length ? selectedQuads : undefined,
         selectedArches: selectedArches.length ? selectedArches : undefined,
@@ -204,6 +205,24 @@ export const ProcedurePickerModal: React.FC<ProcedurePickerModalProps> = ({
                                             </div>
                                         </div>
                                     )}
+                                </div>
+                            )}
+
+                            {configuringProc.selectionRules.allowsArch && (
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Arch Selection</label>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {(['UPPER', 'LOWER'] as const).map(arch => (
+                                            <button
+                                                key={arch}
+                                                onClick={() => setSelectedArches(prev => prev.includes(arch) ? prev.filter(x => x !== arch) : [...prev, arch])}
+                                                className={`p-6 rounded-2xl border-2 font-black transition-all text-lg flex flex-col items-center gap-2 ${selectedArches.includes(arch) ? 'bg-blue-600 border-blue-600 text-white shadow-lg' : 'bg-white border-gray-200 text-gray-600 hover:border-blue-400'}`}
+                                            >
+                                                <span>{arch} ARCH</span>
+                                                <span className="text-[10px] font-bold uppercase opacity-60">{arch === 'UPPER' ? 'Maxillary' : 'Mandibular'}</span>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
 
